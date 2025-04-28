@@ -1,0 +1,101 @@
+import json
+import os
+
+import pandas as pd
+from tqdm import tqdm
+from utils import DATASET_COMBINATIONS, clean_row, flag_row
+
+
+def main(args):
+    """
+    Takes as an argument a json file containing reddit comments and posts, and generates
+      a dataset which uses the associated subreddit as a label. The dataset comprsises
+      of a train set, and a test set, which have related but different subreddits for
+      the purposes of evaluation. The target class in a given dataset is poorly
+      represented, with the ratio of target classes to non target classes being defined
+      by the imbalance ratio
+
+    Args:
+        args: _description_
+    """
+
+    split = DATASET_COMBINATIONS[args.split]
+
+    with open(args.data_dir) as f:
+        data = json.load(f)
+
+    train_data_targets = []
+    test_data_targets = []
+
+    non_targets = [[], []]
+
+    for row_index, row in enumerate(tqdm(data)):
+        if flag_row(row):
+            continue
+        if row["communityName"] in split["train"]:
+            train_data_targets.append(clean_row(row))
+        elif row["communityName"] in split["test"]:
+            test_data_targets.append(clean_row(row))
+        else:
+            non_targets[row_index % 2].append(clean_row(row))
+
+    # Imbalance the dataset
+    imbalance_ratio = args.r
+    if isinstance(imbalance_ratio, int):
+        n_targets = imbalance_ratio
+    else:
+        n_targets = int(len(non_targets[0]) * imbalance_ratio)
+
+    train_data = train_data_targets[:n_targets] + non_targets
+
+    train_targets_df = pd.DataFrame.from_dict(
+        train_data_targets[:n_targets]
+    ).sort_values("len", ascending=False, inplace=False)
+
+    test_targets_df = pd.DataFrame.from_dict(test_data_targets[:n_targets]).sort_values(
+        "len", ascending=False, inplace=False
+    )
+
+    train_non_targets_df = pd.DataFrame.from_dict(non_targets[0]).sort_values(
+        "len", ascending=False, inplace=False
+    )
+    test_non_targets_df = pd.DataFrame.from_dict(non_targets[1]).sort_values(
+        "len", ascending=False, inplace=False
+    )
+
+    train_data = pd.concat([train_targets_df, train_non_targets_df])
+    test_data = pd.concat([test_targets_df, test_non_targets_df])
+
+    os.makedirs(f"../datasets/{args.split}", exist_ok=True)
+    train_data.to_csv(f"../data/datasets/{args.split}/train.csv", index=False)
+    test_data.to_csv(f"../data/datasets/{args.split}/test.csv", index=False)
+    print(f"Train data: {len(train_data)} total | {n_targets} targets")
+    print(f"Test data: {len(test_data)} total | {n_targets} targets")
+    print(f"Train data saved to {args.split}")
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Generate dataset")
+    parser.add_argument(
+        "split",
+        type=str,
+        help="Split to generate, options are: sport, american_football, ami, news, advice",
+    )
+    parser.add_argument(
+        "--data_dir",
+        type=str,
+        default="../data/reddit_dataset_12.json",
+        help="Path to the data used for generation",
+    )
+
+    parser.add_argument(
+        "-r",
+        default=0.01,
+        help="Imbalance ratio for the dataset. provide a float or int, "
+        "where 0.01 means 1% of the dataset is target classes. Int values are also "
+        "accepted, where 100 means 100 samples are the target classes.",
+    )
+    args = parser.parse_args()
+    main(args)
