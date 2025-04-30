@@ -21,6 +21,7 @@ def main(args):
     """
 
     split = DATASET_COMBINATIONS[args.split]
+    save_dir = "/".join(args.data_dir.split("/")[:-2]) + "/"
 
     with open(args.data_dir) as f:
         data = json.load(f)
@@ -67,9 +68,10 @@ def main(args):
     train_data = pd.concat([train_targets_df, train_non_targets_df])
     test_data = pd.concat([test_targets_df, test_non_targets_df])
 
-    os.makedirs(f"../datasets/{args.split}", exist_ok=True)
-    train_data.to_csv(f"../data/datasets/{args.split}/train.csv", index=False)
-    test_data.to_csv(f"../data/datasets/{args.split}/test.csv", index=False)
+    save_path = f"{save_dir}/splits/{args.split}/"
+    os.makedirs(save_path, exist_ok=True)
+    train_data.to_csv(f"{save_path}/train.csv", index=False)
+    test_data.to_csv(f"{save_path}/test.csv", index=False)
     print(f"Train data: {len(train_data)} total | {n_targets} targets")
     print(f"Test data: {len(test_data)} total | {n_targets} targets")
     print(f"Train data saved to {args.split}")
@@ -80,18 +82,18 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Generate dataset")
     parser.add_argument(
+        "data_dir",
+        type=str,
+        default="../data/reddit_dataset_12.json",
+        help="Path to the data used for generation",
+    )
+    parser.add_argument(
         "split",
         type=str,
         help=(
             "Split to generate, options are: sport, american_football, ami, news, "
             "advice"
         ),
-    )
-    parser.add_argument(
-        "--data_dir",
-        type=str,
-        default="../data/reddit_dataset_12.json",
-        help="Path to the data used for generation",
     )
 
     parser.add_argument(
