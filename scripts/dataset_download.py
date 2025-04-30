@@ -36,9 +36,9 @@ def main(max_rows, dataset_name, target_subreddits):
             break
 
     # Save the filtered data to a JSON file
-    output_dir = f"../data/{dataset_name.split('/')[-1]}/"
+    output_dir = f"../data/{dataset_name.split('/')[-1]}/{max_rows}_rows/"
     os.makedirs(output_dir, exist_ok=True)
-    save_pth = f"{output_dir}/{max_rows}_rows_filtered.json"
+    save_pth = f"{output_dir}/filtered_rows.json"
     json_data = json.dumps(data, indent=2)
     with open(save_pth, "w") as f:
         f.write(json_data)

@@ -21,7 +21,7 @@ def main(args):
     """
 
     split = DATASET_COMBINATIONS[args.split]
-    save_dir = "/".join(args.data_dir.split("/")[:-2]) + "/"
+    save_dir = "/".join(args.data_dir.split("/")[:-1])
 
     with open(args.data_dir) as f:
         data = json.load(f)
@@ -74,7 +74,7 @@ def main(args):
     test_data.to_csv(f"{save_path}/test.csv", index=False)
     print(f"Train data: {len(train_data)} total | {n_targets} targets")
     print(f"Test data: {len(test_data)} total | {n_targets} targets")
-    print(f"Train data saved to {args.split}")
+    print(f"Train data saved to {save_path}")
 
 
 if __name__ == "__main__":
