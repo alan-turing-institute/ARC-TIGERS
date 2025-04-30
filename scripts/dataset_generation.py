@@ -84,7 +84,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "data_dir",
         type=str,
-        default="../data/reddit_dataset_12.json",
+        default="../data/reddit_dataset_12/15000000_rows/filtered_rows.json",
         help="Path to the data used for generation",
     )
     parser.add_argument(
