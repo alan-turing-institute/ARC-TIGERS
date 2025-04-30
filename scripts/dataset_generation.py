@@ -3,7 +3,8 @@ import os
 
 import pandas as pd
 from tqdm import tqdm
-from utils import DATASET_COMBINATIONS, clean_row, flag_row
+
+from arc_tigers.data.utils import DATASET_COMBINATIONS, clean_row, flag_row
 
 
 def main(args):
@@ -81,7 +82,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "split",
         type=str,
-        help="Split to generate, options are: sport, american_football, ami, news, advice",
+        help=(
+            "Split to generate, options are: sport, american_football, ami, news, "
+            "advice"
+        ),
     )
     parser.add_argument(
         "--data_dir",
