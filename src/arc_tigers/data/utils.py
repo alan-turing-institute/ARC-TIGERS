@@ -31,3 +31,7 @@ def clean_row(row):
     new_row["label"] = row["communityName"]
     new_row["len"] = len(row["text"])
     return new_row
+
+
+def preprocess_function(examples, tokenizer):
+    return tokenizer(examples["text"], truncation=True)
