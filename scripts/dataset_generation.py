@@ -4,7 +4,7 @@ import os
 import pandas as pd
 from tqdm import tqdm
 
-from arc_tigers.data.utils import DATASET_COMBINATIONS, clean_row, flag_row
+from arc_tigers.data.utils import ONE_VS_ALL_COMBINATIONS, clean_row, flag_row
 
 
 def main(args):
@@ -20,7 +20,7 @@ def main(args):
         args: _description_
     """
 
-    split = DATASET_COMBINATIONS[args.split]
+    split = ONE_VS_ALL_COMBINATIONS[args.split]
     save_dir = "/".join(args.data_dir.split("/")[:-1])
 
     with open(args.data_dir) as f:
@@ -42,9 +42,9 @@ def main(args):
             non_targets[row_index % 2].append(clean_row(row))
 
     # Imbalance the dataset
-    imbalance_ratio = args.r
-    if isinstance(imbalance_ratio, int):
-        n_targets = imbalance_ratio
+    imbalance_ratio = float(args.r)
+    if imbalance_ratio < 1:
+        n_targets = int(imbalance_ratio)
     else:
         n_targets = int(len(non_targets[0]) * imbalance_ratio)
 
