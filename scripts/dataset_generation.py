@@ -50,7 +50,7 @@ def main(args):
             n_targets = int(len(non_targets[0]) * imbalance_ratio)
     else:
         # None will just use all values in array
-        n_targets = args.r
+        n_targets = None
 
     train_data = train_data_targets[:n_targets] + non_targets
 
