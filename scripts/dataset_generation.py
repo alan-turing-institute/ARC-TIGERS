@@ -42,11 +42,15 @@ def main(args):
             non_targets[row_index % 2].append(clean_row(row))
 
     # Imbalance the dataset
-    imbalance_ratio = args.r
-    if isinstance(imbalance_ratio, int):
-        n_targets = imbalance_ratio
+    if args.r is not None:
+        imbalance_ratio = args.r
+        if isinstance(imbalance_ratio, int):
+            n_targets = imbalance_ratio
+        else:
+            n_targets = int(len(non_targets[0]) * imbalance_ratio)
     else:
-        n_targets = int(len(non_targets[0]) * imbalance_ratio)
+        # None will just use all values in array
+        n_targets = args.r
 
     train_data = train_data_targets[:n_targets] + non_targets
 
@@ -98,7 +102,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "-r",
-        default=0.01,
+        default=None,
         help="Imbalance ratio for the dataset. provide a float or int, "
         "where 0.01 means 1% of the dataset is target classes. Int values are also "
         "accepted, where 100 means 100 samples are the target classes.",
