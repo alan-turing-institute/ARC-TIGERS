@@ -1,4 +1,5 @@
 import argparse
+import json
 from collections import Counter
 
 from datasets import concatenate_datasets, load_dataset
@@ -24,6 +25,7 @@ def main(args):
     split = args.split
     balanced = args.balanced
     data_dir = f"{args.data_dir}/splits/{split}/"
+    save_dir = "../sentiment-classifier"
 
     # Load tokenizer and model
     model_name = "distilbert-base-uncased"
@@ -89,13 +91,13 @@ def main(args):
         print(f"Label: {label}, Count: {count}, Weight: {label_weights[label_idx]}")
 
     training_args = TrainingArguments(
-        output_dir="../sentiment-classifier",
+        output_dir=save_dir,
         num_train_epochs=3,
         per_device_train_batch_size=16,
         per_device_eval_batch_size=16,
         warmup_steps=500,
         weight_decay=0.01,
-        logging_dir="../sentiment-classifier/logs",
+        logging_dir=f"{save_dir}/logs",
     )
     # Trainer
     trainer = WeightedLossTrainer(
@@ -115,10 +117,15 @@ def main(args):
     # Evaluate the model
     results = trainer.evaluate()
     print("Evaluation results:", results)
+    # Save evaluation results to a JSON file
+    results_path = f"{save_dir}/evaluation_results.json"
+    with open(results_path, "w") as f:
+        json.dump(results, f, indent=4)
+    print(f"Evaluation results saved to {results_path}")
 
     # Save the model
-    model.save_pretrained("../sentiment-classifier")
-    tokenizer.save_pretrained("../sentiment-classifier")
+    model.save_pretrained(save_dir)
+    tokenizer.save_pretrained(save_dir)
 
 
 if __name__ == "__main__":
