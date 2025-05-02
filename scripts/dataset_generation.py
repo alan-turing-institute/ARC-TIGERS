@@ -56,8 +56,6 @@ def main(args):
         n_train_targets = len(train_data_targets)
         n_test_targets = len(test_data_targets)
 
-    train_data = train_data_targets[:n_targets] + non_targets
-
     train_targets_df = pd.DataFrame.from_dict(
         train_data_targets[:n_train_targets]
     ).sort_values("len", ascending=False, inplace=False)

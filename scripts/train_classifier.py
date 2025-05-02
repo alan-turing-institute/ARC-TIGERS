@@ -1,6 +1,6 @@
 from collections import Counter
 
-from datasets import load_dataset
+from datasets import concatenate_datasets, load_dataset
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -20,6 +20,8 @@ from arc_tigers.utils import get_device
 
 device = get_device()
 # Ensure model is moved to the selected device
+
+balanced = False
 
 setting = "multi-class"
 
@@ -61,6 +63,22 @@ tokenized_datasets = dataset.map(
         "targets": target_map,
     },
 )
+
+# balance the dataset
+if balanced:
+    print("Balancing the dataset...")
+    # Get the number of samples in each class
+    label_counts = Counter(tokenized_datasets["train"]["label"])
+    # Calculate the weights for each class
+    min_samples = min(label_counts.values())
+    resampled_data = []
+    for label in label_counts:
+        label_data = tokenized_datasets["train"].filter(
+            lambda x, label=label: x["label"] == label
+        )
+        resampled_data.append(label_data.shuffle().select(range(min_samples)))
+    tokenized_datasets["train"] = concatenate_datasets(resampled_data)
+
 
 # Split dataset
 train_data = tokenized_datasets["train"]
