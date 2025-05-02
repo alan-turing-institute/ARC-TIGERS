@@ -48,19 +48,23 @@ def main(args):
             n_targets = imbalance_ratio
         else:
             n_targets = int(len(non_targets[0]) * imbalance_ratio)
+
+        n_train_targets = n_targets
+        n_test_targets = n_targets
     else:
         # None will just use all values in array
-        n_targets = None
+        n_train_targets = len(train_data_targets)
+        n_test_targets = len(test_data_targets)
 
     train_data = train_data_targets[:n_targets] + non_targets
 
     train_targets_df = pd.DataFrame.from_dict(
-        train_data_targets[:n_targets]
+        train_data_targets[:n_train_targets]
     ).sort_values("len", ascending=False, inplace=False)
 
-    test_targets_df = pd.DataFrame.from_dict(test_data_targets[:n_targets]).sort_values(
-        "len", ascending=False, inplace=False
-    )
+    test_targets_df = pd.DataFrame.from_dict(
+        test_data_targets[:n_test_targets]
+    ).sort_values("len", ascending=False, inplace=False)
 
     train_non_targets_df = pd.DataFrame.from_dict(non_targets[0]).sort_values(
         "len", ascending=False, inplace=False
@@ -76,8 +80,8 @@ def main(args):
     os.makedirs(save_path, exist_ok=True)
     train_data.to_csv(f"{save_path}/train.csv", index=False)
     test_data.to_csv(f"{save_path}/test.csv", index=False)
-    print(f"Train data: {len(train_data)} total | {n_targets} targets")
-    print(f"Test data: {len(test_data)} total | {n_targets} targets")
+    print(f"Train data: {len(train_data)} total | {n_train_targets} targets")
+    print(f"Test data: {len(test_data)} total | {n_test_targets} targets")
     print(f"Train data saved to {save_path}")
 
 
