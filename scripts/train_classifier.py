@@ -5,7 +5,6 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DataCollatorWithPadding,
-    Trainer,
     TrainingArguments,
 )
 
@@ -16,6 +15,7 @@ from arc_tigers.data.utils import (
     preprocess_function,
 )
 from arc_tigers.eval.utils import compute_metrics
+from arc_tigers.training.utils import WeightedLossTrainer
 from arc_tigers.utils import get_device
 
 device = get_device()
@@ -68,10 +68,16 @@ train_dataset, eval_dataset = train_data.train_test_split(test_size=0.1).values(
 
 test_dataset = tokenized_datasets["eval"]
 
-label_counts = Counter(train_dataset["label"])
 print("Label counts in the training dataset:")
-for label, count in label_counts.items():
-    print(f"Label: {label}, Count: {count}")
+label_counter = Counter(train_dataset["label"])
+label_counts = dict(sorted(label_counter.items(), key=lambda item: item[1]))
+label_weights = [
+    1 - (label_count / sum(label_counts.values()))
+    for label_count in label_counts.values()
+]
+
+for label_idx, (label, count) in enumerate(label_counts.items()):
+    print(f"Label: {label}, Count: {count}, Weight: {label_weights[label_idx]}")
 
 training_args = TrainingArguments(
     output_dir="../sentiment-classifier",
@@ -83,7 +89,7 @@ training_args = TrainingArguments(
     logging_dir="../sentiment-classifier/logs",
 )
 # Trainer
-trainer = Trainer(
+trainer = WeightedLossTrainer(
     model=model,
     args=training_args,
     train_dataset=train_dataset,
@@ -91,6 +97,7 @@ trainer = Trainer(
     tokenizer=tokenizer,
     data_collator=data_collator,
     compute_metrics=compute_metrics,
+    loss_weights=label_weights,
 )
 
 # Train the model
