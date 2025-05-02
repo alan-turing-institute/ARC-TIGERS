@@ -17,6 +17,10 @@ BINARY_COMBINATIONS = {
         "train": ["r/soccer", "r/Cricket"],
         "test": ["r/soccer", "r/Cricket"],
     },
+    "football": {
+        "train": ["r/soccer", "r/fantasyPL"],
+        "test": ["r/soccer", "r/fantasyPL"],
+    },
 }
 
 

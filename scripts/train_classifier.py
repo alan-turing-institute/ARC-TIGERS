@@ -6,6 +6,7 @@ from transformers import (
     AutoTokenizer,
     DataCollatorWithPadding,
     Trainer,
+    TrainingArguments,
 )
 
 from arc_tigers.data.utils import (
@@ -21,7 +22,6 @@ device = get_device()
 # Ensure model is moved to the selected device
 
 setting = "multi-class"
-target_subreddits = ["r/soccer", "r/Cricket"]
 
 split = "sport"
 
@@ -44,6 +44,7 @@ dataset = load_dataset(
 
 if setting == "multi-class":
     targets = BINARY_COMBINATIONS[split]["train"]
+    targets = ["r/soccer", "r/FantasyPL"]
     dataset = dataset.filter(lambda y: y in targets, input_columns=["label"])
     target_map = get_target_mapping(setting, targets)
 
@@ -63,28 +64,41 @@ tokenized_datasets = dataset.map(
 
 # Split dataset
 train_data = tokenized_datasets["train"]
-train_dataset, test_dataset = train_data.train_test_split(test_size=0.1).values()
+train_dataset, eval_dataset = train_data.train_test_split(test_size=0.1).values()
 
-eval_dataset = tokenized_datasets["eval"]
+test_dataset = tokenized_datasets["eval"]
 
 label_counts = Counter(train_dataset["label"])
 print("Label counts in the training dataset:")
 for label, count in label_counts.items():
     print(f"Label: {label}, Count: {count}")
 
+training_args = TrainingArguments(
+    output_dir="../sentiment-classifier",
+    num_train_epochs=3,
+    per_device_train_batch_size=16,
+    per_device_eval_batch_size=16,
+    warmup_steps=500,
+    weight_decay=0.01,
+    logging_dir="../sentiment-classifier/logs",
+)
 # Trainer
 trainer = Trainer(
     model=model,
+    args=training_args,
     train_dataset=train_dataset,
-    eval_dataset=test_dataset,
+    eval_dataset=eval_dataset,
     tokenizer=tokenizer,
     data_collator=data_collator,
     compute_metrics=compute_metrics,
-    output_directory="../sentiment-classifier",
 )
 
 # Train the model
 trainer.train()
+
+# Evaluate the model
+results = trainer.evaluate()
+print("Evaluation results:", results)
 
 # Save the model
 model.save_pretrained("../sentiment-classifier")
