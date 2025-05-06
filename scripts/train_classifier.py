@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 from collections import Counter
 
 from datasets import concatenate_datasets, load_dataset
@@ -25,7 +26,8 @@ def main(args):
     split = args.split
     balanced = args.balanced
     data_dir = f"{args.data_dir}/splits/{split}/"
-    save_dir = "../sentiment-classifier"
+    save_dir = args.save_dir
+    os.makedirs(save_dir, exist_ok=False)
 
     # Load tokenizer and model
     model_name = "distilbert-base-uncased"
@@ -125,7 +127,6 @@ def main(args):
 
     # Save the model
     model.save_pretrained(save_dir)
-    tokenizer.save_pretrained(save_dir)
 
 
 if __name__ == "__main__":
@@ -153,6 +154,12 @@ if __name__ == "__main__":
         type=str,
         default="../data/reddit_dataset_12/15000000_rows/",
         help="Path to the data used for training",
+    )
+    parser.add_argument(
+        "save_dir",
+        type=str,
+        default=None,
+        help="Path to save the model and results",
     )
     args = parser.parse_args()
 
