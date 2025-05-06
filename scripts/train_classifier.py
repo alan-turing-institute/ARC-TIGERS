@@ -15,28 +15,27 @@ from arc_tigers.training.utils import (
     get_label_weights,
     get_reddit_data,
 )
+from arc_tigers.utils import load_yaml
 
 
 def main(args):
-    target_config = args.target_config
-    data_dir = f"{args.data_dir}/splits/{target_config}/"
+    data_config = load_yaml(args.data_config)
+    model_config = load_yaml(args.model_config)
     save_dir = args.save_dir
     os.makedirs(save_dir, exist_ok=False)
 
     # Load tokenizer and model
-    model_name = "distilbert-base-uncased"
+    model_name = model_config["model_id"]
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=2)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        model_name, **model_config["model_kwargs"]
+    )
 
     # Data collator
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
     train_dataset, eval_dataset = get_reddit_data(
-        setting=args.setting,
-        target_config=target_config,
-        balanced=args.balanced,
-        data_dir=data_dir,
-        tokenizer=tokenizer,
+        **data_config["data_args"], tokenizer=tokenizer
     )
 
     training_args = TrainingArguments(
@@ -79,28 +78,12 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a classifier")
     parser.add_argument(
-        "--balanced",
-        action="store_true",
-        help="Whether to balance the dataset",
+        "data_config",
+        help="path to the data config yaml file",
     )
     parser.add_argument(
-        "--setting",
-        type=str,
-        choices=["multi-class", "one-vs-all"],
-        default="multi-class",
-        help="Evaluation setting",
-    )
-    parser.add_argument(
-        "--split",
-        type=str,
-        default="sport",
-        help="Split to use for training",
-    )
-    parser.add_argument(
-        "--data_dir",
-        type=str,
-        default="../data/reddit_dataset_12/15000000_rows/",
-        help="Path to the data used for training",
+        "model_config",
+        help="path to the model config yaml file",
     )
     parser.add_argument(
         "save_dir",

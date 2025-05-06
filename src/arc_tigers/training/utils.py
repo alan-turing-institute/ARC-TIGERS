@@ -5,6 +5,7 @@ from datasets import concatenate_datasets, load_dataset
 from torch import nn
 from transformers import Trainer
 
+from arc_tigers.constants import DATA_DIR
 from arc_tigers.data.utils import (
     BINARY_COMBINATIONS,
     ONE_VS_ALL_COMBINATIONS,
@@ -33,7 +34,9 @@ class WeightedLossTrainer(Trainer):
         return (loss, outputs) if return_outputs else loss
 
 
-def get_reddit_data(setting, target_config, balanced, data_dir, tokenizer):
+def get_reddit_data(setting, target_config, balanced, n_rows, tokenizer):
+    # work out the data directory
+    data_dir = f"{DATA_DIR}/reddit_dataset_12/{n_rows}_rows/splits/{target_config}/"
     # load dataset
     dataset = load_dataset(
         "csv",
