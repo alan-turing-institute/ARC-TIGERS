@@ -1,9 +1,7 @@
 import argparse
 import json
 import os
-from collections import Counter
 
-from datasets import concatenate_datasets, load_dataset
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -11,21 +9,17 @@ from transformers import (
     TrainingArguments,
 )
 
-from arc_tigers.data.utils import (
-    BINARY_COMBINATIONS,
-    ONE_VS_ALL_COMBINATIONS,
-    get_target_mapping,
-    preprocess_function,
-)
 from arc_tigers.eval.utils import compute_metrics
-from arc_tigers.training.utils import WeightedLossTrainer
+from arc_tigers.training.utils import (
+    WeightedLossTrainer,
+    get_label_weights,
+    get_reddit_data,
+)
 
 
 def main(args):
-    setting = args.setting
-    split = args.split
-    balanced = args.balanced
-    data_dir = f"{args.data_dir}/splits/{split}/"
+    target_config = args.target_config
+    data_dir = f"{args.data_dir}/splits/{target_config}/"
     save_dir = args.save_dir
     os.makedirs(save_dir, exist_ok=False)
 
@@ -37,60 +31,13 @@ def main(args):
     # Data collator
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
-    # load dataset
-    dataset = load_dataset(
-        "csv",
-        data_files={"train": f"{data_dir}/train.csv", "eval": f"{data_dir}/test.csv"},
+    train_dataset, eval_dataset = get_reddit_data(
+        setting=args.setting,
+        target_config=target_config,
+        balanced=args.balanced,
+        data_dir=data_dir,
+        tokenizer=tokenizer,
     )
-
-    if setting == "multi-class":
-        targets = BINARY_COMBINATIONS[split]["train"]
-        targets = ["r/soccer", "r/FantasyPL"]
-        dataset = dataset.filter(lambda y: y in targets, input_columns=["label"])
-        target_map = get_target_mapping(setting, targets)
-
-    elif setting == "one-vs-all":
-        targets = ONE_VS_ALL_COMBINATIONS[split]["train"]
-        target_map = get_target_mapping(setting, targets)
-
-    tokenized_datasets = dataset.map(
-        preprocess_function,
-        batched=True,
-        fn_kwargs={
-            "tokenizer": tokenizer,
-            "targets": target_map,
-        },
-    )
-
-    # balance the dataset
-    if balanced:
-        print("Balancing the dataset...")
-        # Get the number of samples in each class
-        label_counts = Counter(tokenized_datasets["train"]["label"])
-        # Calculate the weights for each class
-        min_samples = min(label_counts.values())
-        resampled_data = []
-        for label in label_counts:
-            label_data = tokenized_datasets["train"].filter(
-                lambda x, label=label: x["label"] == label
-            )
-            resampled_data.append(label_data.shuffle().select(range(min_samples)))
-        tokenized_datasets["train"] = concatenate_datasets(resampled_data)
-
-    # Split dataset
-    train_data = tokenized_datasets["train"]
-    train_dataset, eval_dataset = train_data.train_test_split(test_size=0.1).values()
-
-    print("Label counts in the training dataset:")
-    label_counter = Counter(train_dataset["label"])
-    label_counts = dict(sorted(label_counter.items(), key=lambda item: item[1]))
-    label_weights = [
-        1 - (label_count / sum(label_counts.values()))
-        for label_count in label_counts.values()
-    ]
-
-    for label_idx, (label, count) in enumerate(label_counts.items()):
-        print(f"Label: {label}, Count: {count}, Weight: {label_weights[label_idx]}")
 
     training_args = TrainingArguments(
         output_dir=save_dir,
@@ -110,7 +57,7 @@ def main(args):
         tokenizer=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
-        loss_weights=label_weights,
+        loss_weights=get_label_weights(train_dataset),
     )
 
     # Train the model
