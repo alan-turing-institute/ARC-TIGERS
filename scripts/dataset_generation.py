@@ -20,7 +20,7 @@ def main(args):
         args: _description_
     """
 
-    split = DATASET_COMBINATIONS[args.split]
+    target_categories = DATASET_COMBINATIONS[args.target_config]
     save_dir = "/".join(args.data_dir.split("/")[:-1])
 
     with open(args.data_dir) as f:
@@ -32,11 +32,13 @@ def main(args):
     non_targets = [[], []]
 
     for row_index, row in enumerate(tqdm(data)):
+        # flag the row if it is empty, deleted, removed, or too short
+        # and skip it
         if flag_row(row):
             continue
-        if row["communityName"] in split["train"]:
+        if row["communityName"] in target_categories["train"]:
             train_data_targets.append(clean_row(row))
-        elif row["communityName"] in split["test"]:
+        elif row["communityName"] in target_categories["test"]:
             test_data_targets.append(clean_row(row))
         else:
             non_targets[row_index % 2].append(clean_row(row))
@@ -96,7 +98,7 @@ if __name__ == "__main__":
         help="Path to the data used for generation",
     )
     parser.add_argument(
-        "split",
+        "target_config",
         type=str,
         help=(
             "Split to generate, options are: sport, american_football, ami, news, "

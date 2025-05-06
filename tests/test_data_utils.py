@@ -2,7 +2,13 @@ from arc_tigers.data.utils import clean_row
 
 
 def test_clean_row():
-    # Test with a sample row
+    """
+    This test checks the clean_row function which is used to clean the data from the
+    reddit dataset. The function is expected to take a row of data with all of the
+    fields. It then removes the extra fields and returns a new row with only the
+    relevant fields (text, label, and the length). It also renames these appropriately.
+    """
+    # Test with a sample row that removes unnecessary fields
     test_string = "This is a test sentence."
     test_string_len = len(test_string)
     row = {
