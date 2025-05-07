@@ -40,7 +40,7 @@ def main(args):
 
     training_args = TrainingArguments(
         output_dir=save_dir,
-        num_train_epochs=3,
+        num_train_epochs=5,
         per_device_train_batch_size=16,
         per_device_eval_batch_size=16,
         warmup_steps=500,
@@ -64,6 +64,9 @@ def main(args):
 
     # Evaluate the model
     results = trainer.evaluate()
+    for key in ["eval_f1", "eval_precision", "eval_recall"]:
+        if key in results:
+            results[key] = results[key].tolist()
     print("Evaluation results:", results)
     # Save evaluation results to a JSON file
     results_path = f"{save_dir}/evaluation_results.json"
