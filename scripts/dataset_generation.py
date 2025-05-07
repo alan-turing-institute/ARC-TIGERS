@@ -4,7 +4,7 @@ import os
 import pandas as pd
 from tqdm import tqdm
 
-from arc_tigers.data.utils import DATASET_COMBINATIONS, clean_row, flag_row
+from arc_tigers.data.utils import ONE_VS_ALL_COMBINATIONS, clean_row, flag_row
 
 
 def main(args):
@@ -20,7 +20,7 @@ def main(args):
         args: _description_
     """
 
-    target_categories = DATASET_COMBINATIONS[args.target_config]
+    target_categories = ONE_VS_ALL_COMBINATIONS[args.target_config]
     save_dir = "/".join(args.data_dir.split("/")[:-1])
 
     with open(args.data_dir) as f:
@@ -57,8 +57,6 @@ def main(args):
         # None will just use all values in array
         n_train_targets = len(train_data_targets)
         n_test_targets = len(test_data_targets)
-
-    train_data = train_data_targets[:n_targets] + non_targets
 
     train_targets_df = pd.DataFrame.from_dict(
         train_data_targets[:n_train_targets]
