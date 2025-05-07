@@ -5,10 +5,11 @@ import os
 from datasets import load_dataset
 from tqdm import tqdm
 
-os.environ["HF_DATASETS_OFFLINE"] = "1"
 
-
-def main(max_rows, dataset_name, target_subreddits):
+def main(args):
+    dataset_name = args.dataset_name
+    max_rows = args.max_rows
+    target_subreddits = args.target_subreddits
     # Ensure the output directory exists
     os.makedirs("../data/", exist_ok=True)
 
@@ -61,4 +62,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    main(args.max_rows, args.dataset_name, args.target_subreddits)
+    main(args)
