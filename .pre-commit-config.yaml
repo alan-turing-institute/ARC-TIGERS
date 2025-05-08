@@ -34,9 +34,10 @@ repos:
     hooks:
       - id: mypy
         files: src
-        args: [--ignore-missing-imports, --disable-error-code=import-untyped]
+        args: [--ignore-missing-imports]
         additional_dependencies:
           - pytest
+          - types-PyYAML
 
   - repo: local
     hooks:

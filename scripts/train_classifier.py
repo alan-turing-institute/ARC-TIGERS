@@ -46,6 +46,8 @@ def main(args):
         warmup_steps=500,
         weight_decay=0.01,
         logging_dir=f"{save_dir}/logs",
+        save_total_limit=3,
+        load_best_model_at_end=True,
     )
     # Trainer
     trainer = WeightedLossTrainer(
