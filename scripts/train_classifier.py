@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import os
 
 from transformers import (
@@ -17,12 +18,27 @@ from arc_tigers.training.utils import (
 )
 from arc_tigers.utils import load_yaml
 
+logger = logging.getLogger(__name__)
+
 
 def main(args):
     data_config = load_yaml(args.data_config)
     model_config = load_yaml(args.model_config)
     save_dir = args.save_dir
     os.makedirs(save_dir, exist_ok=False)
+    exp_config = {
+        "data_config_pth": args.data_config,
+        "model_config_pth": args.model_config,
+        "save_dir": save_dir,
+        "seed": 42,
+    }
+    # Save experiment configuration to the save directory
+    exp_config_path = os.path.join(save_dir, "experiment_config.json")
+    with open(exp_config_path, "w") as f:
+        json.dump(exp_config, f, indent=4)
+    print(f"Experiment configuration saved to {exp_config_path}")
+    # set up logging
+    logging.basicConfig(filename=f"{save_dir}/logs.log", level=logging.INFO)
 
     # Load tokenizer and model
     model_name = model_config["model_id"]
@@ -34,13 +50,13 @@ def main(args):
     # Data collator
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
-    train_dataset, eval_dataset = get_reddit_data(
+    train_dataset, eval_dataset, _ = get_reddit_data(
         **data_config["data_args"], tokenizer=tokenizer
     )
 
     training_args = TrainingArguments(
         output_dir=save_dir,
-        num_train_epochs=5,
+        num_train_epochs=3,
         per_device_train_batch_size=16,
         per_device_eval_batch_size=16,
         warmup_steps=500,
