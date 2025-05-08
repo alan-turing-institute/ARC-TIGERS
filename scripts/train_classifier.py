@@ -26,6 +26,17 @@ def main(args):
     model_config = load_yaml(args.model_config)
     save_dir = args.save_dir
     os.makedirs(save_dir, exist_ok=False)
+    exp_config = {
+        "data_config_pth": args.data_config,
+        "model_config_pth": args.model_config,
+        "save_dir": save_dir,
+        "seed": 42,
+    }
+    # Save experiment configuration to the save directory
+    exp_config_path = os.path.join(save_dir, "experiment_config.json")
+    with open(exp_config_path, "w") as f:
+        json.dump(exp_config, f, indent=4)
+    print(f"Experiment configuration saved to {exp_config_path}")
     # set up logging
     logging.basicConfig(filename=f"{save_dir}/logs.log", level=logging.INFO)
 
@@ -39,7 +50,7 @@ def main(args):
     # Data collator
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
-    train_dataset, eval_dataset = get_reddit_data(
+    train_dataset, eval_dataset, _ = get_reddit_data(
         **data_config["data_args"], tokenizer=tokenizer
     )
 

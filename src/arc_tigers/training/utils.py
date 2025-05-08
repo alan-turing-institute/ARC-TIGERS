@@ -1,5 +1,6 @@
 from collections import Counter
 
+import numpy as np
 import torch
 from datasets import Dataset, concatenate_datasets, load_dataset
 from torch import nn
@@ -46,7 +47,9 @@ class WeightedLossTrainer(Trainer):
         return (loss, outputs) if return_outputs else loss
 
 
-def get_reddit_data(setting, target_config, balanced, n_rows, tokenizer):
+def get_reddit_data(
+    setting, target_config, balanced, n_rows, tokenizer, random_seed=42
+):
     """
     Loads and preprocesses the Reddit dataset based on the specified configuration.
 
@@ -65,6 +68,7 @@ def get_reddit_data(setting, target_config, balanced, n_rows, tokenizer):
         tuple: A tuple containing the training dataset, evaluation dataset, and test
         dataset.
     """
+    split_generator = np.random.default_rng(seed=random_seed)
     # work out the data directory
     data_dir = f"{DATA_DIR}/reddit_dataset_12/{n_rows}_rows/splits/{target_config}/"
     # load dataset
@@ -101,7 +105,6 @@ def get_reddit_data(setting, target_config, balanced, n_rows, tokenizer):
             "targets": train_target_map,
         },
     )
-
     if setting == "one-vs-all":
         tokenized_test_dataset: Dataset = dataset["test"].map(
             preprocess_function,
@@ -111,10 +114,13 @@ def get_reddit_data(setting, target_config, balanced, n_rows, tokenizer):
                 "targets": test_target_map,
             },
         )
-    elif setting == "one-vs-all":
-        tokenized_test_dataset = tokenized_train_dataset.train_test_split(
-            test_size=0.5,
-        ).values()
+    elif setting == "multi-class":
+        # use the train set so hat the classes are consistent
+        tokenized_train_dataset, tokenized_test_dataset = (
+            tokenized_train_dataset.train_test_split(
+                test_size=0.5, generator=split_generator
+            ).values()
+        )
 
     # balance the dataset
     if balanced:
@@ -124,7 +130,7 @@ def get_reddit_data(setting, target_config, balanced, n_rows, tokenizer):
 
     # Split dataset
     train_data, eval_data = tokenized_train_dataset.train_test_split(
-        test_size=0.1
+        test_size=0.1, generator=split_generator
     ).values()
     return train_data, eval_data, tokenized_test_dataset
 
