@@ -34,7 +34,6 @@ repos:
     hooks:
       - id: mypy
         files: src
-        args: [--ignore-missing-imports]
         additional_dependencies:
           - pytest
           - types-PyYAML

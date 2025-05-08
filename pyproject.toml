@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "ARC-TIGERS"
 version = "0.1.0"
 authors = [
-  { name = "Jack Dymond", email = "j.dymond@turing.ac.uk" },
+  { name = "Applied Research Centre", email = "arc@turing.ac.uk" },
 ]
 description = "Testing Imbalanced cateGory classifiERS"
 readme = "README.md"
@@ -20,7 +20,6 @@ classifiers = [
   "Programming Language :: Python",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -81,7 +80,7 @@ disallow_untyped_defs = false
 disallow_incomplete_defs = false
 check_untyped_defs = true
 strict = false
-
+ignore_missing_imports = true
 
 [tool.ruff]
 src = ["src"]
