@@ -36,6 +36,13 @@ def main(data_dir: str):
         metric_stats[metric]["std"] = np.std(metric_repeats, axis=0)
 
     for metric in metrics:
+        plt.axhline(
+            y=full_metrics[metric],
+            color="k",
+            linestyle="--",
+            label="estimate (whole dataset)",
+        )
+
         plt.plot(
             repeats[0].index,
             metric_stats[metric]["mean"],
@@ -59,19 +66,12 @@ def main(data_dir: str):
             linestyle="-",
             linewidth=1,
         )
-
-        plt.axhline(
-            y=full_metrics[metric],
-            color="k",
-            linestyle="--",
-            label="estimate (whole dataset)",
-        )
-
         plt.ylabel(metric)
         plt.xlabel("Number of labelled samples")
         plt.legend()
         plt.tight_layout()
         plt.savefig(f"{data_dir}/metrics_{metric}.png", dpi=300)
+        plt.close()
 
 
 if __name__ == "__main__":
