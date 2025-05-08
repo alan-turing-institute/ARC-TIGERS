@@ -4,9 +4,20 @@ import os
 import numpy as np
 import pandas as pd
 from datasets import Dataset
-from transformers import PreTrainedModel
+from transformers import (
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    DataCollatorWithPadding,
+    PreTrainedModel,
+    TrainingArguments,
+)
 
 from arc_tigers.sample.random import RandomSampler
+from arc_tigers.training.utils import (
+    WeightedLossTrainer,
+    get_label_weights,
+    get_reddit_data,
+)
 
 
 def compute_metrics(dataset, model) -> dict[str, float]:
@@ -81,11 +92,6 @@ def main(
     os.makedirs(save_dir, exist_ok=True)
     rng = np.random.default_rng(init_seed)
 
-    # calculate predictions for whole dataset
-    model = ...  # Load model
-    preds = ...  # Compute predictions
-    # dataset["preds"] = preds
-
     # full dataset stats
     metrics = compute_metrics(dataset, model)
     with open(f"{save_dir}/metrics_full.json", "w") as f:
@@ -99,4 +105,44 @@ def main(
 
 
 if __name__ == "__main__":
+    # calculate predictions for whole dataset
+    model_name = model_config["model_id"]
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        model_name, **model_config["model_kwargs"]
+    )
+
+    # Data collator
+    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+
+    train_dataset, eval_dataset, _ = get_reddit_data(
+        **data_config["data_args"], tokenizer=tokenizer
+    )
+
+    training_args = TrainingArguments(
+        output_dir=save_dir,
+        num_train_epochs=3,
+        per_device_train_batch_size=16,
+        per_device_eval_batch_size=16,
+        warmup_steps=500,
+        weight_decay=0.01,
+        logging_dir=f"{save_dir}/logs",
+        save_total_limit=3,
+        load_best_model_at_end=True,
+    )
+    # Trainer
+    trainer = WeightedLossTrainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        tokenizer=tokenizer,
+        data_collator=data_collator,
+        compute_metrics=compute_metrics,
+        loss_weights=get_label_weights(train_dataset),
+    )
+
+    preds = ...  # Compute predictions
+    # dataset["preds"] = preds
+
     main("data/random_sampling", 1000, np.array(range(10000)), None, 42, 500)
