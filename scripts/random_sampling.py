@@ -19,25 +19,29 @@ from arc_tigers.training.utils import get_reddit_data
 from arc_tigers.utils import load_yaml
 
 
-def evaluate(dataset) -> dict[str, float]:
+def evaluate(dataset, preds) -> dict[str, float]:
     """
     Compute metrics for a given dataset with preds.
 
     Args:
-        dataset: The dataset to compute metrics for, which should have a column
-            called "preds" containing the predictions.
+        dataset: The dataset to compute metrics for
+        preds: The predictions for the dataset.
         model: The model to compute metrics with.
 
     Returns:
         A dictionary containing the computed metrics.
     """
     # Placeholder for actual metric computation
-    eval_pred = (dataset["preds"], dataset["label"])
-    return compute_metrics(eval_pred)
+    eval_pred = (preds, dataset["label"])
+    metrics = compute_metrics(eval_pred)
+    for key in metrics:
+        if isinstance(metrics[key], np.ndarray):
+            metrics[key] = metrics[key].tolist()
+    return metrics
 
 
 def sample_dataset_metrics(
-    dataset: Dataset, seed: int, max_labels: int | None = None
+    dataset: Dataset, preds, seed: int, max_labels: int | None = None
 ) -> list[dict[str, float]]:
     """
     Simulate iteratively random sampling the whole dataset, re-computing metrics
@@ -45,6 +49,7 @@ def sample_dataset_metrics(
 
     Args:
         dataset: The dataset to sample from.
+        preds: The predictions for the dataset.
         model: The model to compute metrics with.
         seed: The random seed for sampling.
         max_labels: The maximum number of labels to sample. If None, the whole dataset
@@ -59,7 +64,7 @@ def sample_dataset_metrics(
     metrics = []
     for i in range(max_labels):
         sampler.sample()
-        metric = evaluate(dataset[sampler.labelled_idx])
+        metric = evaluate(dataset[sampler.labelled_idx], preds[sampler.labelled_idx])
         metric["n"] = i + 1
         metrics.append(metric)
 
@@ -70,6 +75,7 @@ def main(
     save_dir: str,
     n_repeats: int,
     dataset: Dataset,
+    preds,
     init_seed: int,
     max_labels: int | None = None,
 ):
@@ -79,8 +85,8 @@ def main(
     Args:
         save_dir: Directory to save the metrics files.
         n_repeats: Number of times to repeat the sampling.
-        dataset: The dataset to sample from, with predictions already computed and
-            stored in a column called "preds".
+        dataset: The dataset to sample from
+        preds: The predictions for the dataset.
         model: The model to compute metrics with.
         init_seed: The initial seed for random sampling (determines the seed used for
             each repeat).
@@ -91,14 +97,15 @@ def main(
     rng = np.random.default_rng(init_seed)
 
     # full dataset stats
-    metrics = evaluate(dataset)
+    metrics = evaluate(dataset, preds)
+    print(metrics)
     with open(f"{save_dir}/metrics_full.json", "w") as f:
         json.dump(metrics, f)
 
     # iteratively sample dataset and compute metrics, repeated n_repeats times
     for _ in range(n_repeats):
         seed = rng.integers(1, 2**32 - 1)  # Generate a random seed
-        metrics = sample_dataset_metrics(dataset, seed, max_labels=max_labels)
+        metrics = sample_dataset_metrics(dataset, preds, seed, max_labels=max_labels)
         pd.DataFrame(metrics).to_csv(f"{save_dir}/metrics_{seed}.csv", index=False)
 
 
@@ -112,6 +119,9 @@ if __name__ == "__main__":
         "model_config",
         help="path to the model config yaml file",
     )
+    parser.add_argument("--n_repeats", type=int)
+    parser.add_argument("--max_labels", type=int)
+    parser.add_argument("--seed", type=int)
     parser.add_argument(
         "save_dir",
         type=str,
@@ -141,12 +151,11 @@ if __name__ == "__main__":
     trainer = Trainer(
         model=model,
         args=training_args,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         data_collator=data_collator,
-        compute_metrics=evaluate,
+        compute_metrics=compute_metrics,
     )
 
-    preds = trainer.predict(test_dataset, metric_key_prefix="")
-    test_dataset["preds"] = preds
+    preds = trainer.predict(test_dataset, metric_key_prefix="").predictions
 
-    main(args.save_dir, 1000, test_dataset, 42, 500)
+    main(args.save_dir, args.n_repeats, test_dataset, preds, args.seed, args.max_labels)
