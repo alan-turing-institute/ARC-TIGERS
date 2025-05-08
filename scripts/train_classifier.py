@@ -56,7 +56,7 @@ def main(args):
 
     training_args = TrainingArguments(
         output_dir=save_dir,
-        num_train_epochs=5,
+        num_train_epochs=3,
         per_device_train_batch_size=16,
         per_device_eval_batch_size=16,
         warmup_steps=500,
