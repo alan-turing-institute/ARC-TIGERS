@@ -1,7 +1,7 @@
 from collections import Counter
 
 import torch
-from datasets import concatenate_datasets, load_dataset
+from datasets import Dataset, concatenate_datasets, load_dataset
 from torch import nn
 from transformers import Trainer
 
@@ -13,6 +13,18 @@ from arc_tigers.data.utils import (
     preprocess_function,
 )
 from arc_tigers.utils import get_device
+
+
+def balance_dataset(dataset):
+    # Get the number of samples in each class
+    label_counts = Counter(dataset["label"])
+    # Calculate the number for each class
+    min_samples = min(label_counts.values())
+    resampled_data = []
+    for label in label_counts:
+        label_data = dataset.filter(lambda x, label=label: x["label"] == label)
+        resampled_data.append(label_data.shuffle().select(range(min_samples)))
+    return concatenate_datasets(resampled_data)
 
 
 class WeightedLossTrainer(Trainer):
@@ -35,51 +47,86 @@ class WeightedLossTrainer(Trainer):
 
 
 def get_reddit_data(setting, target_config, balanced, n_rows, tokenizer):
+    """
+    Loads and preprocesses the Reddit dataset based on the specified configuration.
+
+    Args:
+        setting (str): The classification setting, either "multi-class" or "one-vs-all".
+        target_config (str): The target configuration to use for the dataset.
+        balanced (bool): Whether to balance the dataset by resampling classes.
+        n_rows (int): The number of rows to load from the dataset.
+        tokenizer (transformers.PreTrainedTokenizer): The tokenizer to use for
+        reprocessing.
+
+    Raises:
+        ValueError: If an unknown setting is provided.
+
+    Returns:
+        tuple: A tuple containing the training dataset, evaluation dataset, and test
+        dataset.
+    """
     # work out the data directory
     data_dir = f"{DATA_DIR}/reddit_dataset_12/{n_rows}_rows/splits/{target_config}/"
     # load dataset
-    dataset = load_dataset(
+    dataset: dict[str, Dataset] = load_dataset(
         "csv",
         data_files={"train": f"{data_dir}/train.csv", "eval": f"{data_dir}/test.csv"},
     )
 
     if setting == "multi-class":
-        targets = BINARY_COMBINATIONS[target_config]["train"]
-        targets = ["r/soccer", "r/FantasyPL"]
-        dataset = dataset.filter(lambda y: y in targets, input_columns=["label"])
-        target_map = get_target_mapping(setting, targets)
+        train_targets = BINARY_COMBINATIONS[target_config]["train"]
+        train_dataset = dataset["train"].filter(
+            lambda y: y in train_targets, input_columns=["label"]
+        )
+        train_target_map = get_target_mapping(setting, train_targets)
 
     elif setting == "one-vs-all":
-        targets = ONE_VS_ALL_COMBINATIONS[target_config]["train"]
-        target_map = get_target_mapping(setting, targets)
+        train_dataset = dataset["train"]
+        train_targets = ONE_VS_ALL_COMBINATIONS[target_config]["train"]
+        test_targets = ONE_VS_ALL_COMBINATIONS[target_config]["test"]
+        train_target_map = get_target_mapping(setting, train_targets)
+        test_target_map = get_target_mapping(setting, test_targets)
 
-    tokenized_datasets = dataset.map(
+    else:
+        err_msg = (
+            f"Unknown setting: {setting}. Please use 'multi-class' or 'one-vs-all'."
+        )
+        raise ValueError(err_msg)
+
+    tokenized_train_dataset = train_dataset.map(
         preprocess_function,
         batched=True,
         fn_kwargs={
             "tokenizer": tokenizer,
-            "targets": target_map,
+            "targets": train_target_map,
         },
     )
 
+    if setting == "one-vs-all":
+        tokenized_test_dataset: Dataset = dataset["test"].map(
+            preprocess_function,
+            batched=True,
+            fn_kwargs={
+                "tokenizer": tokenizer,
+                "targets": test_target_map,
+            },
+        )
+    elif setting == "one-vs-all":
+        tokenized_test_dataset = tokenized_train_dataset.train_test_split(
+            test_size=0.5,
+        ).values()
+
     # balance the dataset
     if balanced:
-        print("Balancing the dataset...")
-        # Get the number of samples in each class
-        label_counts = Counter(tokenized_datasets["train"]["label"])
-        # Calculate the weights for each class
-        min_samples = min(label_counts.values())
-        resampled_data = []
-        for label in label_counts:
-            label_data = tokenized_datasets["train"].filter(
-                lambda x, label=label: x["label"] == label
-            )
-            resampled_data.append(label_data.shuffle().select(range(min_samples)))
-        tokenized_datasets["train"] = concatenate_datasets(resampled_data)
+        print("Balancing the datasets...")
+        tokenized_train_dataset = balance_dataset(tokenized_train_dataset)
+        tokenized_test_dataset = balance_dataset(tokenized_test_dataset)
 
     # Split dataset
-    train_data = tokenized_datasets["train"]
-    return train_data.train_test_split(test_size=0.1).values()
+    train_data, eval_data = tokenized_train_dataset.train_test_split(
+        test_size=0.1
+    ).values()
+    return train_data, eval_data, tokenized_test_dataset
 
 
 def get_label_weights(dataset, verbose=True):
