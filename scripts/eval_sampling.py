@@ -7,6 +7,12 @@ import pandas as pd
 
 
 def main(data_dir: str):
+    """
+    Compute and plot stats of metric values after a varying number of labelled samples.
+
+    Args:
+        data_dir: Directory containing the metrics files.
+    """
     result_files = glob(f"{data_dir}/metrics_*.csv")
     repeats = [pd.read_csv(f, index_col="n") for f in result_files]
     if any(len(r) != len(repeats[0]) for r in repeats):

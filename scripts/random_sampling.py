@@ -65,6 +65,19 @@ def main(
     init_seed: int,
     max_labels: int | None = None,
 ):
+    """
+    Iteratively sample a dataset and compute metrics for the labelled subset.
+
+    Args:
+        save_dir: Directory to save the metrics files.
+        n_repeats: Number of times to repeat the sampling.
+        dataset: The dataset to sample from.
+        model: The model to compute metrics with.
+        init_seed: The initial seed for random sampling (determines the seed used for
+            each repeat).
+        max_labels: The maximum number of labels to sample. If None, the whole dataset
+            will be sampled.
+    """
     os.makedirs(save_dir, exist_ok=True)
     rng = np.random.default_rng(init_seed)
 
