@@ -10,7 +10,11 @@ logger = logging.getLogger(__name__)
 def compute_metrics(eval_pred):
     logits, labels = eval_pred
     predictions = np.argmax(logits, axis=-1)
-    precision, recall, f1, _ = precision_recall_fscore_support(labels, predictions)
+    precision, recall, f1, _ = precision_recall_fscore_support(
+        labels,
+        predictions,
+        labels=[0, 1],  # TODO: assumed labels are 0 and 1 here
+    )
     acc = accuracy_score(labels, predictions)
     eval_scores = {
         "accuracy": acc,

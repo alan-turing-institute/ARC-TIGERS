@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+from copy import deepcopy
 
 import numpy as np
 import pandas as pd
@@ -35,9 +36,17 @@ def evaluate(dataset, preds) -> dict[str, float]:
     # Placeholder for actual metric computation
     eval_pred = (preds, dataset["label"])
     metrics = compute_metrics(eval_pred)
-    for key in metrics:
-        if isinstance(metrics[key], np.ndarray):
-            metrics[key] = metrics[key].tolist()
+    metric_names = list(metrics.keys())
+    for key in metric_names:
+        if isinstance(metrics[key], list):
+            # unpack multi-valued metrics into separate values for each class
+            multi_metric = metrics.pop(key)
+            if len(multi_metric) == 1:
+                msg = "If metric value is a list, should have more than 1 value"
+                raise ValueError(msg)
+            for i, m in enumerate(multi_metric):
+                metrics[f"{key}_{i}"] = m
+
     return metrics
 
 
@@ -67,6 +76,7 @@ def sample_dataset_metrics(
         max_labels = len(dataset)
     if evaluate_steps is None:
         evaluate_steps = list(range(1, max_labels + 1))
+    evaluate_steps = deepcopy(evaluate_steps)
     sampler = RandomSampler(dataset, seed)
     metrics = []
     next_eval_step = evaluate_steps.pop(0)
@@ -155,7 +165,7 @@ if __name__ == "__main__":
     model_name = model_config["model_id"]
     model_weights = args.save_dir
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(model_weights)
+    model = AutoModelForSequenceClassification.from_pretrained(model_name)
 
     # Data collator
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
@@ -183,5 +193,5 @@ if __name__ == "__main__":
         preds,
         args.seed,
         args.max_labels,
-        evaluate_steps=np.arange(10, 1010, 10).tolist(),
+        evaluate_steps=np.arange(10, 100, 10).tolist(),
     )
