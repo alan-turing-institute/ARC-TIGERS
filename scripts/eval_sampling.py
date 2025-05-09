@@ -40,6 +40,14 @@ def main(data_dir: str):
         metric_stats[metric] = {}
         metric_stats[metric]["mean"] = np.mean(metric_repeats, axis=0)
         metric_stats[metric]["std"] = np.std(metric_repeats, axis=0)
+        metric_stats[metric]["quantile_25"] = np.quantile(metric_repeats, 0.25, axis=0)
+        metric_stats[metric]["quantile_75"] = np.quantile(metric_repeats, 0.75, axis=0)
+        metric_stats[metric]["quantile_2.5"] = np.quantile(
+            metric_repeats, 0.025, axis=0
+        )
+        metric_stats[metric]["quantile_97.5"] = np.quantile(
+            metric_repeats, 0.975, axis=0
+        )
 
     for metric in metrics:
         plt.axhline(
@@ -59,15 +67,30 @@ def main(data_dir: str):
         )
         plt.plot(
             repeats[0].index,
-            metric_stats[metric]["mean"] + metric_stats[metric]["std"],
-            label="std (labelled subset)",
+            metric_stats[metric]["quantile_25"],
+            label="Quantiles (25-75)",
+            color="orange",
+            linestyle="-",
+            linewidth=1,
+        )
+        plt.plot(
+            repeats[0].index,
+            metric_stats[metric]["quantile_75"],
+            color="orange",
+            linestyle="-",
+            linewidth=1,
+        )
+        plt.plot(
+            repeats[0].index,
+            metric_stats[metric]["quantile_2.5"],
+            label="Quantiles (2.5-97.5)",
             color="r",
             linestyle="-",
             linewidth=1,
         )
         plt.plot(
             repeats[0].index,
-            metric_stats[metric]["mean"] - metric_stats[metric]["std"],
+            metric_stats[metric]["quantile_97.5"],
             color="r",
             linestyle="-",
             linewidth=1,
