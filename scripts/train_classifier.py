@@ -63,6 +63,8 @@ def main(args):
         weight_decay=0.01,
         logging_dir=f"{save_dir}/logs",
         save_total_limit=3,
+        eval_strategy="epoch",
+        save_strategy="epoch",
         load_best_model_at_end=True,
     )
     # Trainer
@@ -82,9 +84,6 @@ def main(args):
 
     # Evaluate the model
     results = trainer.evaluate()
-    for key in ["eval_f1", "eval_precision", "eval_recall"]:
-        if key in results:
-            results[key] = results[key].tolist()
     print("Evaluation results:", results)
     # Save evaluation results to a JSON file
     results_path = f"{save_dir}/evaluation_results.json"

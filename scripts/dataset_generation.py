@@ -76,7 +76,7 @@ def main(args):
     train_data = pd.concat([train_targets_df, train_non_targets_df])
     test_data = pd.concat([test_targets_df, test_non_targets_df])
 
-    save_path = f"{save_dir}/splits/{args.split}/"
+    save_path = f"{save_dir}/splits/{args.target_config}/"
     os.makedirs(save_path, exist_ok=True)
     train_data.to_csv(f"{save_path}/train.csv", index=False)
     test_data.to_csv(f"{save_path}/test.csv", index=False)

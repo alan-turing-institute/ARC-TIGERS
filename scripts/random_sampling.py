@@ -5,6 +5,7 @@ import os
 import numpy as np
 import pandas as pd
 from datasets import Dataset
+from tqdm import tqdm
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -93,20 +94,21 @@ def main(
         max_labels: The maximum number of labels to sample. If None, the whole dataset
             will be sampled.
     """
-    os.makedirs(save_dir, exist_ok=True)
+    output_dir = f"{save_dir}/random_sampling_outputs/"
+    os.makedirs(output_dir, exist_ok=True)
     rng = np.random.default_rng(init_seed)
 
     # full dataset stats
     metrics = evaluate(dataset, preds)
     print(metrics)
-    with open(f"{save_dir}/metrics_full.json", "w") as f:
+    with open(f"{output_dir}/metrics_full.json", "w") as f:
         json.dump(metrics, f)
 
     # iteratively sample dataset and compute metrics, repeated n_repeats times
-    for _ in range(n_repeats):
+    for _ in tqdm(range(n_repeats)):
         seed = rng.integers(1, 2**32 - 1)  # Generate a random seed
         metrics = sample_dataset_metrics(dataset, preds, seed, max_labels=max_labels)
-        pd.DataFrame(metrics).to_csv(f"{save_dir}/metrics_{seed}.csv", index=False)
+        pd.DataFrame(metrics).to_csv(f"{output_dir}/metrics_{seed}.csv", index=False)
 
 
 if __name__ == "__main__":
@@ -119,25 +121,24 @@ if __name__ == "__main__":
         "model_config",
         help="path to the model config yaml file",
     )
-    parser.add_argument("--n_repeats", type=int)
-    parser.add_argument("--max_labels", type=int)
-    parser.add_argument("--seed", type=int)
     parser.add_argument(
         "save_dir",
         type=str,
         default=None,
         help="Path to save the model and results",
     )
+    parser.add_argument("--n_repeats", type=int, required=True)
+    parser.add_argument("--max_labels", type=int, required=True)
+    parser.add_argument("--seed", type=int, required=True)
     args = parser.parse_args()
     data_config = load_yaml(args.data_config)
     model_config = load_yaml(args.model_config)
 
     # calculate predictions for whole dataset
     model_name = model_config["model_id"]
+    model_weights = args.save_dir
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(
-        model_name, **model_config["model_kwargs"]
-    )
+    model = AutoModelForSequenceClassification.from_pretrained(model_weights)
 
     # Data collator
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)

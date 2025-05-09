@@ -3,8 +3,12 @@ ONE_VS_ALL_COMBINATIONS = {
         "train": ["r/soccer", "r/Cricket"],
         "test": ["r/nfl", "NFLv2", "r/NBATalk", "r/nba"],
     },
+    "football": {
+        "train": ["r/soccer", "r/FantasyPL"],
+        "test": ["r/coys", "r/reddevils", "r/LiverpoolFC"],
+    },
     "american_football": {
-        "train": ["r/nfl", "NFLv2"],
+        "train": ["r/nfl", "r/NFLv2"],
         "test": ["r/fantasyfootball"],
     },
     "ami": {"train": ["r/AmItheAsshole"], "test": ["r/AmIOverreacting"]},

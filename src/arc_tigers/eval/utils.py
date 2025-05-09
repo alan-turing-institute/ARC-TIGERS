@@ -12,6 +12,11 @@ def compute_metrics(eval_pred):
     predictions = np.argmax(logits, axis=-1)
     precision, recall, f1, _ = precision_recall_fscore_support(labels, predictions)
     acc = accuracy_score(labels, predictions)
-    eval_scores = {"accuracy": acc, "f1": f1, "precision": precision, "recall": recall}
+    eval_scores = {
+        "accuracy": acc,
+        "f1": f1.tolist(),
+        "precision": precision.tolist(),
+        "recall": recall.tolist(),
+    }
     logger.info("Eval metrics: %s", eval_scores)
     return eval_scores
