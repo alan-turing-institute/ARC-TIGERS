@@ -42,7 +42,11 @@ def evaluate(dataset, preds) -> dict[str, float]:
 
 
 def sample_dataset_metrics(
-    dataset: Dataset, preds, seed: int, max_labels: int | None = None
+    dataset: Dataset,
+    preds,
+    seed: int,
+    max_labels: int | None = None,
+    evaluate_steps: list[int] | None = None,
 ) -> list[dict[str, float]]:
     """
     Simulate iteratively random sampling the whole dataset, re-computing metrics
@@ -61,13 +65,23 @@ def sample_dataset_metrics(
     """
     if max_labels is None:
         max_labels = len(dataset)
+    if evaluate_steps is None:
+        evaluate_steps = list(range(1, max_labels + 1))
     sampler = RandomSampler(dataset, seed)
     metrics = []
-    for i in range(max_labels):
+    next_eval_step = evaluate_steps.pop(0)
+    for n in range(max_labels):
         sampler.sample()
-        metric = evaluate(dataset[sampler.labelled_idx], preds[sampler.labelled_idx])
-        metric["n"] = i + 1
-        metrics.append(metric)
+        if (n + 1) == next_eval_step:
+            metric = evaluate(
+                dataset[sampler.labelled_idx], preds[sampler.labelled_idx]
+            )
+            metric["n"] = n + 1
+            metrics.append(metric)
+            if evaluate_steps:
+                next_eval_step = evaluate_steps.pop(0)
+            else:
+                break
 
     return metrics
 
@@ -79,6 +93,7 @@ def main(
     preds,
     init_seed: int,
     max_labels: int | None = None,
+    evaluate_steps: list[int] | None = None,
 ):
     """
     Iteratively sample a dataset and compute metrics for the labelled subset.
@@ -107,7 +122,9 @@ def main(
     # iteratively sample dataset and compute metrics, repeated n_repeats times
     for _ in tqdm(range(n_repeats)):
         seed = rng.integers(1, 2**32 - 1)  # Generate a random seed
-        metrics = sample_dataset_metrics(dataset, preds, seed, max_labels=max_labels)
+        metrics = sample_dataset_metrics(
+            dataset, preds, seed, max_labels=max_labels, evaluate_steps=evaluate_steps
+        )
         pd.DataFrame(metrics).to_csv(f"{output_dir}/metrics_{seed}.csv", index=False)
 
 
@@ -159,4 +176,12 @@ if __name__ == "__main__":
 
     preds = trainer.predict(test_dataset, metric_key_prefix="").predictions
 
-    main(args.save_dir, args.n_repeats, test_dataset, preds, args.seed, args.max_labels)
+    main(
+        args.save_dir,
+        args.n_repeats,
+        test_dataset,
+        preds,
+        args.seed,
+        args.max_labels,
+        evaluate_steps=np.arange(10, 1010, 10).tolist(),
+    )
