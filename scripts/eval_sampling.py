@@ -1,3 +1,4 @@
+import argparse
 import json
 from glob import glob
 
@@ -81,5 +82,11 @@ def main(data_dir: str):
 
 
 if __name__ == "__main__":
-    data_dir = "data/random_sampling"
+    parser = argparse.ArgumentParser(description="Evaluate sampling metrics.")
+    parser.add_argument(
+        "data_dir", type=str, help="Directory containing the metrics files."
+    )
+    args = parser.parse_args()
+
+    data_dir = args.data_dir
     main(data_dir)

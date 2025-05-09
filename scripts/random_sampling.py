@@ -21,6 +21,34 @@ from arc_tigers.training.utils import get_reddit_data
 from arc_tigers.utils import load_yaml
 
 
+def imbalance_dataset(dataset, seed, class_balance):
+    # Imbalance the dataset based on the class_balance variable
+    class_labels = np.array(dataset["label"])
+    class_0_indices = np.where(class_labels == 0)[0]
+    class_1_indices = np.where(class_labels == 1)[0]
+
+    # Calculate the number of samples for each class based on class_balance
+    n_class_0 = len(class_0_indices)
+    n_class_1 = int(n_class_0 * class_balance)
+
+    # Randomly sample indices for each class
+    rng = np.random.default_rng(seed)
+    sampled_class_0_indices = rng.choice(class_0_indices, n_class_0, replace=False)
+    sampled_class_1_indices = rng.choice(class_1_indices, n_class_1, replace=False)
+
+    # Combine the sampled indices and sort them
+    sampled_indices = np.sort(
+        np.concatenate([sampled_class_0_indices, sampled_class_1_indices])
+    )
+
+    # Subset the dataset and predictions
+    dataset = dataset.select(sampled_indices)
+    # Print class counts
+    print(f"Class 0 count: {len(sampled_class_0_indices)}")
+    print(f"Class 1 count: {len(sampled_class_1_indices)}")
+    return dataset
+
+
 def evaluate(dataset, preds) -> dict[str, float]:
     """
     Compute metrics for a given dataset with preds.
@@ -104,6 +132,7 @@ def main(
     init_seed: int,
     max_labels: int | None = None,
     evaluate_steps: list[int] | None = None,
+    class_balance: float = 1.0,
 ):
     """
     Iteratively sample a dataset and compute metrics for the labelled subset.
@@ -119,9 +148,16 @@ def main(
         max_labels: The maximum number of labels to sample. If None, the whole dataset
             will be sampled.
     """
-    output_dir = f"{save_dir}/random_sampling_outputs/"
-    os.makedirs(output_dir, exist_ok=True)
+
     rng = np.random.default_rng(init_seed)
+    if class_balance != 1.0:
+        output_dir = (
+            f"{save_dir}/imbalanced_random_sampling_outputs_)"
+            f"({str(class_balance).strip('.')}/"
+        )
+    else:
+        output_dir = f"{save_dir}/new_random_sampling_outputs/"
+    os.makedirs(output_dir, exist_ok=True)
 
     # full dataset stats
     metrics = evaluate(dataset, preds)
@@ -154,6 +190,12 @@ if __name__ == "__main__":
         default=None,
         help="Path to save the model and results",
     )
+    parser.add_argument(
+        "--class_balance",
+        type=float,
+        default=1.0,
+        help="Balance between the classes",
+    )
     parser.add_argument("--n_repeats", type=int, required=True)
     parser.add_argument("--max_labels", type=int, required=True)
     parser.add_argument("--seed", type=int, required=True)
@@ -165,7 +207,7 @@ if __name__ == "__main__":
     model_name = model_config["model_id"]
     model_weights = args.save_dir
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(model_name)
+    model = AutoModelForSequenceClassification.from_pretrained(model_weights)
 
     # Data collator
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
@@ -173,6 +215,11 @@ if __name__ == "__main__":
     _, _, test_dataset = get_reddit_data(
         **data_config["data_args"], tokenizer=tokenizer
     )
+
+    if args.class_balance != 1.0:
+        test_dataset = imbalance_dataset(
+            test_dataset, seed=args.seed, class_balance=args.class_balance
+        )
 
     training_args = TrainingArguments(output_dir="tmp", per_device_eval_batch_size=16)
     # Trainer
@@ -193,5 +240,6 @@ if __name__ == "__main__":
         preds,
         args.seed,
         args.max_labels,
-        evaluate_steps=np.arange(10, 100, 10).tolist(),
+        evaluate_steps=np.arange(5, args.max_labels, 10).tolist(),
+        class_balance=args.class_balance,
     )
