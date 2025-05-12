@@ -211,7 +211,7 @@ if __name__ == "__main__":
     # Data collator
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
-    _, _, test_dataset = get_reddit_data(
+    _, _, test_dataset, meta_data = get_reddit_data(
         **data_config["data_args"], tokenizer=tokenizer
     )
 

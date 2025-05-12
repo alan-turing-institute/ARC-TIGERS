@@ -53,7 +53,7 @@ def main(args):
     # Data collator
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
-    train_dataset, eval_dataset, _ = get_reddit_data(
+    train_dataset, eval_dataset, _, _ = get_reddit_data(
         **data_config["data_args"], tokenizer=tokenizer
     )
 

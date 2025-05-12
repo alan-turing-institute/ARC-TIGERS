@@ -76,6 +76,7 @@ def get_reddit_data(
         "csv",
         data_files={"train": f"{data_dir}/train.csv", "eval": f"{data_dir}/test.csv"},
     )
+    meta_data = {}
 
     if setting == "multi-class":
         train_targets = BINARY_COMBINATIONS[target_config]["train"]
@@ -83,6 +84,7 @@ def get_reddit_data(
             lambda y: y in train_targets, input_columns=["label"]
         )
         train_target_map = get_target_mapping(setting, train_targets)
+        meta_data["train_target_map"] = train_target_map
 
     elif setting == "one-vs-all":
         train_dataset = dataset["train"]
@@ -90,6 +92,8 @@ def get_reddit_data(
         test_targets = ONE_VS_ALL_COMBINATIONS[target_config]["test"]
         train_target_map = get_target_mapping(setting, train_targets)
         test_target_map = get_target_mapping(setting, test_targets)
+        meta_data["train_target_map"] = train_target_map
+        meta_data["test_target_map"] = test_target_map
 
     else:
         err_msg = (
@@ -132,7 +136,7 @@ def get_reddit_data(
     train_data, eval_data = tokenized_train_dataset.train_test_split(
         test_size=0.1, generator=split_generator
     ).values()
-    return train_data, eval_data, tokenized_test_dataset
+    return train_data, eval_data, tokenized_test_dataset, meta_data
 
 
 def get_label_weights(dataset, verbose=True):
