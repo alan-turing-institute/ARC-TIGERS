@@ -15,9 +15,6 @@ def main(args):
       the purposes of evaluation. The target class in a given dataset is poorly
       represented, with the ratio of target classes to non target classes being defined
       by the imbalance ratio
-
-    Args:
-        args: _description_
     """
 
     target_categories = ONE_VS_ALL_COMBINATIONS[args.target_config]
