@@ -19,3 +19,4 @@ def _get_config_dir(location):
 
 MODEL_CONFIG_DIR = _get_config_dir("model")
 DATA_CONFIG_DIR = _get_config_dir("data")
+EXP_CONFIG_DIR = _get_config_dir("experiment")

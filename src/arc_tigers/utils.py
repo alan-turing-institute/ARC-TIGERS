@@ -1,5 +1,9 @@
+from typing import Any
+
 import torch
 import yaml
+
+from arc_tigers.constants import DATA_CONFIG_DIR, MODEL_CONFIG_DIR
 
 
 def get_device() -> torch.device:
@@ -28,3 +32,19 @@ def load_yaml(yaml_file: str) -> dict:
 
     with open(yaml_file) as f:
         return yaml.safe_load(f)
+
+
+def get_configs(exp_config: dict[str, Any]):
+    """Get the experiment, data and model configs from the experiment config file.
+
+    Args:
+        exp_config (str): path to the experiment config file
+
+    Returns:
+        tuple: experiment config, data config, model config
+    """
+    data_config_file_name = f"{exp_config['data_config']}.yaml"
+    model_config_file_name = f"{exp_config['model_config']}.yaml"
+    data_config = load_yaml(DATA_CONFIG_DIR / data_config_file_name)
+    model_config = load_yaml(MODEL_CONFIG_DIR / model_config_file_name)
+    return data_config, model_config
