@@ -204,10 +204,9 @@ if __name__ == "__main__":
     model_config = load_yaml(args.model_config)
 
     # calculate predictions for whole dataset
-    model_name = model_config["model_id"]
-    model_weights = args.save_dir
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(model_weights)
+    print(f"Loading model and tokenizer from {args.save_dir}...")
+    tokenizer = AutoTokenizer.from_pretrained(args.save_dir)
+    model = AutoModelForSequenceClassification.from_pretrained(args.save_dir)
 
     # Data collator
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)

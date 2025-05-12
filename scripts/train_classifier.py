@@ -7,6 +7,8 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DataCollatorWithPadding,
+    PreTrainedModel,
+    PreTrainedTokenizer,
     TrainingArguments,
 )
 
@@ -43,8 +45,8 @@ def main(args):
 
     # Load tokenizer and model
     model_name = model_config["model_id"]
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(
+    tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(model_name)
+    model: PreTrainedModel = AutoModelForSequenceClassification.from_pretrained(
         model_name, **model_config["model_kwargs"]
     )
 
@@ -84,8 +86,9 @@ def main(args):
         json.dump(results, f, indent=4)
     print(f"Evaluation results saved to {results_path}")
 
-    # Save the model
+    # Save the model and tokenizer
     model.save_pretrained(save_dir)
+    tokenizer.save_pretrained(save_dir)
 
 
 if __name__ == "__main__":
