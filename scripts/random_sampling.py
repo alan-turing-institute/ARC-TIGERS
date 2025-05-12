@@ -152,8 +152,8 @@ def main(
     rng = np.random.default_rng(init_seed)
     if class_balance != 1.0:
         output_dir = (
-            f"{save_dir}/imbalanced_random_sampling_outputs_)"
-            f"({str(class_balance).strip('.')}/"
+            f"{save_dir}/imbalanced_random_sampling_outputs_"
+            f"{str(class_balance).replace('.', '')}/"
         )
     else:
         output_dir = f"{save_dir}/new_random_sampling_outputs/"
