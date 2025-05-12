@@ -15,9 +15,9 @@ from transformers import (
     TrainingArguments,
 )
 
+from arc_tigers.data.reddit_data import get_reddit_data
 from arc_tigers.eval.utils import compute_metrics
 from arc_tigers.sample.random import RandomSampler
-from arc_tigers.training.utils import get_reddit_data
 from arc_tigers.utils import load_yaml
 
 
@@ -214,6 +214,10 @@ if __name__ == "__main__":
     _, _, test_dataset, meta_data = get_reddit_data(
         **data_config["data_args"], tokenizer=tokenizer
     )
+    # Save meta_data to the save_dir
+    meta_data_path = os.path.join(args.save_dir, "dataset_meta_data.json")
+    with open(meta_data_path, "w") as meta_file:
+        json.dump(meta_data, meta_file, indent=2)
 
     if args.class_balance != 1.0:
         test_dataset = imbalance_dataset(

@@ -12,12 +12,9 @@ from transformers import (
     TrainingArguments,
 )
 
+from arc_tigers.data.reddit_data import get_reddit_data
 from arc_tigers.eval.utils import compute_metrics
-from arc_tigers.training.utils import (
-    WeightedLossTrainer,
-    get_label_weights,
-    get_reddit_data,
-)
+from arc_tigers.training.utils import WeightedLossTrainer, get_label_weights
 from arc_tigers.utils import get_configs, load_yaml
 
 logger = logging.getLogger(__name__)

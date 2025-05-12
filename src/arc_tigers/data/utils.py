@@ -1,31 +1,6 @@
-ONE_VS_ALL_COMBINATIONS = {
-    "sport": {
-        "train": ["r/soccer", "r/Cricket"],
-        "test": ["r/nfl", "NFLv2", "r/NBATalk", "r/nba"],
-    },
-    "football": {
-        "train": ["r/soccer", "r/FantasyPL"],
-        "test": ["r/coys", "r/reddevils", "r/LiverpoolFC"],
-    },
-    "american_football": {
-        "train": ["r/nfl", "r/NFLv2"],
-        "test": ["r/fantasyfootball"],
-    },
-    "ami": {"train": ["r/AmItheAsshole"], "test": ["r/AmIOverreacting"]},
-    "news": {"train": ["r/news"], "test": ["r/Worldnews"]},
-    "advice": {"train": ["r/AskReddit"], "test": ["r/AskMenAdvice", "r/Advice"]},
-}
+from collections import Counter
 
-BINARY_COMBINATIONS = {
-    "sport": {
-        "train": ["r/soccer", "r/Cricket"],
-        "test": ["r/soccer", "r/Cricket"],
-    },
-    "football": {
-        "train": ["r/soccer", "r/FantasyPL"],
-        "test": ["r/soccer", "r/FantasyPL"],
-    },
-}
+from datasets import concatenate_datasets
 
 
 def flag_row(row: dict) -> bool:
@@ -49,6 +24,18 @@ def flag_row(row: dict) -> bool:
     if len(row["text"]) < 10:
         return True
     return row["dataType"] == "post"
+
+
+def balance_dataset(dataset):
+    # Get the number of samples in each class
+    label_counts = Counter(dataset["label"])
+    # Calculate the number for each class
+    min_samples = min(label_counts.values())
+    resampled_data = []
+    for label in label_counts:
+        label_data = dataset.filter(lambda x, label=label: x["label"] == label)
+        resampled_data.append(label_data.shuffle().select(range(min_samples)))
+    return concatenate_datasets(resampled_data)
 
 
 def clean_row(row: dict) -> dict:
