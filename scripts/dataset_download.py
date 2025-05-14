@@ -5,13 +5,15 @@ import os
 from datasets import load_dataset
 from tqdm import tqdm
 
+from arc_tigers.constants import DATA_DIR
+
 
 def main(args):
     dataset_name = args.dataset_name
     max_rows = args.max_rows
     target_subreddits = args.target_subreddits
     # Ensure the output directory exists
-    os.makedirs("../data/", exist_ok=True)
+    os.makedirs("data/", exist_ok=True)
 
     # Load the dataset in streaming mode to avoid downloading the entire dataset
     unfiltered = load_dataset(dataset_name, streaming=True)["train"]
@@ -37,7 +39,7 @@ def main(args):
             break
 
     # Save the filtered data to a JSON file
-    output_dir = f"../data/{dataset_name.split('/')[-1]}/{max_rows}_rows/"
+    output_dir = f"{DATA_DIR}/{dataset_name.split('/')[-1]}/{max_rows}_rows/"
     os.makedirs(output_dir, exist_ok=True)
     save_pth = f"{output_dir}/filtered_rows.json"
     json_data = json.dumps(data, indent=2)
@@ -52,12 +54,15 @@ if __name__ == "__main__":
         "--max_rows", type=int, required=True, help="Maximum number of rows to process."
     )
     parser.add_argument(
-        "--dataset_name", type=str, required=True, help="Name of the dataset to load."
+        "--dataset_name",
+        type=str,
+        default="bit0/reddit_dataset_12",
+        help="Name of the dataset to load.",
     )
     parser.add_argument(
         "--target_subreddits",
         type=str,
-        default="../data/top_subreddits.json",
+        default="data/top_subreddits.json",
         help="Optional: Path to a JSON file containing a list of target subreddits.",
     )
     args = parser.parse_args()

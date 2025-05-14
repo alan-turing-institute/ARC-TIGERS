@@ -66,6 +66,9 @@ def get_target_mapping(eval_setting, target_subreddits):
 
 
 def preprocess_function(examples, tokenizer, targets: dict[str, int]):
-    tokenized = tokenizer(examples["text"], padding=True, truncation=True)
+    if tokenizer:
+        tokenized = tokenizer(examples["text"], padding=True, truncation=True)
+    else:
+        tokenized = examples
     tokenized["label"] = [targets.get(label, 0) for label in examples["label"]]
     return tokenized

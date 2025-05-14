@@ -16,7 +16,7 @@ from transformers import (
 )
 
 from arc_tigers.data.reddit_data import get_reddit_data
-from arc_tigers.eval.utils import compute_metrics
+from arc_tigers.eval.utils import compute_metrics, get_stats
 from arc_tigers.sample.random import RandomSampler
 from arc_tigers.utils import load_yaml
 
@@ -156,14 +156,17 @@ def main(
             f"{str(class_balance).replace('.', '')}/"
         )
     else:
-        output_dir = f"{save_dir}/new_random_sampling_outputs/"
+        output_dir = f"{save_dir}/random_sampling_outputs/"
     os.makedirs(output_dir, exist_ok=True)
 
     # full dataset stats
     metrics = evaluate(dataset, preds)
-    print(metrics)
+    stats = get_stats(preds, dataset["label"])
+
     with open(f"{output_dir}/metrics_full.json", "w") as f:
-        json.dump(metrics, f)
+        json.dump(metrics, f, indent=2)
+    with open(f"{output_dir}/stats_full.json", "w") as f:
+        json.dump(stats, f, indent=2)
 
     # iteratively sample dataset and compute metrics, repeated n_repeats times
     for _ in tqdm(range(n_repeats)):
@@ -215,7 +218,7 @@ if __name__ == "__main__":
         **data_config["data_args"], tokenizer=tokenizer
     )
     # Save meta_data to the save_dir
-    meta_data_path = os.path.join(args.save_dir, "dataset_meta_data.json")
+    meta_data_path = os.path.join(args.save_dir, "data_stats.json")
     with open(meta_data_path, "w") as meta_file:
         json.dump(meta_data, meta_file, indent=2)
 

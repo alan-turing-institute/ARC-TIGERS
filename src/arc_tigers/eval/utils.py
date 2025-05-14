@@ -24,3 +24,56 @@ def compute_metrics(eval_pred):
     }
     logger.info("Eval metrics: %s", eval_scores)
     return eval_scores
+
+
+def softmax(logits: np.ndarray) -> np.ndarray:
+    """
+    Compute the softmax of the logits.
+
+    Args:
+        logits: The logits to compute the softmax for.
+
+    Returns:
+        The softmax of the logits.
+    """
+    return np.exp(logits) / np.sum(np.exp(logits), axis=-1, keepdims=True)
+
+
+def entropy(logits: np.ndarray) -> np.ndarray:
+    """
+    Compute the entropy of the logits.
+
+    Args:
+        logits: The logits to compute the entropy for.
+
+    Returns:
+        The entropy of the logits.
+    """
+    softmax_probs = softmax(logits)
+    return -np.sum(softmax_probs * np.log(softmax_probs + 1e-10), axis=-1)
+
+
+def get_stats(preds, labels):
+    """
+    Compute statistics for a given dataset with preds.
+
+    Args:
+        preds: The labels for the dataset.
+        labels: The dataset to compute metrics for
+
+    Returns:
+        A dictionary containing the computed metrics.
+    """
+    # Placeholder for actual metric computation
+    logits = np.array(preds)
+    class_preds = np.argmax(logits, axis=-1)
+    label_vector = np.array(labels)
+
+    accuracy_vector = np.array(class_preds == label_vector, dtype=int)
+    entropy_values = entropy(logits)
+
+    return {
+        "accuracy": accuracy_vector.tolist(),
+        "softmax": softmax(logits).tolist(),
+        "entropy": entropy_values.tolist(),
+    }

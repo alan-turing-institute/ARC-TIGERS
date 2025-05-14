@@ -77,6 +77,7 @@ def get_reddit_data(
         )
         train_target_map = get_target_mapping(setting, train_targets)
         meta_data["train_target_map"] = train_target_map
+        meta_data["test_target_map"] = train_target_map
 
     elif setting == "one-vs-all":
         train_dataset = dataset["train"]
