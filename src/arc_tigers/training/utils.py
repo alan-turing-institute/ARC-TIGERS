@@ -43,12 +43,37 @@ def balance_dataset(dataset: Dataset, random_generator: Generator) -> Dataset:
 
 
 class WeightedLossTrainer(Trainer):
-    def __init__(self, *args, **kwargs):
+    """
+    Custom trainer, inhereted from the base Trainer class, that uses a weighted cross
+    entropy loss function for training. This is useful for imbalanced datasets.
+    The weights are calculated by the inverse of the class frequencies.
+
+    Args:
+        loss_weights (list): A list of weights for each class. The length of the list
+        must be equal to the number of classes.
+        args: Additional arguments to pass to the base Trainer class.
+        kwargs: Additional keyword arguments to pass to the base Trainer class.
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
         assert "loss_weights" in kwargs, "loss_weights must be provided"
         self.loss_weights = kwargs.pop("loss_weights", None)
         super().__init__(*args, **kwargs)
 
-    def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
+    def compute_loss(self, model, inputs, return_outputs=False, **kwargs) -> tuple:
+        """
+        computes the loss for the inputs and the model
+
+        Args:
+            model: Huggingface model to be used for training
+            inputs: the inputs to the model
+            return_outputs: whether to return the outputs of the model.
+            Defaults to False.
+
+        Returns:
+            tuple: A tuple containing the loss and the outputs of the model if
+            return_outputs is True, otherwise just the loss.
+        """
         labels = inputs.get("labels")
         # forward pass
         outputs = model(**inputs)
@@ -68,7 +93,7 @@ def get_reddit_data(
     n_rows: int,
     tokenizer: PreTrainedTokenizer,
     random_seed: int,
-):
+) -> tuple[Dataset, Dataset, Dataset, dict[str, dict[str, int]]]:
     """
     Loads and preprocesses the Reddit dataset based on the specified configuration.
 
@@ -163,7 +188,19 @@ def get_reddit_data(
     return train_data, eval_data, tokenized_test_dataset, meta_data
 
 
-def get_label_weights(dataset, verbose=True):
+def get_label_weights(dataset: Dataset, verbose=True) -> list[float]:
+    """
+    This function takes a dataset and calculates the weights for each class based on
+    the inverse of the class frequencies.
+
+    Args:
+        dataset: Huggingface dataset used for training
+        verbose: should the class counts and according weights be printed?
+        Defaults to True.
+
+    Returns:
+        the loss weights for each class
+    """
     label_counter = Counter(dataset["label"])
     label_counts = dict(sorted(label_counter.items(), key=lambda item: item[1]))
     label_weights = [
