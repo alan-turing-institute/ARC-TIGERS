@@ -3,8 +3,9 @@ from collections import Counter
 import numpy as np
 import torch
 from datasets import Dataset, concatenate_datasets, load_dataset
+from numpy.random import Generator
 from torch import nn
-from transformers import Trainer
+from transformers import PreTrainedTokenizer, Trainer
 
 from arc_tigers.constants import DATA_DIR
 from arc_tigers.data.utils import (
@@ -16,7 +17,18 @@ from arc_tigers.data.utils import (
 from arc_tigers.utils import get_device
 
 
-def balance_dataset(dataset):
+def balance_dataset(dataset: Dataset, random_generator: Generator) -> Dataset:
+    """
+    This function takes a dataset and balances it by resamplling the classes to have an
+    equal number of samples for each class. It also
+
+    Args:
+        dataset: Huggingface dataset to be balanced
+        random_generator: Random generator to be used for shuffling the dataset
+
+    Returns:
+        dataset: A balanced dataset with an equal number of samples for each class
+    """
     # Get the number of samples in each class
     label_counts = Counter(dataset["label"])
     # Calculate the number for each class
@@ -24,7 +36,9 @@ def balance_dataset(dataset):
     resampled_data = []
     for label in label_counts:
         label_data = dataset.filter(lambda x, label=label: x["label"] == label)
-        resampled_data.append(label_data.shuffle().select(range(min_samples)))
+        resampled_data.append(
+            label_data.shuffle(generator=random_generator).select(range(min_samples))
+        )
     return concatenate_datasets(resampled_data)
 
 
@@ -48,7 +62,12 @@ class WeightedLossTrainer(Trainer):
 
 
 def get_reddit_data(
-    setting, target_config, balanced, n_rows, tokenizer, random_seed=42
+    setting: str,
+    target_config: str,
+    balanced: bool,
+    n_rows: int,
+    tokenizer: PreTrainedTokenizer,
+    random_seed: int,
 ):
     """
     Loads and preprocesses the Reddit dataset based on the specified configuration.
@@ -58,8 +77,9 @@ def get_reddit_data(
         target_config (str): The target configuration to use for the dataset.
         balanced (bool): Whether to balance the dataset by resampling classes.
         n_rows (int): The number of rows to load from the dataset.
-        tokenizer (transformers.PreTrainedTokenizer): The tokenizer to use for
+        tokenizer (PreTrainedTokenizer): The tokenizer to use for
         reprocessing.
+        random_seed (int): The random seed to use for reproducibility.
 
     Raises:
         ValueError: If an unknown setting is provided.
@@ -68,7 +88,7 @@ def get_reddit_data(
         tuple: A tuple containing the training dataset, evaluation dataset, and test
         dataset.
     """
-    split_generator = np.random.default_rng(seed=random_seed)
+    random_generator = np.random.default_rng(seed=random_seed)
     # work out the data directory
     data_dir = f"{DATA_DIR}/reddit_dataset_12/{n_rows}_rows/splits/{target_config}/"
     # load dataset
@@ -122,19 +142,23 @@ def get_reddit_data(
         # use the train set so hat the classes are consistent
         tokenized_train_dataset, tokenized_test_dataset = (
             tokenized_train_dataset.train_test_split(
-                test_size=0.5, generator=split_generator
+                test_size=0.5, generator=random_generator
             ).values()
         )
 
     # balance the dataset
     if balanced:
         print("Balancing the datasets...")
-        tokenized_train_dataset = balance_dataset(tokenized_train_dataset)
-        tokenized_test_dataset = balance_dataset(tokenized_test_dataset)
+        tokenized_train_dataset = balance_dataset(
+            tokenized_train_dataset, random_generator=random_generator
+        )
+        tokenized_test_dataset = balance_dataset(
+            tokenized_test_dataset, random_generator=random_generator
+        )
 
     # Split dataset
     train_data, eval_data = tokenized_train_dataset.train_test_split(
-        test_size=0.1, generator=split_generator
+        test_size=0.1, generator=random_generator
     ).values()
     return train_data, eval_data, tokenized_test_dataset, meta_data
 
