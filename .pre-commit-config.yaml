@@ -36,3 +36,4 @@ repos:
         files: src
         additional_dependencies:
           - pytest
+          - types-PyYAML

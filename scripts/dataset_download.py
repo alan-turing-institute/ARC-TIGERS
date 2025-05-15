@@ -57,8 +57,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--target_subreddits",
         type=str,
-        required=True,
-        help="Path to the JSON file containing target subreddits.",
+        default="../data/top_subreddits.json",
+        help="Optional: Path to a JSON file containing a list of target subreddits.",
     )
     args = parser.parse_args()
 

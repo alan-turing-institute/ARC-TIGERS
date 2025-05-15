@@ -4,7 +4,7 @@ import os
 import pandas as pd
 from tqdm import tqdm
 
-from arc_tigers.data.utils import DATASET_COMBINATIONS, clean_row, flag_row
+from arc_tigers.data.utils import ONE_VS_ALL_COMBINATIONS, clean_row, flag_row
 
 
 def main(args):
@@ -15,12 +15,9 @@ def main(args):
       the purposes of evaluation. The target class in a given dataset is poorly
       represented, with the ratio of target classes to non target classes being defined
       by the imbalance ratio
-
-    Args:
-        args: _description_
     """
 
-    target_categories = DATASET_COMBINATIONS[args.target_config]
+    target_categories = ONE_VS_ALL_COMBINATIONS[args.target_config]
     save_dir = "/".join(args.data_dir.split("/")[:-1])
 
     with open(args.data_dir) as f:
@@ -58,8 +55,6 @@ def main(args):
         n_train_targets = len(train_data_targets)
         n_test_targets = len(test_data_targets)
 
-    train_data = train_data_targets[:n_targets] + non_targets
-
     train_targets_df = pd.DataFrame.from_dict(
         train_data_targets[:n_train_targets]
     ).sort_values("len", ascending=False, inplace=False)
@@ -78,7 +73,7 @@ def main(args):
     train_data = pd.concat([train_targets_df, train_non_targets_df])
     test_data = pd.concat([test_targets_df, test_non_targets_df])
 
-    save_path = f"{save_dir}/splits/{args.split}/"
+    save_path = f"{save_dir}/splits/{args.target_config}/"
     os.makedirs(save_path, exist_ok=True)
     train_data.to_csv(f"{save_path}/train.csv", index=False)
     test_data.to_csv(f"{save_path}/test.csv", index=False)
