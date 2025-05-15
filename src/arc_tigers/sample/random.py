@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.typing as npt
 from datasets import Dataset
 
 
@@ -22,7 +23,7 @@ class RandomSampler:
         self.n_sampled = 0
 
     @property
-    def labelled_idx(self) -> list[int]:
+    def labelled_idx(self) -> npt.NDArray[np.integer]:
         """
         Returns:
             Indices of the samples that have been labelled.
@@ -30,14 +31,14 @@ class RandomSampler:
         return self._sample_order[: self.n_sampled]
 
     @property
-    def unlabelled_idx(self) -> list[int]:
+    def unlabelled_idx(self) -> npt.NDArray[np.integer]:
         """
         Returns:
             Indices of the samples that haven't been labelled.
         """
         return self._sample_order[self.n_sampled :]
 
-    def sample(self) -> int:
+    def sample(self) -> np.integer:
         """
         Updates the n_sampled counter and gets the next sample to label.
 
@@ -47,5 +48,5 @@ class RandomSampler:
         self.n_sampled += 1
         if self.n_sampled > len(self._sample_order):
             msg = "No more samples to sample."
-            raise ValueError(msg)
+            raise IndexError(msg)
         return self._sample_order[self.n_sampled - 1]
