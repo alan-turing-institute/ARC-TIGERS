@@ -39,7 +39,11 @@ def main(args):
             break
 
     # Save the filtered data to a JSON file
-    output_dir = f"{DATA_DIR}/{dataset_name.split('/')[-1]}/{max_rows}_rows/"
+    if target_subreddits == "data/top_subreddits.json":
+        dataset_name = dataset_name.split("/")[-1]
+    else:
+        dataset_name = target_subreddits.split("/")[-1].rstrip(".json")
+    output_dir = f"{DATA_DIR}/{dataset_name}/{max_rows}_rows/"
     os.makedirs(output_dir, exist_ok=True)
     save_pth = f"{output_dir}/filtered_rows.json"
     json_data = json.dumps(data, indent=2)

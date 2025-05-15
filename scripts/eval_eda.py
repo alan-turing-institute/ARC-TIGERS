@@ -39,17 +39,23 @@ def main(args):
     correct_entropy = normalised_entropy[correct_indices]
     incorrect_entropy = normalised_entropy[incorrect_indices]
 
-    plt.hist(correct_softmax, density=True, bins=100, alpha=0.5, label="correct")
-    plt.hist(incorrect_softmax, density=True, bins=100, alpha=0.5, label="incorrect")
+    plt.hist(correct_softmax, bins=100, alpha=0.5, label="correct")
+    plt.hist(incorrect_softmax, bins=100, alpha=0.5, label="incorrect")
     plt.yscale("log")
-    plt.legend()
-    plt.show()
+    plt.xlabel("Predicted Softmax")
+    plt.ylabel("Counts")
+    plt.legend(title="Prediction type")
+    plt.savefig(experiment_dir + "/softmax_histogram.pdf")
+    plt.clf()
 
-    plt.hist(correct_entropy, density=True, bins=100, alpha=0.5, label="correct")
-    plt.hist(incorrect_entropy, density=True, bins=100, alpha=0.5, label="incorrect")
+    plt.hist(correct_entropy, bins=100, alpha=0.5, label="correct")
+    plt.hist(incorrect_entropy, bins=100, alpha=0.5, label="incorrect")
     plt.yscale("log")
-    plt.legend()
-    plt.show()
+    plt.xlabel("Normalised Predicted Entropy")
+    plt.ylabel("Counts")
+    plt.legend(title="Prediction type")
+    plt.savefig(experiment_dir + "/entropy_histogram.pdf")
+    plt.clf()
 
     exp_config = os.path.join(experiment_dir, "../experiment_config.json")
     with open(exp_config) as f:
@@ -58,8 +64,8 @@ def main(args):
     _, _, test_data, meta_data = get_reddit_data(
         **data_config["data_args"], random_seed=exp_config["seed"], tokenizer=None
     )
-    subreddit_label_map = meta_data["test_target_map"]
-    label_subreddit_map = {v: k for k, v in subreddit_label_map.items()}
+    subreddit_label_map: dict[str, int] = meta_data["test_target_map"]
+    label_subreddit_map: dict[int, str] = {v: k for k, v in subreddit_label_map.items()}
 
     for input in test_data["text"]:
         counter_dict["all"].update(input.split())
@@ -86,12 +92,26 @@ def main(args):
             if word in counter:
                 counter.pop(word)
 
-    for acc in ["incorrect", "correct"]:
-        print(f"Most common words in {acc} inputs:")
-        print(label_subreddit_map[0])
-        print(counter_dict[acc][0].most_common(50))
-        print(label_subreddit_map[1])
-        print(counter_dict[acc][1].most_common(50))
+    for class_label in range(n_classes):
+        fig, axes = plt.subplots(2, 1, figsize=(15, 5))
+        for ax_idx, acc in enumerate(["incorrect", "correct"]):
+            # print(f"Most common words in {acc} inputs:")
+            # print(label_subreddit_map[class_label])
+            # print(counter_dict[acc][class_label].most_common(50))
+            top_50 = counter_dict[acc][class_label].most_common(50)
+            words, counts = zip(*top_50, strict=True)
+            x_pos = np.arange(len(words))
+            axes[ax_idx].set_title(f"{acc} inputs")
+            axes[ax_idx].bar(x_pos, counts, align="center")
+            axes[ax_idx].set_xticks(x_pos, words, rotation=70)
+            axes[ax_idx].set_ylabel("Counts")
+            axes[ax_idx].set_xlabel("Words")
+        fig.tight_layout()
+        fig.savefig(
+            experiment_dir
+            + f"/{label_subreddit_map[class_label].lstrip('r/')}_word_counts.pdf"
+        )
+        fig.clear()
 
 
 if __name__ == "__main__":
