@@ -16,7 +16,9 @@ from transformers import (
 )
 
 from arc_tigers.data.reddit_data import get_reddit_data
+from arc_tigers.data.synthetic import get_synthetic_data
 from arc_tigers.eval.utils import compute_metrics, get_stats
+from arc_tigers.model.beta_model import BetaModel
 from arc_tigers.sample.random import RandomSampler
 from arc_tigers.utils import load_yaml
 
@@ -181,11 +183,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a classifier")
     parser.add_argument(
         "data_config",
-        help="path to the data config yaml file",
+        help=(
+            "path to the data config yaml file, or 'synthetic' to generate a "
+            "synthetic dataset"
+        ),
     )
     parser.add_argument(
         "model_config",
-        help="path to the model config yaml file",
+        help=(
+            "path to the model config yaml file, or 'beta_model' to use a "
+            "synthetic model. model_adv must be set if using beta_model."
+        ),
     )
     parser.add_argument(
         "save_dir",
@@ -202,32 +210,81 @@ if __name__ == "__main__":
     parser.add_argument("--n_repeats", type=int, required=True)
     parser.add_argument("--max_labels", type=int, required=True)
     parser.add_argument("--seed", type=int, required=True)
+    parser.add_argument(
+        "--model_adv",
+        type=float,
+        default=3.0,
+        help=(
+            "Model advantage parameter used to parameterize the performance of the "
+            "synthetic Beta models"
+        ),
+    )
+    parser.add_argument(
+        "--synthetic_samples",
+        type=int,
+        default=10000,
+        help="Number of samples to generate if using a synthetic dataset",
+    )
     args = parser.parse_args()
-    data_config = load_yaml(args.data_config)
-    model_config = load_yaml(args.model_config)
 
     # calculate predictions for whole dataset
-    print(f"Loading model and tokenizer from {args.save_dir}...")
-    tokenizer = AutoTokenizer.from_pretrained(args.save_dir)
-    model = AutoModelForSequenceClassification.from_pretrained(args.save_dir)
+
+    if args.model_config == "beta_model":
+        # Arbitrary tokenizer only loaded for compatibility with other functions, not
+        # used by the ssynthetic Beta model.
+        tokenizer = AutoTokenizer.from_pretrained("roberta-base")
+    else:
+        print(f"Loading model and tokenizer from {args.save_dir}...")
+        model_config = load_yaml(args.model_config)
+        tokenizer = AutoTokenizer.from_pretrained(model_config["model_id"])
+        model = AutoModelForSequenceClassification.from_pretrained(
+            model_config["model_id"]
+        )
+
+    if args.data_config == "synthetic":
+        negative_samples = int(args.synthetic_samples / (1 + args.class_balance))
+        positive_samples = args.synthetic_samples - negative_samples
+        imbalance = positive_samples / args.synthetic_samples
+        test_dataset = get_synthetic_data(
+            args.synthetic_samples, imbalance, seed=args.seed, tokenizer=tokenizer
+        )
+        meta_data = {
+            "n_class_0": int((np.array(test_dataset["label"]) == 0).sum()),
+            "n_class_1": int((np.array(test_dataset["label"]) == 1).sum()),
+        }
+    else:
+        data_config = load_yaml(args.data_config)
+        _, _, test_dataset, meta_data = get_reddit_data(
+            **data_config["data_args"], tokenizer=tokenizer
+        )
+        if args.class_balance != 1.0:
+            test_dataset = imbalance_dataset(
+                test_dataset, seed=args.seed, class_balance=args.class_balance
+            )
 
     # Data collator
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
-    _, _, test_dataset, meta_data = get_reddit_data(
-        **data_config["data_args"], tokenizer=tokenizer
-    )
     # Save meta_data to the save_dir
     meta_data_path = os.path.join(args.save_dir, "data_stats.json")
     with open(meta_data_path, "w") as meta_file:
         json.dump(meta_data, meta_file, indent=2)
 
-    if args.class_balance != 1.0:
-        test_dataset = imbalance_dataset(
-            test_dataset, seed=args.seed, class_balance=args.class_balance
-        )
+    if args.model_config == "beta_model":
+        n_class_0 = (np.array(test_dataset["label"]) == 0).sum()
+        n_class_1 = (np.array(test_dataset["label"]) == 1).sum()
+        # BetaModel uses a different definition of imbalance than the class_balance
+        # used in the rest of this script - we should settle on one definition.
+        # The BetaModel form is the proportion of data in the minority class
+        imbalance = n_class_1 / (n_class_0 + n_class_1)
+        model = BetaModel.from_imbalance_and_advantage(imbalance, args.model_adv)
 
-    training_args = TrainingArguments(output_dir="tmp", per_device_eval_batch_size=16)
+    training_args = TrainingArguments(
+        output_dir="tmp",
+        per_device_eval_batch_size=16,
+        use_cpu=True,
+        use_mps_device=False,
+    )
     # Trainer
     trainer = Trainer(
         model=model,
@@ -246,6 +303,6 @@ if __name__ == "__main__":
         preds,
         args.seed,
         args.max_labels,
-        evaluate_steps=np.arange(5, args.max_labels, 10).tolist(),
+        evaluate_steps=np.arange(10, args.max_labels, 200).tolist(),
         class_balance=args.class_balance,
     )

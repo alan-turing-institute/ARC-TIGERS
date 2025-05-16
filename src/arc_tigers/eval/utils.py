@@ -9,7 +9,10 @@ logger = logging.getLogger(__name__)
 # Define metrics
 def compute_metrics(eval_pred):
     logits, labels = eval_pred
-    predictions = np.argmax(logits, axis=-1)
+    if logits.ndim > 1:
+        predictions = np.argmax(logits, axis=-1)
+    else:
+        predictions = (logits > 0.5).astype(int)
     precision, recall, f1, _ = precision_recall_fscore_support(
         labels,
         predictions,
