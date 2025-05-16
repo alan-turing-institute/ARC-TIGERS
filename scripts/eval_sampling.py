@@ -10,11 +10,20 @@ import pandas as pd
 def main(data_dir: str):
     """
     Compute and plot stats of metric values after a varying number of labelled samples.
+    Here `metrics_*.csv` refers the metrics files generated in random_sampling.py. Where
+    each represents a single loop of metrics calculated from the minimum number of
+    labelled samples to the maximum number of labelled samples.
+    The `metrics_full.json` file contains the metrics calculated from the whole dataset.
+    This is used to compare the metrics of the labelled subset with the metrics of the
+    whole dataset.
 
     Args:
         data_dir: Directory containing the metrics files.
     """
     result_files = glob(f"{data_dir}/metrics_*.csv")
+    if len(result_files) == 0:
+        msg = "No metrics files found in the directory."
+        raise ValueError(msg)
     repeats = [pd.read_csv(f, index_col="n") for f in result_files]
     if any(len(r) != len(repeats[0]) for r in repeats):
         msg = "Not all files have the same number of rows."

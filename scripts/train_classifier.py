@@ -30,6 +30,13 @@ def main(args):
         f"/{data_config['data_args']['target_config']}"
         f"/{model_config['model_id']}/{exp_name}"
     )
+    if os.path.exists(save_dir):
+        base_save_dir = save_dir
+        counter = 1
+        while os.path.exists(save_dir) and counter < 5:
+            save_dir = f"{base_save_dir}_{counter}"
+            counter += 1
+
     os.makedirs(save_dir, exist_ok=False)
     exp_config[save_dir] = save_dir
     # Save experiment configuration to the save directory
