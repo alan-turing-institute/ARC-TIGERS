@@ -1,6 +1,64 @@
 from collections import Counter
 
-from datasets import concatenate_datasets
+import numpy as np
+from datasets import Dataset, concatenate_datasets
+
+
+def imbalance_binary_dataset(
+    dataset: Dataset,
+    seed: int,
+    class_balance: float,
+) -> Dataset:
+    """
+    Imbalance the dataset based on the class_balance variable.
+
+    Args:
+        dataset: The dataset to imbalance.
+        seed: The random seed for sampling.
+        class_balance: The balance between the classes. A value of 1.0 means
+            balanced classes, while a value of 0.5 means class 1 is half the size of
+            class 0. A negative value means class 1 is larger than class 0.
+
+    Returns:
+        The imbalanced dataset.
+    """
+    # Imbalance the dataset based on the class_balance variable
+    class_labels = np.array(dataset["label"])
+    class_0_indices = np.where(class_labels == 0)[0]
+    class_1_indices = np.where(class_labels == 1)[0]
+
+    # Calculate the number of samples for each class based on class_balance
+    assert abs(class_balance) <= 1.0, "class balance must be between -1.0 and 1.0"
+    if class_balance < 0:
+        class_balance = -1.0 * class_balance
+        n_class_1 = len(class_1_indices)
+        n_class_0 = int(n_class_1 * class_balance)
+        if n_class_0 <= len(class_0_indices):
+            err_msg = "class balance is too large for class 0"
+            raise ValueError(err_msg)
+    else:
+        n_class_0 = len(class_0_indices)
+        n_class_1 = int(n_class_0 * class_balance)
+        if n_class_1 <= len(class_1_indices):
+            err_msg = "class balance is too large for class 0"
+            raise ValueError(err_msg)
+
+    # Randomly sample indices for each class
+    rng = np.random.default_rng(seed)
+    sampled_class_0_indices = rng.choice(class_0_indices, n_class_0, replace=False)
+    sampled_class_1_indices = rng.choice(class_1_indices, n_class_1, replace=False)
+
+    # Combine the sampled indices and sort them
+    sampled_indices = np.sort(
+        np.concatenate([sampled_class_0_indices, sampled_class_1_indices])
+    )
+
+    # Subset the dataset and predictions
+    dataset = dataset.select(sampled_indices)
+    # Print class counts
+    print(f"Class 0 count: {len(sampled_class_0_indices)}")
+    print(f"Class 1 count: {len(sampled_class_1_indices)}")
+    return dataset
 
 
 def flag_row(row: dict) -> bool:

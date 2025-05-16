@@ -21,53 +21,6 @@ from arc_tigers.sample.random import RandomSampler
 from arc_tigers.utils import load_yaml
 
 
-def imbalance_dataset(dataset: Dataset, seed: int, class_balance: float) -> Dataset:
-    """
-    Imbalance the dataset based on the class_balance variable.
-
-    Args:
-        dataset: The dataset to imbalance.
-        seed: The random seed for sampling.
-        class_balance: The balance between the classes. A value of 1.0 means
-            balanced classes, while a value of 0.5 means class 1 is half the size of
-            class 0. A negative value means class 1 is larger than class 0.
-
-    Returns:
-        The imbalanced dataset.
-    """
-    # Imbalance the dataset based on the class_balance variable
-    class_labels = np.array(dataset["label"])
-    class_0_indices = np.where(class_labels == 0)[0]
-    class_1_indices = np.where(class_labels == 1)[0]
-
-    # Calculate the number of samples for each class based on class_balance
-    assert abs(class_balance) <= 1.0, "class balance must be between -1.0 and 1.0"
-    if class_balance < 0:
-        class_balance = -1.0 * class_balance
-        n_class_1 = len(class_1_indices)
-        n_class_0 = int(n_class_1 * class_balance)
-    else:
-        n_class_0 = len(class_0_indices)
-        n_class_1 = int(n_class_0 * class_balance)
-
-    # Randomly sample indices for each class
-    rng = np.random.default_rng(seed)
-    sampled_class_0_indices = rng.choice(class_0_indices, n_class_0, replace=False)
-    sampled_class_1_indices = rng.choice(class_1_indices, n_class_1, replace=False)
-
-    # Combine the sampled indices and sort them
-    sampled_indices = np.sort(
-        np.concatenate([sampled_class_0_indices, sampled_class_1_indices])
-    )
-
-    # Subset the dataset and predictions
-    dataset = dataset.select(sampled_indices)
-    # Print class counts
-    print(f"Class 0 count: {len(sampled_class_0_indices)}")
-    print(f"Class 1 count: {len(sampled_class_1_indices)}")
-    return dataset
-
-
 def evaluate(dataset, preds) -> dict[str, float]:
     """
     Compute metrics for a given dataset with preds.
@@ -95,6 +48,44 @@ def evaluate(dataset, preds) -> dict[str, float]:
                 metrics[f"{key}_{i}"] = m
 
     return metrics
+
+
+def get_preds(args) -> dict[str, float]:
+    data_config = load_yaml(args.data_config)
+
+    # calculate predictions for whole dataset
+    print(f"Loading model and tokenizer from {args.save_dir}...")
+    tokenizer = AutoTokenizer.from_pretrained(args.save_dir)
+    model = AutoModelForSequenceClassification.from_pretrained(args.save_dir)
+
+    # Data collator
+    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+    if args.class_balance != 1.0:
+        data_config["data_args"]["balanced"] = False
+
+    _, _, test_dataset, meta_data = get_reddit_data(
+        **data_config["data_args"],
+        tokenizer=tokenizer,
+        random_seed=args.seed,
+        class_balance=args.class_balance,
+    )
+    # Save meta_data to the save_dir
+    meta_data_path = os.path.join(args.save_dir, "data_stats.json")
+    with open(meta_data_path, "w") as meta_file:
+        json.dump(meta_data, meta_file, indent=2)
+
+    training_args = TrainingArguments(output_dir="tmp", per_device_eval_batch_size=16)
+    # Trainer
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        processing_class=tokenizer,
+        data_collator=data_collator,
+        compute_metrics=compute_metrics,
+    )
+
+    preds = trainer.predict(test_dataset, metric_key_prefix="").predictions
+    return preds, test_dataset
 
 
 def sample_dataset_metrics(
@@ -222,42 +213,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_labels", type=int, required=True)
     parser.add_argument("--seed", type=int, required=True)
     args = parser.parse_args()
-    data_config = load_yaml(args.data_config)
-    model_config = load_yaml(args.model_config)
-
-    # calculate predictions for whole dataset
-    print(f"Loading model and tokenizer from {args.save_dir}...")
-    tokenizer = AutoTokenizer.from_pretrained(args.save_dir)
-    model = AutoModelForSequenceClassification.from_pretrained(args.save_dir)
-
-    # Data collator
-    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-
-    _, _, test_dataset, meta_data = get_reddit_data(
-        **data_config["data_args"], tokenizer=tokenizer
-    )
-    # Save meta_data to the save_dir
-    meta_data_path = os.path.join(args.save_dir, "data_stats.json")
-    with open(meta_data_path, "w") as meta_file:
-        json.dump(meta_data, meta_file, indent=2)
-
-    if args.class_balance != 1.0:
-        test_dataset = imbalance_dataset(
-            test_dataset, seed=args.seed, class_balance=args.class_balance
-        )
-
-    training_args = TrainingArguments(output_dir="tmp", per_device_eval_batch_size=16)
-    # Trainer
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        processing_class=tokenizer,
-        data_collator=data_collator,
-        compute_metrics=compute_metrics,
-    )
-
-    preds = trainer.predict(test_dataset, metric_key_prefix="").predictions
-
+    preds, test_dataset = get_preds(args)
     main(
         args.save_dir,
         args.n_repeats,
