@@ -21,15 +21,34 @@ from arc_tigers.sample.random import RandomSampler
 from arc_tigers.utils import load_yaml
 
 
-def imbalance_dataset(dataset, seed, class_balance):
+def imbalance_dataset(dataset: Dataset, seed: int, class_balance: float) -> Dataset:
+    """
+    Imbalance the dataset based on the class_balance variable.
+
+    Args:
+        dataset: The dataset to imbalance.
+        seed: The random seed for sampling.
+        class_balance: The balance between the classes. A value of 1.0 means
+            balanced classes, while a value of 0.5 means class 1 is half the size of
+            class 0. A negative value means class 1 is larger than class 0.
+
+    Returns:
+        The imbalanced dataset.
+    """
     # Imbalance the dataset based on the class_balance variable
     class_labels = np.array(dataset["label"])
     class_0_indices = np.where(class_labels == 0)[0]
     class_1_indices = np.where(class_labels == 1)[0]
 
     # Calculate the number of samples for each class based on class_balance
-    n_class_0 = len(class_0_indices)
-    n_class_1 = int(n_class_0 * class_balance)
+    assert abs(class_balance) <= 1.0, "class balance must be between -1.0 and 1.0"
+    if class_balance < 0:
+        class_balance = -1.0 * class_balance
+        n_class_1 = len(class_1_indices)
+        n_class_0 = int(n_class_1 * class_balance)
+    else:
+        n_class_0 = len(class_0_indices)
+        n_class_1 = int(n_class_0 * class_balance)
 
     # Randomly sample indices for each class
     rng = np.random.default_rng(seed)
