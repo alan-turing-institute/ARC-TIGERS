@@ -90,8 +90,16 @@ if __name__ == "__main__":
     parser.add_argument("--n_repeats", type=int, required=True)
     parser.add_argument("--max_labels", type=int, required=True)
     parser.add_argument("--seed", type=int, required=True)
+
     args = parser.parse_args()
-    preds, test_dataset = get_preds(args)
+
+    preds, test_dataset = get_preds(
+        data_config_path=args.data_config,
+        save_dir=args.save_dir,
+        class_balance=args.class_balance,
+        seed=args.seed,
+    )
+
     main(
         args.save_dir,
         args.n_repeats,

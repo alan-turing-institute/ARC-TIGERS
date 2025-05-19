@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 import numpy as np
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
@@ -6,7 +7,7 @@ from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 logger = logging.getLogger(__name__)
 
 
-def evaluate(dataset, preds) -> dict[str, float]:
+def evaluate(dataset, preds) -> dict[str, Any]:
     """
     Compute metrics for a given dataset with preds.
 
@@ -36,9 +37,16 @@ def evaluate(dataset, preds) -> dict[str, float]:
 
 
 # Define metrics
-def compute_metrics(eval_pred):
+def compute_metrics(
+    eval_pred: tuple[np.ndarray, np.ndarray],
+) -> dict[str, Any]:
     logits, labels = eval_pred
-    predictions = np.argmax(logits, axis=-1)
+    # Allow logits to be passed as the predictions
+    if np.issubdtype(logits.dtype, np.integer) and logits.ndim == 1:
+        predictions = logits
+    # Assume logits are probabilities
+    else:
+        predictions = np.argmax(logits, axis=-1)
     precision, recall, f1, _ = precision_recall_fscore_support(
         labels,
         predictions,
