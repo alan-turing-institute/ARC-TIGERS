@@ -46,7 +46,7 @@ def get_reddit_data(
     target_config: str,
     balanced: bool,
     n_rows: int,
-    tokenizer: PreTrainedTokenizer,
+    tokenizer: PreTrainedTokenizer | None,
     random_seed: int,
     class_balance: float | None = None,
 ):

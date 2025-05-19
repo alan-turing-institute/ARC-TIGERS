@@ -1,7 +1,9 @@
 from collections import Counter
+from typing import Any
 
 import numpy as np
 from datasets import Dataset, concatenate_datasets
+from transformers import PreTrainedTokenizer
 
 
 def imbalance_binary_dataset(
@@ -84,7 +86,7 @@ def flag_row(row: dict) -> bool:
     return row["dataType"] == "post"
 
 
-def balance_dataset(dataset):
+def balance_dataset(dataset: Dataset) -> Dataset:
     # Get the number of samples in each class
     label_counts = Counter(dataset["label"])
     # Calculate the number for each class
@@ -114,7 +116,9 @@ def clean_row(row: dict) -> dict:
     return new_row
 
 
-def get_target_mapping(eval_setting, target_subreddits):
+def get_target_mapping(
+    eval_setting: str, target_subreddits: list[str]
+) -> dict[str, int]:
     if eval_setting == "multi-class":
         return {subreddit: index for index, subreddit in enumerate(target_subreddits)}
     if eval_setting == "one-vs-all":
@@ -123,7 +127,11 @@ def get_target_mapping(eval_setting, target_subreddits):
     raise ValueError(err_msg)
 
 
-def preprocess_function(examples, tokenizer, targets: dict[str, int]):
+def preprocess_function(
+    examples: dict[str, Any],
+    tokenizer: PreTrainedTokenizer | None,
+    targets: dict[str, int],
+) -> dict[str, Any]:
     if tokenizer:
         tokenized = tokenizer(examples["text"], padding=True, truncation=True)
     else:

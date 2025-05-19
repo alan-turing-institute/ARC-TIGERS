@@ -37,6 +37,7 @@ dependencies = [
     "tqdm>=4.67.1",
     "transformers>=4.51.3",
     "accelerate>=1.6.0",
+    "ipykernel>=6.29.5",
 ]
 
 [project.optional-dependencies]
