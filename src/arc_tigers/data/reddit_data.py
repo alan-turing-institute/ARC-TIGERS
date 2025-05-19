@@ -49,7 +49,7 @@ def get_reddit_data(
     tokenizer: PreTrainedTokenizer | None,
     random_seed: int,
     class_balance: float | None = None,
-):
+) -> tuple[Dataset, Dataset, Dataset, dict[str, dict[str, int]]]:
     """
     Loads and preprocesses the Reddit dataset based on the specified configuration.
 

@@ -1,9 +1,13 @@
 from collections import Counter
+from copy import deepcopy
 from typing import Any
 
 import numpy as np
 from datasets import Dataset, concatenate_datasets
 from transformers import PreTrainedTokenizer
+
+from arc_tigers.eval.utils import evaluate
+from arc_tigers.sample.random import RandomSampler
 
 
 def imbalance_binary_dataset(
@@ -138,3 +142,49 @@ def preprocess_function(
         tokenized = examples
     tokenized["label"] = [targets.get(label, 0) for label in examples["label"]]
     return tokenized
+
+
+def sample_dataset_metrics(
+    dataset: Dataset,
+    preds,
+    seed: int,
+    max_labels: int | None = None,
+    evaluate_steps: list[int] | None = None,
+) -> list[dict[str, float]]:
+    """
+    Simulate iteratively random sampling the whole dataset, re-computing metrics
+    after each sample.
+
+    Args:
+        dataset: The dataset to sample from.
+        preds: The predictions for the dataset.
+        model: The model to compute metrics with.
+        seed: The random seed for sampling.
+        max_labels: The maximum number of labels to sample. If None, the whole dataset
+            will be sampled.
+
+    Returns:
+        A list of dictionaries containing the computed metrics after each sample.
+    """
+    if max_labels is None:
+        max_labels = len(dataset)
+    if evaluate_steps is None:
+        evaluate_steps = list(range(1, max_labels + 1))
+    evaluate_steps = deepcopy(evaluate_steps)
+    sampler = RandomSampler(dataset, seed)
+    metrics = []
+    next_eval_step = evaluate_steps.pop(0)
+    for n in range(max_labels):
+        sampler.sample()
+        if (n + 1) == next_eval_step:
+            metric = evaluate(
+                dataset[sampler.labelled_idx], preds[sampler.labelled_idx]
+            )
+            metric["n"] = n + 1
+            metrics.append(metric)
+            if evaluate_steps:
+                next_eval_step = evaluate_steps.pop(0)
+            else:
+                break
+
+    return metrics

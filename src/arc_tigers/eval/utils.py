@@ -6,6 +6,35 @@ from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 logger = logging.getLogger(__name__)
 
 
+def evaluate(dataset, preds) -> dict[str, float]:
+    """
+    Compute metrics for a given dataset with preds.
+
+    Args:
+        dataset: The dataset to compute metrics for
+        preds: The predictions for the dataset.
+        model: The model to compute metrics with.
+
+    Returns:
+        A dictionary containing the computed metrics.
+    """
+    # Placeholder for actual metric computation
+    eval_pred = (preds, dataset["label"])
+    metrics = compute_metrics(eval_pred)
+    metric_names = list(metrics.keys())
+    for key in metric_names:
+        if isinstance(metrics[key], list):
+            # unpack multi-valued metrics into separate values for each class
+            multi_metric = metrics.pop(key)
+            if len(multi_metric) == 1:
+                msg = "If metric value is a list, should have more than 1 value"
+                raise ValueError(msg)
+            for i, m in enumerate(multi_metric):
+                metrics[f"{key}_{i}"] = m
+
+    return metrics
+
+
 # Define metrics
 def compute_metrics(eval_pred):
     logits, labels = eval_pred
