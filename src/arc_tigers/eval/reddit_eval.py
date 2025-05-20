@@ -1,5 +1,6 @@
 import json
 import os
+from typing import cast
 
 import numpy as np
 from datasets import Dataset
@@ -39,7 +40,7 @@ def get_preds(
         model = AutoModelForSequenceClassification.from_pretrained(save_dir)
 
     if synthetic_args:
-        synthetic_args = dict(synthetic_args)
+        cast(dict, synthetic_args)
         negative_samples = int(
             synthetic_args["synthetic_samples"] / (1 + class_balance)
         )
