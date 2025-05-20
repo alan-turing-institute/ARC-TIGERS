@@ -1,6 +1,70 @@
 from collections import Counter
+from copy import deepcopy
+from typing import Any
 
-from datasets import concatenate_datasets
+import numpy as np
+from datasets import Dataset, concatenate_datasets
+from transformers import PreTrainedTokenizer
+
+from arc_tigers.eval.utils import evaluate
+from arc_tigers.sample.random import RandomSampler
+
+
+def imbalance_binary_dataset(
+    dataset: Dataset,
+    seed: int,
+    class_balance: float,
+) -> Dataset:
+    """
+    Imbalance the dataset based on the class_balance variable.
+
+    Args:
+        dataset: The dataset to imbalance.
+        seed: The random seed for sampling.
+        class_balance: The balance between the classes. A value of 1.0 means
+            balanced classes, while a value of 0.5 means class 1 is half the size of
+            class 0. A negative value means class 1 is larger than class 0.
+
+    Returns:
+        The imbalanced dataset.
+    """
+    # Imbalance the dataset based on the class_balance variable
+    class_labels = np.array(dataset["label"])
+    class_0_indices = np.where(class_labels == 0)[0]
+    class_1_indices = np.where(class_labels == 1)[0]
+
+    # Calculate the number of samples for each class based on class_balance
+    assert abs(class_balance) <= 1.0, "class balance must be between -1.0 and 1.0"
+    if class_balance < 0:
+        class_balance = -1.0 * class_balance
+        n_class_1 = len(class_1_indices)
+        n_class_0 = int(n_class_1 * class_balance)
+        if n_class_0 <= len(class_0_indices):
+            err_msg = "class balance is too large for class 0"
+            raise ValueError(err_msg)
+    else:
+        n_class_0 = len(class_0_indices)
+        n_class_1 = int(n_class_0 * class_balance)
+        if n_class_1 <= len(class_1_indices):
+            err_msg = "class balance is too large for class 0"
+            raise ValueError(err_msg)
+
+    # Randomly sample indices for each class
+    rng = np.random.default_rng(seed)
+    sampled_class_0_indices = rng.choice(class_0_indices, n_class_0, replace=False)
+    sampled_class_1_indices = rng.choice(class_1_indices, n_class_1, replace=False)
+
+    # Combine the sampled indices and sort them
+    sampled_indices = np.sort(
+        np.concatenate([sampled_class_0_indices, sampled_class_1_indices])
+    )
+
+    # Subset the dataset and predictions
+    dataset = dataset.select(sampled_indices)
+    # Print class counts
+    print(f"Class 0 count: {len(sampled_class_0_indices)}")
+    print(f"Class 1 count: {len(sampled_class_1_indices)}")
+    return dataset
 
 
 def flag_row(row: dict) -> bool:
@@ -26,7 +90,7 @@ def flag_row(row: dict) -> bool:
     return row["dataType"] == "post"
 
 
-def balance_dataset(dataset):
+def balance_dataset(dataset: Dataset) -> Dataset:
     # Get the number of samples in each class
     label_counts = Counter(dataset["label"])
     # Calculate the number for each class
@@ -56,7 +120,9 @@ def clean_row(row: dict) -> dict:
     return new_row
 
 
-def get_target_mapping(eval_setting, target_subreddits):
+def get_target_mapping(
+    eval_setting: str, target_subreddits: list[str]
+) -> dict[str, int]:
     if eval_setting == "multi-class":
         return {subreddit: index for index, subreddit in enumerate(target_subreddits)}
     if eval_setting == "one-vs-all":
@@ -65,10 +131,60 @@ def get_target_mapping(eval_setting, target_subreddits):
     raise ValueError(err_msg)
 
 
-def preprocess_function(examples, tokenizer, targets: dict[str, int]):
+def preprocess_function(
+    examples: dict[str, Any],
+    tokenizer: PreTrainedTokenizer | None,
+    targets: dict[str, int],
+) -> dict[str, Any]:
     if tokenizer:
         tokenized = tokenizer(examples["text"], padding=True, truncation=True)
     else:
         tokenized = examples
     tokenized["label"] = [targets.get(label, 0) for label in examples["label"]]
     return tokenized
+
+
+def sample_dataset_metrics(
+    dataset: Dataset,
+    preds,
+    seed: int,
+    max_labels: int | None = None,
+    evaluate_steps: list[int] | None = None,
+) -> list[dict[str, float]]:
+    """
+    Simulate iteratively random sampling the whole dataset, re-computing metrics
+    after each sample.
+
+    Args:
+        dataset: The dataset to sample from.
+        preds: The predictions for the dataset.
+        model: The model to compute metrics with.
+        seed: The random seed for sampling.
+        max_labels: The maximum number of labels to sample. If None, the whole dataset
+            will be sampled.
+
+    Returns:
+        A list of dictionaries containing the computed metrics after each sample.
+    """
+    if max_labels is None:
+        max_labels = len(dataset)
+    if evaluate_steps is None:
+        evaluate_steps = list(range(1, max_labels + 1))
+    evaluate_steps = deepcopy(evaluate_steps)
+    sampler = RandomSampler(dataset, seed)
+    metrics = []
+    next_eval_step = evaluate_steps.pop(0)
+    for n in range(max_labels):
+        sampler.sample()
+        if (n + 1) == next_eval_step:
+            metric = evaluate(
+                dataset[sampler.labelled_idx], preds[sampler.labelled_idx]
+            )
+            metric["n"] = n + 1
+            metrics.append(metric)
+            if evaluate_steps:
+                next_eval_step = evaluate_steps.pop(0)
+            else:
+                break
+
+    return metrics

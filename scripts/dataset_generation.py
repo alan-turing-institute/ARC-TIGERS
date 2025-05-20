@@ -43,9 +43,9 @@ def main(args):
 
     # Imbalance the dataset
     if args.r is not None:
-        imbalance_ratio = args.r
-        if isinstance(imbalance_ratio, int):
-            n_targets = imbalance_ratio
+        imbalance_ratio = float(args.r)
+        if imbalance_ratio > 1:
+            n_targets = int(imbalance_ratio)
         else:
             n_targets = int(len(non_targets[0]) * imbalance_ratio)
 

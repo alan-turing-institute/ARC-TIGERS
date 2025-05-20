@@ -1,10 +1,14 @@
+from typing import Any
+
 import numpy as np
 from datasets import Dataset, load_dataset
+from transformers import PreTrainedTokenizer
 
 from arc_tigers.constants import DATA_DIR
 from arc_tigers.data.utils import (
     balance_dataset,
     get_target_mapping,
+    imbalance_binary_dataset,
     preprocess_function,
 )
 from arc_tigers.training.utils import get_label_weights
@@ -40,8 +44,14 @@ BINARY_COMBINATIONS = {
 
 
 def get_reddit_data(
-    setting, target_config, balanced, n_rows, tokenizer, random_seed=42
-):
+    setting: str,
+    target_config: str,
+    balanced: bool,
+    n_rows: int,
+    tokenizer: PreTrainedTokenizer | None,
+    random_seed: int,
+    class_balance: float | None = None,
+) -> tuple[Dataset, Dataset, Dataset, dict[str, dict[str, Any]]]:
     """
     Loads and preprocesses the Reddit dataset based on the specified configuration.
 
@@ -52,6 +62,10 @@ def get_reddit_data(
         n_rows (int): The number of rows to load from the dataset.
         tokenizer (transformers.PreTrainedTokenizer): The tokenizer to use for
         reprocessing.
+        random_seed (int): The random seed for reproducibility.
+        class_balance (float | None): Typically used for evaluation stage. The class
+            balance to use for imbalanced sampling.
+            If None, the dataset will be left in its natural state.
 
     Raises:
         ValueError: If an unknown setting is provided.
@@ -124,6 +138,23 @@ def get_reddit_data(
         print("Balancing the datasets...")
         tokenized_train_dataset = balance_dataset(tokenized_train_dataset)
         tokenized_test_dataset = balance_dataset(tokenized_test_dataset)
+    else:
+        # perform imbalanced sampling if class_balance is not None:
+        if class_balance:
+            print(f"Imbalancing the dataset with a class balance of {class_balance}...")
+            print("Training dataset:")
+            tokenized_train_dataset = imbalance_binary_dataset(
+                tokenized_train_dataset,
+                seed=random_seed,
+                class_balance=class_balance,
+            )
+            print("Test dataset:")
+            tokenized_test_dataset = imbalance_binary_dataset(
+                tokenized_test_dataset,
+                seed=random_seed,
+                class_balance=class_balance,
+            )
+        # otherwise leave natural imbalance
 
     # Split dataset
     train_data, eval_data = tokenized_train_dataset.train_test_split(

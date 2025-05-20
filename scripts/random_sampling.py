@@ -1,129 +1,15 @@
 import argparse
 import json
 import os
-from copy import deepcopy
 
 import numpy as np
 import pandas as pd
 from datasets import Dataset
 from tqdm import tqdm
-from transformers import (
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    DataCollatorWithPadding,
-    Trainer,
-    TrainingArguments,
-)
 
-from arc_tigers.data.reddit_data import get_reddit_data
-from arc_tigers.data.synthetic import get_synthetic_data
-from arc_tigers.eval.utils import compute_metrics, get_stats
-from arc_tigers.model.beta_model import BetaModel
-from arc_tigers.sample.random import RandomSampler
-from arc_tigers.utils import load_yaml
-
-
-def imbalance_dataset(dataset, seed, class_balance):
-    # Imbalance the dataset based on the class_balance variable
-    class_labels = np.array(dataset["label"])
-    class_0_indices = np.where(class_labels == 0)[0]
-    class_1_indices = np.where(class_labels == 1)[0]
-
-    # Calculate the number of samples for each class based on class_balance
-    n_class_0 = len(class_0_indices)
-    n_class_1 = int(n_class_0 * class_balance)
-
-    # Randomly sample indices for each class
-    rng = np.random.default_rng(seed)
-    sampled_class_0_indices = rng.choice(class_0_indices, n_class_0, replace=False)
-    sampled_class_1_indices = rng.choice(class_1_indices, n_class_1, replace=False)
-
-    # Combine the sampled indices and sort them
-    sampled_indices = np.sort(
-        np.concatenate([sampled_class_0_indices, sampled_class_1_indices])
-    )
-
-    # Subset the dataset and predictions
-    dataset = dataset.select(sampled_indices)
-    # Print class counts
-    print(f"Class 0 count: {len(sampled_class_0_indices)}")
-    print(f"Class 1 count: {len(sampled_class_1_indices)}")
-    return dataset
-
-
-def evaluate(dataset, preds) -> dict[str, float]:
-    """
-    Compute metrics for a given dataset with preds.
-
-    Args:
-        dataset: The dataset to compute metrics for
-        preds: The predictions for the dataset.
-        model: The model to compute metrics with.
-
-    Returns:
-        A dictionary containing the computed metrics.
-    """
-    # Placeholder for actual metric computation
-    eval_pred = (preds, dataset["label"])
-    metrics = compute_metrics(eval_pred)
-    metric_names = list(metrics.keys())
-    for key in metric_names:
-        if isinstance(metrics[key], list):
-            # unpack multi-valued metrics into separate values for each class
-            multi_metric = metrics.pop(key)
-            if len(multi_metric) == 1:
-                msg = "If metric value is a list, should have more than 1 value"
-                raise ValueError(msg)
-            for i, m in enumerate(multi_metric):
-                metrics[f"{key}_{i}"] = m
-
-    return metrics
-
-
-def sample_dataset_metrics(
-    dataset: Dataset,
-    preds,
-    seed: int,
-    max_labels: int | None = None,
-    evaluate_steps: list[int] | None = None,
-) -> list[dict[str, float]]:
-    """
-    Simulate iteratively random sampling the whole dataset, re-computing metrics
-    after each sample.
-
-    Args:
-        dataset: The dataset to sample from.
-        preds: The predictions for the dataset.
-        model: The model to compute metrics with.
-        seed: The random seed for sampling.
-        max_labels: The maximum number of labels to sample. If None, the whole dataset
-            will be sampled.
-
-    Returns:
-        A list of dictionaries containing the computed metrics after each sample.
-    """
-    if max_labels is None:
-        max_labels = len(dataset)
-    if evaluate_steps is None:
-        evaluate_steps = list(range(1, max_labels + 1))
-    evaluate_steps = deepcopy(evaluate_steps)
-    sampler = RandomSampler(dataset, seed)
-    metrics = []
-    next_eval_step = evaluate_steps.pop(0)
-    for n in range(max_labels):
-        sampler.sample()
-        if (n + 1) == next_eval_step:
-            metric = evaluate(
-                dataset[sampler.labelled_idx], preds[sampler.labelled_idx]
-            )
-            metric["n"] = n + 1
-            metrics.append(metric)
-            if evaluate_steps:
-                next_eval_step = evaluate_steps.pop(0)
-            else:
-                break
-
-    return metrics
+from arc_tigers.data.utils import sample_dataset_metrics
+from arc_tigers.eval.reddit_eval import get_preds
+from arc_tigers.eval.utils import evaluate, get_stats
 
 
 def main(
@@ -225,76 +111,22 @@ if __name__ == "__main__":
         default=10000,
         help="Number of samples to generate if using a synthetic dataset",
     )
+
     args = parser.parse_args()
 
-    # calculate predictions for whole dataset
-
-    if args.model_config == "beta_model":
-        # Arbitrary tokenizer only loaded for compatibility with other functions, not
-        # used by the ssynthetic Beta model.
-        tokenizer = AutoTokenizer.from_pretrained("roberta-base")
-    else:
-        print(f"Loading model and tokenizer from {args.save_dir}...")
-        model_config = load_yaml(args.model_config)
-        tokenizer = AutoTokenizer.from_pretrained(model_config["model_id"])
-        model = AutoModelForSequenceClassification.from_pretrained(
-            model_config["model_id"]
-        )
-
-    if args.data_config == "synthetic":
-        negative_samples = int(args.synthetic_samples / (1 + args.class_balance))
-        positive_samples = args.synthetic_samples - negative_samples
-        imbalance = positive_samples / args.synthetic_samples
-        test_dataset = get_synthetic_data(
-            args.synthetic_samples, imbalance, seed=args.seed, tokenizer=tokenizer
-        )
-        meta_data = {
-            "n_class_0": int((np.array(test_dataset["label"]) == 0).sum()),
-            "n_class_1": int((np.array(test_dataset["label"]) == 1).sum()),
-        }
-    else:
-        data_config = load_yaml(args.data_config)
-        _, _, test_dataset, meta_data = get_reddit_data(
-            **data_config["data_args"], tokenizer=tokenizer
-        )
-        if args.class_balance != 1.0:
-            test_dataset = imbalance_dataset(
-                test_dataset, seed=args.seed, class_balance=args.class_balance
-            )
-
-    # Data collator
-    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-
-    # Save meta_data to the save_dir
-    meta_data_path = os.path.join(args.save_dir, "data_stats.json")
-    with open(meta_data_path, "w") as meta_file:
-        json.dump(meta_data, meta_file, indent=2)
-
-    if args.model_config == "beta_model":
-        n_class_0 = (np.array(test_dataset["label"]) == 0).sum()
-        n_class_1 = (np.array(test_dataset["label"]) == 1).sum()
-        # BetaModel uses a different definition of imbalance than the class_balance
-        # used in the rest of this script - we should settle on one definition.
-        # The BetaModel form is the proportion of data in the minority class
-        imbalance = n_class_1 / (n_class_0 + n_class_1)
-        model = BetaModel.from_imbalance_and_advantage(imbalance, args.model_adv)
-
-    training_args = TrainingArguments(
-        output_dir="tmp",
-        per_device_eval_batch_size=16,
-        use_cpu=True,
-        use_mps_device=False,
-    )
-    # Trainer
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        processing_class=tokenizer,
-        data_collator=data_collator,
-        compute_metrics=compute_metrics,
+    synthetic_args = (
+        {"model_adv": args.model_adv, "synthetic_samples": args.synthetic_samples}
+        if args.data_config == "synthetic"
+        else None
     )
 
-    preds = trainer.predict(test_dataset, metric_key_prefix="").predictions
+    preds, test_dataset = get_preds(
+        data_config_path=args.data_config,
+        save_dir=args.save_dir,
+        class_balance=args.class_balance,
+        seed=args.seed,
+        synthetic_args=synthetic_args,
+    )
 
     main(
         args.save_dir,
