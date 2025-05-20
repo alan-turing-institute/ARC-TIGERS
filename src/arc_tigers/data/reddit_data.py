@@ -51,6 +51,7 @@ def get_reddit_data(
     tokenizer: PreTrainedTokenizer | None,
     random_seed: int,
     class_balance: float | None = None,
+    all_classes: bool = False,
 ) -> tuple[Dataset, Dataset, Dataset, dict[str, dict[str, Any]]]:
     """
     Loads and preprocesses the Reddit dataset based on the specified configuration.
@@ -66,6 +67,9 @@ def get_reddit_data(
         class_balance (float | None): Typically used for evaluation stage. The class
             balance to use for imbalanced sampling.
             If None, the dataset will be left in its natural state.
+        all_classes (bool): If True, all classes will be used for training. If False,
+            only the classes specified in the target_config will be used. This is only
+            used in the multi-class setting.
 
     Raises:
         ValueError: If an unknown setting is provided.
@@ -75,8 +79,9 @@ def get_reddit_data(
         dataset.
     """
     split_generator = np.random.default_rng(seed=random_seed)
-    # work out the data directory
+
     data_dir = f"{DATA_DIR}/reddit_dataset_12/{n_rows}_rows/splits/{target_config}/"
+
     # load dataset
     dataset: dict[str, Dataset] = load_dataset(
         "csv",
@@ -85,7 +90,22 @@ def get_reddit_data(
     meta_data = {}
 
     if setting == "multi-class":
-        train_targets = BINARY_COMBINATIONS[target_config]["train"]
+        if target_config not in BINARY_COMBINATIONS:
+            err_msg = (
+                f"Unknown target config: {target_config}. Please use one of "
+                f"{list(BINARY_COMBINATIONS.keys())} or use 'all' to use all classes."
+            )
+            raise ValueError(err_msg)
+
+        # allow for all classes to be used
+        if all_classes:
+            train_targets = dataset["train"]["label"]
+            # remove duplicates
+            train_targets = list(set(train_targets))
+
+        else:
+            train_targets = BINARY_COMBINATIONS[target_config]["train"]
+
         train_dataset = dataset["train"].filter(
             lambda y: y in train_targets, input_columns=["label"]
         )
@@ -94,6 +114,12 @@ def get_reddit_data(
         meta_data["test_target_map"] = train_target_map
 
     elif setting == "one-vs-all":
+        if target_config not in ONE_VS_ALL_COMBINATIONS:
+            err_msg = (
+                f"Unknown target config: {target_config}. Please use one of "
+                f"{list(ONE_VS_ALL_COMBINATIONS.keys())}."
+            )
+            raise ValueError(err_msg)
         train_dataset = dataset["train"]
         train_targets = ONE_VS_ALL_COMBINATIONS[target_config]["train"]
         test_targets = ONE_VS_ALL_COMBINATIONS[target_config]["test"]
