@@ -1,0 +1,4 @@
+model_config: tf-idf
+data_config: reddit_balanced
+exp_name: simple_classifier_sport
+random_seed: 42
