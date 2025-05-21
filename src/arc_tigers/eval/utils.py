@@ -41,10 +41,13 @@ def compute_metrics(
     eval_pred: tuple[np.ndarray, np.ndarray],
 ) -> dict[str, Any]:
     logits, labels = eval_pred
-    # Allow logits to be passed as the predictions
-    if np.issubdtype(logits.dtype, np.integer) and logits.ndim == 1:
-        predictions = logits
-    # Assume logits are probabilities
+    if logits.ndim == 1:
+        # Allow logits to be passed as the predictions
+        if np.issubdtype(logits.dtype, np.integer):
+            predictions = logits
+        # Allow binary bredictions
+        else:
+            predictions = (logits > 0.5).astype(int)
     else:
         predictions = np.argmax(logits, axis=-1)
     precision, recall, f1, _ = precision_recall_fscore_support(

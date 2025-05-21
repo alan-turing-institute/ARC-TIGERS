@@ -69,11 +69,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a classifier")
     parser.add_argument(
         "data_config",
-        help="path to the data config yaml file",
+        help=(
+            "path to the data config yaml file, or 'synthetic' to generate a "
+            "synthetic dataset"
+        ),
     )
     parser.add_argument(
         "model_config",
-        help="path to the model config yaml file",
+        help=(
+            "path to the model config yaml file, or 'beta_model' to use a "
+            "synthetic model. model_adv must be set if using beta_model."
+        ),
     )
     parser.add_argument(
         "save_dir",
@@ -90,14 +96,36 @@ if __name__ == "__main__":
     parser.add_argument("--n_repeats", type=int, required=True)
     parser.add_argument("--max_labels", type=int, required=True)
     parser.add_argument("--seed", type=int, required=True)
+    parser.add_argument(
+        "--model_adv",
+        type=float,
+        default=3.0,
+        help=(
+            "Model advantage parameter used to parameterize the performance of the "
+            "synthetic Beta models"
+        ),
+    )
+    parser.add_argument(
+        "--synthetic_samples",
+        type=int,
+        default=10000,
+        help="Number of samples to generate if using a synthetic dataset",
+    )
 
     args = parser.parse_args()
+
+    synthetic_args = (
+        {"model_adv": args.model_adv, "synthetic_samples": args.synthetic_samples}
+        if args.data_config == "synthetic"
+        else None
+    )
 
     preds, test_dataset = get_preds(
         data_config_path=args.data_config,
         save_dir=args.save_dir,
         class_balance=args.class_balance,
         seed=args.seed,
+        synthetic_args=synthetic_args,
     )
 
     main(
@@ -107,6 +135,6 @@ if __name__ == "__main__":
         preds,
         args.seed,
         args.max_labels,
-        evaluate_steps=np.arange(5, args.max_labels, 10).tolist(),
+        evaluate_steps=np.arange(10, args.max_labels, 200).tolist(),
         class_balance=args.class_balance,
     )
