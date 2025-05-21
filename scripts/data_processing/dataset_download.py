@@ -12,7 +12,6 @@ def main(args):
     dataset_name = args.dataset_name
     max_rows = args.max_rows
     target_subreddits = args.target_subreddits
-    # Ensure the output directory exists
 
     # Load the dataset in streaming mode to avoid downloading the entire dataset
     unfiltered = load_dataset(dataset_name, streaming=True)["train"]
