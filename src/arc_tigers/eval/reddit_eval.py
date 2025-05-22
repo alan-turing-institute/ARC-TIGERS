@@ -41,6 +41,26 @@ def get_transformers_preds(
     synthetic_args: dict | None = None,
     **kwargs,
 ) -> tuple[np.ndarray, Dataset]:
+    """
+    Get the predictions from a model using the transformers library. This function is
+    also used when synthetic data is used. Model weights are loaded from the save_dir
+    data and model config data are loaded from the data_config_path and
+    model_config_path. The seed should be set to the same value as used in the training.
+
+    Args:
+        data_config_path: Data config path
+        model_config_path: Model config path
+        save_dir: Model weights directory
+        class_balance: The class balance to use in evaluation.
+        seed: The seed to use for the random number generator, this should be the same
+            as the seed used in training.
+        synthetic_args: arguments to use for synthetic data generation if being used.
+            Defaults to None.
+
+    Returns:
+        tuple `preds` the predictions from the model on the test dataset. `test_dataset`
+        the test dataset used for predictions.
+    """
     if model_config_path == "beta_model":
         # Arbitrary tokenizer only loaded for compatibility with other functions, not
         # used by the ssynthetic Beta model.
@@ -128,6 +148,22 @@ def get_tfidf_preds(
     seed: int,
     **kwargs,
 ) -> tuple[np.ndarray, Dataset]:
+    """
+    Function to get the predictions from a tfidf model. The model is loaded from the
+    save_dir and the data is loaded from the data_config_path. The seed should be set
+    to the same value as used in the training.
+
+    Args:
+        data_config_path: data config path
+        save_dir: directory where the model is saved
+        class_balance: The class balance to use in evaluation.
+        seed: The seed to use for the random number generator, this should be the same
+            as the seed used in training.
+
+    Returns:
+        tuple `preds` the predictions from the model on the test dataset. `test_dataset`
+        the test dataset used for predictions.
+    """
     data_config = load_yaml(data_config_path)
 
     print(f"Loading model and tokenizer from {save_dir} ...")
