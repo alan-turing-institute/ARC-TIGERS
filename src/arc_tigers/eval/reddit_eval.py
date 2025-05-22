@@ -21,7 +21,17 @@ from arc_tigers.model.beta_model import BetaModel
 from arc_tigers.utils import load_yaml
 
 
-def get_preds(
+def get_preds(*args, **kwargs):
+    """
+    Wrapper function to get predictions from either a transformer model or a tfidf
+    model.
+    """
+    if len(glob(f"{kwargs['save_dir']}/*.joblib")) > 0:
+        return get_tfidf_preds(*args, **kwargs)
+    return get_transformers_preds(*args, **kwargs)
+
+
+def get_transformers_preds(
     data_config_path: str,
     model_config_path: str,
     save_dir: str,
@@ -38,7 +48,6 @@ def get_preds(
         print(f"Loading model and tokenizer from {save_dir}...")
         model_config = load_yaml(model_config_path)
         # calculate predictions for whole dataset
-        print(f"Loading model and tokenizer from {save_dir}...")
         tokenizer = AutoTokenizer.from_pretrained(model_config["model_id"])
         model = AutoModelForSequenceClassification.from_pretrained(save_dir)
         use_cpu = False
@@ -124,11 +133,12 @@ def get_preds(
     return preds, test_dataset
 
 
-def get_preds_tfidf(
+def get_tfidf_preds(
     data_config_path: str,
     save_dir: str,
     class_balance: float,
     seed: int,
+    **kwargs,
 ) -> tuple[np.ndarray, Dataset]:
     data_config = load_yaml(data_config_path)
 
