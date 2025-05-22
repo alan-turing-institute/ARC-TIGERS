@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 def main(args):
+    # Load experiment configuration
+    # and set up the experiment directory
     exp_config = load_yaml(args.exp_config)
     data_config, model_config = get_configs(exp_config)
     exp_name = args.exp_name if args.exp_name else exp_config["exp_name"]
@@ -33,12 +35,14 @@ def main(args):
             counter += 1
 
     os.makedirs(save_dir, exist_ok=False)
-    exp_config[save_dir] = save_dir
+
     # Save experiment configuration to the save directory
+    exp_config[save_dir] = save_dir
     exp_config_path = os.path.join(save_dir, "experiment_config.json")
     with open(exp_config_path, "w") as f:
         json.dump(exp_config, f, indent=4)
     print(f"Experiment configuration saved to {exp_config_path}")
+
     # set up logging
     logging.basicConfig(filename=f"{save_dir}/logs.log", level=logging.INFO)
 
@@ -50,6 +54,7 @@ def main(args):
         ),
     )
 
+    # load dataset
     train_dataset, eval_dataset, _, _ = get_reddit_data(
         **data_config["data_args"],
         tokenizer=None,
