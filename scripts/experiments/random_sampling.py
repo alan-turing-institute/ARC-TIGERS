@@ -111,6 +111,12 @@ if __name__ == "__main__":
         default=10000,
         help="Number of samples to generate if using a synthetic dataset",
     )
+    parser.add_argument(
+        "--eval_every",
+        type=int,
+        default=50,
+        help="Re-compute metrics every eval_every samples",
+    )
 
     args = parser.parse_args()
 
@@ -122,6 +128,7 @@ if __name__ == "__main__":
 
     preds, test_dataset = get_preds(
         data_config_path=args.data_config,
+        model_config_path=args.model_config,
         save_dir=args.save_dir,
         class_balance=args.class_balance,
         seed=args.seed,
@@ -135,6 +142,6 @@ if __name__ == "__main__":
         preds,
         args.seed,
         args.max_labels,
-        evaluate_steps=np.arange(10, args.max_labels, 200).tolist(),
+        evaluate_steps=np.arange(10, args.max_labels, args.eval_every).tolist(),
         class_balance=args.class_balance,
     )

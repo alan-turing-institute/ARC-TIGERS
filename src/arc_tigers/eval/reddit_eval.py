@@ -31,6 +31,7 @@ def get_preds(
         # Arbitrary tokenizer only loaded for compatibility with other functions, not
         # used by the ssynthetic Beta model.
         tokenizer = AutoTokenizer.from_pretrained("roberta-base")
+        use_cpu = True
     else:
         print(f"Loading model and tokenizer from {save_dir}...")
         model_config = load_yaml(model_config_path)
@@ -38,6 +39,7 @@ def get_preds(
         print(f"Loading model and tokenizer from {save_dir}...")
         tokenizer = AutoTokenizer.from_pretrained(model_config["model_id"])
         model = AutoModelForSequenceClassification.from_pretrained(save_dir)
+        use_cpu = False
 
     if synthetic_args:
         cast(dict, synthetic_args)
@@ -88,7 +90,11 @@ def get_preds(
             imbalance, synthetic_args["model_adv"]
         )
 
-    training_args = TrainingArguments(output_dir="tmp", per_device_eval_batch_size=16)
+    training_args = TrainingArguments(
+        output_dir="tmp",
+        per_device_eval_batch_size=16,
+        use_cpu=use_cpu,
+    )
     # Trainer
     trainer = Trainer(
         model=model,
