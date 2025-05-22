@@ -1,9 +1,12 @@
 import json
 import os
+from glob import glob
 from typing import cast
 
+import joblib
 import numpy as np
 from datasets import Dataset
+from sklearn.pipeline import Pipeline
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -99,4 +102,39 @@ def get_preds(
     )
 
     preds = trainer.predict(test_dataset, metric_key_prefix="").predictions
+    return preds, test_dataset
+
+
+def get_preds_tfidf(
+    data_config_path: str,
+    save_dir: str,
+    class_balance: float,
+    seed: int,
+) -> tuple[np.ndarray, Dataset]:
+    data_config = load_yaml(data_config_path)
+
+    print(f"Loading model and tokenizer from {save_dir} ...")
+
+    tokenizer = None
+    # Load the model from the joblib file
+    model_path = glob(f"{save_dir}/*.joblib")[0]
+    model: Pipeline = joblib.load(model_path)
+
+    # Data collator
+    if class_balance != 1.0:
+        data_config["data_args"]["balanced"] = False
+
+    _, _, test_dataset, meta_data = get_reddit_data(
+        **data_config["data_args"],
+        tokenizer=tokenizer,
+        random_seed=seed,
+        class_balance=class_balance,
+    )
+    # Save meta_data to the save_dir
+    meta_data_path = os.path.join(save_dir, "data_stats.json")
+    with open(meta_data_path, "w") as meta_file:
+        json.dump(meta_data, meta_file, indent=2)
+
+    preds = model.predict(test_dataset["text"])
+
     return preds, test_dataset
