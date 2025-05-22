@@ -1,6 +1,5 @@
 import json
 import os
-from typing import cast
 
 import numpy as np
 from datasets import Dataset
@@ -25,7 +24,7 @@ def get_preds(
     save_dir: str,
     class_balance: float,
     seed: int,
-    synthetic_args: dict | None = None,
+    synthetic_args: dict,
 ) -> tuple[np.ndarray, Dataset]:
     if model_config_path == "beta_model":
         # Arbitrary tokenizer only loaded for compatibility with other functions, not
@@ -41,8 +40,7 @@ def get_preds(
         model = AutoModelForSequenceClassification.from_pretrained(save_dir)
         use_cpu = False
 
-    if synthetic_args:
-        cast(dict, synthetic_args)
+    if data_config_path == "synthetic":
         negative_samples = int(
             synthetic_args["synthetic_samples"] / (1 + class_balance)
         )
@@ -79,16 +77,31 @@ def get_preds(
     with open(meta_data_path, "w") as meta_file:
         json.dump(meta_data, meta_file, indent=2)
 
-    if synthetic_args:
+    if model_config_path == "beta_model":
         n_class_0 = (np.array(test_dataset["label"]) == 0).sum()
         n_class_1 = (np.array(test_dataset["label"]) == 1).sum()
         # BetaModel uses a different definition of imbalance than the class_balance
         # used in the rest of this script - we should settle on one definition.
         # The BetaModel form is the proportion of data in the minority class
         imbalance = n_class_1 / (n_class_0 + n_class_1)
-        model = BetaModel.from_imbalance_and_advantage(
-            imbalance, synthetic_args["model_adv"]
-        )
+        if (
+            synthetic_args["positive_error_rate"]
+            or synthetic_args["negative_error_rate"]
+        ):
+            if not (
+                synthetic_args["positive_error_rate"]
+                and synthetic_args["negative_error_rate"]
+            ):
+                msg = "Both positive and negative error rates must be set."
+                raise ValueError(msg)
+            model = BetaModel.from_error_rates(
+                synthetic_args["positive_error_rate"],
+                synthetic_args["negative_error_rate"],
+            )
+        else:
+            model = BetaModel.from_imbalance_and_advantage(
+                imbalance, synthetic_args["model_adv"]
+            )
 
     training_args = TrainingArguments(
         output_dir="tmp",

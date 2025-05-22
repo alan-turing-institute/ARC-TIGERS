@@ -102,7 +102,25 @@ if __name__ == "__main__":
         default=3.0,
         help=(
             "Model advantage parameter used to parameterize the performance of the "
-            "synthetic Beta models"
+            "synthetic Beta models (use either this or error rates)."
+        ),
+    )
+    parser.add_argument(
+        "--pos_error_rate",
+        type=float,
+        required=False,
+        help=(
+            "Error rate for positive samples if using a synthetic model "
+            "(use either this and neg_error_rate or model_adv)"
+        ),
+    )
+    parser.add_argument(
+        "--neg_error_rate",
+        type=float,
+        required=False,
+        help=(
+            "Error rate for negative samples if using a synthetic model "
+            "(use either this and pos_error_rate or model_adv)"
         ),
     )
     parser.add_argument(
@@ -126,11 +144,13 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    synthetic_args = (
-        {"model_adv": args.model_adv, "synthetic_samples": args.synthetic_samples}
-        if args.data_config == "synthetic"
-        else None
-    )
+    # only used if using a synthetic model or dataset
+    synthetic_args = {
+        "model_adv": args.model_adv,
+        "synthetic_samples": args.synthetic_samples,
+        "positive_error_rate": args.pos_error_rate,
+        "negative_error_rate": args.neg_error_rate,
+    }
 
     preds, test_dataset = get_preds(
         data_config_path=args.data_config,
