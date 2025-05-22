@@ -49,62 +49,47 @@ def main(data_dir: str):
 
         metric_stats[metric] = {}
         metric_stats[metric]["mean"] = np.mean(metric_repeats, axis=0)
+        metric_stats[metric]["median"] = np.median(metric_repeats, axis=0)
         metric_stats[metric]["std"] = np.std(metric_repeats, axis=0)
-        metric_stats[metric]["quantile_25"] = np.quantile(metric_repeats, 0.25, axis=0)
-        metric_stats[metric]["quantile_75"] = np.quantile(metric_repeats, 0.75, axis=0)
-        metric_stats[metric]["quantile_2.5"] = np.quantile(
-            metric_repeats, 0.025, axis=0
-        )
-        metric_stats[metric]["quantile_97.5"] = np.quantile(
-            metric_repeats, 0.975, axis=0
-        )
+
+        quantiles = [0.025, 0.25]  # will also compute 1 - quantiles
+        quantile_colors = ["r", "orange"]
+        for quantile in quantiles:
+            metric_stats[metric][f"quantile_{quantile * 100}"] = np.quantile(
+                metric_repeats, quantile, axis=0
+            )
+            metric_stats[metric][f"quantile_{(1 - quantile) * 100}"] = np.quantile(
+                metric_repeats, 1 - quantile, axis=0
+            )
 
     for metric in metrics:
-        plt.axhline(
-            y=full_metrics[metric],
-            color="k",
-            linestyle="--",
-            label="estimate (whole dataset)",
-        )
+        if "n_class" not in metric:
+            # n_class on full dataset is just the full dataset size, which isn't helpful
+            # to plot
+            plt.axhline(
+                y=full_metrics[metric],
+                color="k",
+                linestyle="--",
+                label="Ground Truth",
+            )
 
         plt.plot(
             repeats[0].index,
             metric_stats[metric]["mean"],
-            label="estimate (labelled subset)",
+            label="Mean (labelled subset)",
             color="blue",
             linestyle="-",
             linewidth=2,
         )
-        plt.plot(
-            repeats[0].index,
-            metric_stats[metric]["quantile_25"],
-            label="Quantiles (25-75)",
-            color="orange",
-            linestyle="-",
-            linewidth=1,
-        )
-        plt.plot(
-            repeats[0].index,
-            metric_stats[metric]["quantile_75"],
-            color="orange",
-            linestyle="-",
-            linewidth=1,
-        )
-        plt.plot(
-            repeats[0].index,
-            metric_stats[metric]["quantile_2.5"],
-            label="Quantiles (2.5-97.5)",
-            color="r",
-            linestyle="-",
-            linewidth=1,
-        )
-        plt.plot(
-            repeats[0].index,
-            metric_stats[metric]["quantile_97.5"],
-            color="r",
-            linestyle="-",
-            linewidth=1,
-        )
+        for quantile, color in zip(quantiles, quantile_colors, strict=True):
+            plt.fill_between(
+                repeats[0].index,
+                metric_stats[metric][f"quantile_{quantile * 100}"],
+                metric_stats[metric][f"quantile_{(1 - quantile) * 100}"],
+                color=color,
+                alpha=0.2,
+                label=f"Quantiles ({quantile * 100} - {(1 - quantile) * 100})",
+            )
         plt.ylabel(metric)
         plt.xlabel("Number of labelled samples")
         plt.legend()
