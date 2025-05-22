@@ -117,6 +117,12 @@ if __name__ == "__main__":
         default=50,
         help="Re-compute metrics every eval_every samples",
     )
+    parser.add_argument(
+        "--min_labels",
+        type=int,
+        default=10,
+        help="Minimum number of labels to sample before computing metrics",
+    )
 
     args = parser.parse_args()
 
@@ -142,6 +148,8 @@ if __name__ == "__main__":
         preds,
         args.seed,
         args.max_labels,
-        evaluate_steps=np.arange(10, args.max_labels, args.eval_every).tolist(),
+        evaluate_steps=np.arange(
+            args.min_labels, args.max_labels, args.eval_every
+        ).tolist(),
         class_balance=args.class_balance,
     )
