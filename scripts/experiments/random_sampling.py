@@ -102,7 +102,25 @@ if __name__ == "__main__":
         default=3.0,
         help=(
             "Model advantage parameter used to parameterize the performance of the "
-            "synthetic Beta models"
+            "synthetic Beta models (use either this or error rates)."
+        ),
+    )
+    parser.add_argument(
+        "--pos_error_rate",
+        type=float,
+        required=False,
+        help=(
+            "Error rate for positive samples if using a synthetic model "
+            "(use either this and neg_error_rate or model_adv)"
+        ),
+    )
+    parser.add_argument(
+        "--neg_error_rate",
+        type=float,
+        required=False,
+        help=(
+            "Error rate for negative samples if using a synthetic model "
+            "(use either this and pos_error_rate or model_adv)"
         ),
     )
     parser.add_argument(
@@ -111,17 +129,32 @@ if __name__ == "__main__":
         default=10000,
         help="Number of samples to generate if using a synthetic dataset",
     )
+    parser.add_argument(
+        "--eval_every",
+        type=int,
+        default=50,
+        help="Re-compute metrics every eval_every samples",
+    )
+    parser.add_argument(
+        "--min_labels",
+        type=int,
+        default=10,
+        help="Minimum number of labels to sample before computing metrics",
+    )
 
     args = parser.parse_args()
 
-    synthetic_args = (
-        {"model_adv": args.model_adv, "synthetic_samples": args.synthetic_samples}
-        if args.data_config == "synthetic"
-        else None
-    )
+    # only used if using a synthetic model or dataset
+    synthetic_args = {
+        "model_adv": args.model_adv,
+        "synthetic_samples": args.synthetic_samples,
+        "positive_error_rate": args.pos_error_rate,
+        "negative_error_rate": args.neg_error_rate,
+    }
 
     preds, test_dataset = get_preds(
         data_config_path=args.data_config,
+        model_config_path=args.model_config,
         save_dir=args.save_dir,
         class_balance=args.class_balance,
         seed=args.seed,
@@ -135,6 +168,8 @@ if __name__ == "__main__":
         preds,
         args.seed,
         args.max_labels,
-        evaluate_steps=np.arange(10, args.max_labels, 200).tolist(),
+        evaluate_steps=np.arange(
+            args.min_labels, args.max_labels, args.eval_every
+        ).tolist(),
         class_balance=args.class_balance,
     )

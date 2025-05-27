@@ -290,6 +290,27 @@ class BetaModel(nn.Module):
         positive_err_rate, negative_err_rate = imbalance_scaled_error_rate(
             model_adv=model_adv, imbalance=imbalance
         )
+        return BetaModel.from_error_rates(
+            positive_err_rate=positive_err_rate,
+            negative_err_rate=negative_err_rate,
+        )
+
+    @classmethod
+    def from_error_rates(
+        cls,
+        positive_err_rate: float,
+        negative_err_rate: float,
+    ) -> "BetaModel":
+        """
+        Create a BetaModel instance based on the error rates.
+
+        Args:
+            positive_err_rate: Error rate for the positive class.
+            negative_err_rate: Error rate for the negative class.
+
+        Returns:
+            A BetaModel instance with the fitted parameters.
+        """
         a_positive, b_positive, a_negative, b_negative = fit_beta_model_params(
             positive_err_rate=positive_err_rate,
             negative_err_rate=negative_err_rate,

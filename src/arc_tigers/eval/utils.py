@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 import numpy as np
+import torch
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ def compute_metrics(
         # Allow logits to be passed as the predictions
         if np.issubdtype(logits.dtype, np.integer):
             predictions = logits
-        # Allow binary bredictions
+        # Allow binary predictions
         else:
             predictions = (logits > 0.5).astype(int)
     else:
@@ -53,14 +54,23 @@ def compute_metrics(
     precision, recall, f1, _ = precision_recall_fscore_support(
         labels,
         predictions,
-        labels=[0, 1],  # TODO: assumed labels are 0 and 1 here
+        labels=[0, 1],  # assumed binary labels (0 and 1) here
     )
     acc = accuracy_score(labels, predictions)
+    # no. of samples per class in the eval data (also assumed binary labels here,
+    # minlength should be set to the number of classes to ensure
+    # len(samples_per_class) == n_classes)
+    if isinstance(labels, torch.Tensor):
+        n_class = torch.bincount(labels, minlength=2)
+    else:
+        n_class = np.bincount(labels, minlength=2)
+
     eval_scores = {
         "accuracy": acc,
         "f1": f1.tolist(),
         "precision": precision.tolist(),
         "recall": recall.tolist(),
+        "n_class": n_class.tolist(),
     }
     logger.info("Eval metrics: %s", eval_scores)
     return eval_scores
