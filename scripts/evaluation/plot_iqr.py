@@ -4,25 +4,47 @@ import matplotlib.pyplot as plt
 from eval_sampling import get_metric_stats
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evaluate sampling metrics.")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Plot inter-quartile ranges from a range of experiments with different "
+            "imbalances."
+        )
+    )
     parser.add_argument(
-        "data_dir", type=str, help="Directory containing the metrics files."
+        "data_dir",
+        type=str,
+        help="Parent directory containing experiment sub-directories",
+    )
+    parser.add_argument(
+        "experiment_prefix",
+        type=str,
+        help=(
+            "Prefix for the each experiment directory. Results files for each "
+            "experiment (level of imbalance) are expected to be in "
+            "be in <data_dir>/<experiment_prefix>_<imbalance>"
+        ),
+    )
+    parser.add_argument(
+        "--imbalances",
+        type=float,
+        nargs="+",
+        default=(0.01, 0.1, 0.25, 0.5),
+        help="List of imbalances to plot (default: 0.01, 0.1, 0.25, 0.5).",
     )
     args = parser.parse_args()
-    imbalances = [0.01, 0.1, 0.25, 0.5]
 
     data_dir = args.data_dir
     imbalance_stats = {}
-    for imb in imbalances:
+    for imb in args.imbalances:
         imb_dir = (
             f"{data_dir}/imbalanced_random_sampling_outputs_{str(imb).replace('.', '')}"
         )
         imbalance_stats[imb] = get_metric_stats(imb_dir, plot=False)
 
-    for metric in imbalance_stats[imbalances[0]]:
+    for metric in imbalance_stats[args.imbalances[0]]:
         if metric == "n_labels":
             continue
-        for imb in imbalances:
+        for imb in args.imbalances:
             plt.plot(
                 imbalance_stats[imb]["n_labels"],
                 imbalance_stats[imb][metric]["IQR"],
