@@ -1,3 +1,0 @@
-model_id: "tomaarsen/glove-wikipedia-tf-idf"
-model_kwargs:
-  num_labels: 2
