@@ -1,5 +1,6 @@
 import numpy as np
 from datasets import Dataset
+from sklearn.ensemble import RandomForestClassifier
 
 from arc_tigers.sample.utils import get_distilbert_embeddings
 
@@ -89,8 +90,8 @@ class DistanceSampler(AqcuisitionFunction):
 
 class RFSampler(AqcuisitionFunction):
     def __init__(self, data: Dataset):
-        """Samples a dataset based on distance between observed and unobserved
-        embeddings.
+        """Samples a dataset based on distance between model loss and surrogate loss,
+        where the surrogate is a Random Forest classifier.
 
         Args:
             data: The dataset to sample from.
@@ -105,5 +106,45 @@ class RFSampler(AqcuisitionFunction):
         self.n_sampled = 0
 
         self.data = data
+        # Get embeddings for use with RF classifier
+        self.embeddings = get_distilbert_embeddings(data)
+
+        # Train Random Forest classifier
+        self.rf_classifier = RandomForestClassifier().fit(
+            self.embeddings, self.data["label"]
+        )
+
+        # TODO: Get predictions for model and surrogate over all remaining *test* points
+        # self.model_preds =
+        # self.surrogate_preds =
+
+    def accuracy_loss(self):
+        # we need higher values = higher loss
+        # so we will return 1 - accuracy
+
+        pred_classes = np.argmax(self.model_preds, axis=1)
+
+        # instead of 0,1 loss we get p_surr(y|x) for accuracy
+
+        res = (
+            1 - self.surrogate_preds[np.arange(len(self.surrogate_preds)), pred_classes]
+        )
+
+        res = np.maximum(res, np.max(res) * 0.05)
+
+        return res
 
     def sample(self):
+
+        expected_loss = self.accuracy_loss()
+
+        if (expected_loss < 0).sum() > 0:
+            # Log-lik can be negative.
+            # Make all values positive.
+            # Alternatively could set <0 values to 0.
+            expected_loss += np.abs(expected_loss.min())
+
+        if expected_loss.sum() != 0:
+            expected_loss /= expected_loss.sum()
+
+        return self.sample_pmf(expected_loss)

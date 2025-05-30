@@ -16,7 +16,7 @@ class RedditTextDataset(Dataset):
         return self.texts[idx], self.labels[idx]
 
 
-def get_embeddings(dataset):
+def get_distilbert_embeddings(dataset):
     train_texts = dataset["text"]
     train_labels = dataset["label"]
 
