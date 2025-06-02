@@ -160,3 +160,4 @@ Thumbs.db
 # project files
 data/*
 outputs/
+tmp/

@@ -4,7 +4,8 @@ import os
 import pandas as pd
 from tqdm import tqdm
 
-from arc_tigers.data.utils import ONE_VS_ALL_COMBINATIONS, clean_row, flag_row
+from arc_tigers.data.reddit_data import ONE_VS_ALL_COMBINATIONS
+from arc_tigers.data.utils import clean_row, flag_row
 
 
 def main(args):
@@ -42,9 +43,9 @@ def main(args):
 
     # Imbalance the dataset
     if args.r is not None:
-        imbalance_ratio = args.r
-        if isinstance(imbalance_ratio, int):
-            n_targets = imbalance_ratio
+        imbalance_ratio = float(args.r)
+        if imbalance_ratio > 1:
+            n_targets = int(imbalance_ratio)
         else:
             n_targets = int(len(non_targets[0]) * imbalance_ratio)
 
@@ -89,7 +90,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "data_dir",
         type=str,
-        default="../data/reddit_dataset_12/15000000_rows/filtered_rows.json",
+        default="data/reddit_dataset_12/15000000_rows/filtered_rows.json",
         help="Path to the data used for generation",
     )
     parser.add_argument(
