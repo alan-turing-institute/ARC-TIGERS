@@ -32,10 +32,9 @@ def get_preds(
         tokenizer = AutoTokenizer.from_pretrained("roberta-base")
         use_cpu = True
     else:
-        print(f"Loading model and tokenizer from {save_dir}...")
-        model_config = load_yaml(model_config_path)
         # calculate predictions for whole dataset
         print(f"Loading model and tokenizer from {save_dir}...")
+        model_config = load_yaml(model_config_path)
         tokenizer = AutoTokenizer.from_pretrained(model_config["model_id"])
         model = AutoModelForSequenceClassification.from_pretrained(save_dir)
         use_cpu = False

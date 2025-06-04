@@ -7,7 +7,7 @@ from datasets import Dataset, concatenate_datasets
 from transformers import PreTrainedTokenizer
 
 from arc_tigers.eval.utils import evaluate
-from arc_tigers.sample.random import RandomSampler
+from arc_tigers.sample.acquisition import AcquisitionFunction
 
 
 def imbalance_binary_dataset(
@@ -146,8 +146,8 @@ def preprocess_function(
 
 def sample_dataset_metrics(
     dataset: Dataset,
-    preds,
-    seed: int,
+    preds: np.ndarray,
+    sampler: AcquisitionFunction,
     max_labels: int | None = None,
     evaluate_steps: list[int] | None = None,
 ) -> list[dict[str, float]]:
@@ -171,7 +171,6 @@ def sample_dataset_metrics(
     if evaluate_steps is None:
         evaluate_steps = list(range(1, max_labels + 1))
     evaluate_steps = deepcopy(evaluate_steps)
-    sampler = RandomSampler(dataset, seed)
     metrics = []
     next_eval_step = evaluate_steps.pop(0)
     for n in range(max_labels):
