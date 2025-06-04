@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --qos turing
 #SBATCH --job-name generate_reddit_dataset
-#SBATCH --time 0-23:00:0
+#SBATCH --time 0-5:00:0
 #SBATCH --nodes 1
 #SBATCH --gpus 1
 #SBATCH --output /bask/projects/v/vjgo8416-tigers/ARC-TIGERS/slurm_logs/generate_reddit_dataset-%j.out
@@ -30,6 +30,6 @@ else
     python scripts/data_processing/dataset_download.py --max_rows $1
 fi
 
-if [ ! -z $2 ]; then
+if [ $# -eq 2 ]; then
     python scripts/data_processing/dataset_generation.py "data/reddit_dataset_12/"$1"_rows/filtered_rows.json" $2
 fi

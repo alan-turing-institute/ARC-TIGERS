@@ -1,8 +1,9 @@
 from collections import Counter
 from copy import deepcopy
-from typing import Any
+from typing import Any, Generator
 
 import numpy as np
+from numpy.random import BitGenerator
 from datasets import Dataset, concatenate_datasets
 from transformers import PreTrainedTokenizer
 
@@ -14,6 +15,7 @@ def imbalance_binary_dataset(
     dataset: Dataset,
     seed: int,
     class_balance: float,
+    generator: BitGenerator,
 ) -> Dataset:
     """
     Imbalance the dataset based on the class_balance variable.
@@ -50,9 +52,12 @@ def imbalance_binary_dataset(
             raise ValueError(err_msg)
 
     # Randomly sample indices for each class
-    rng = np.random.default_rng(seed)
-    sampled_class_0_indices = rng.choice(class_0_indices, n_class_0, replace=False)
-    sampled_class_1_indices = rng.choice(class_1_indices, n_class_1, replace=False)
+    sampled_class_0_indices = generator.choice(
+        class_0_indices, n_class_0, replace=False
+    )
+    sampled_class_1_indices = generator.choice(
+        class_1_indices, n_class_1, replace=False
+    )
 
     # Combine the sampled indices and sort them
     sampled_indices = np.sort(
@@ -90,7 +95,7 @@ def flag_row(row: dict) -> bool:
     return row["dataType"] == "post"
 
 
-def balance_dataset(dataset: Dataset) -> Dataset:
+def balance_dataset(dataset: Dataset, split_generator: Generator) -> Dataset:
     # Get the number of samples in each class
     label_counts = Counter(dataset["label"])
     # Calculate the number for each class
@@ -98,7 +103,9 @@ def balance_dataset(dataset: Dataset) -> Dataset:
     resampled_data = []
     for label in label_counts:
         label_data = dataset.filter(lambda x, label=label: x["label"] == label)
-        resampled_data.append(label_data.shuffle().select(range(min_samples)))
+        resampled_data.append(
+            label_data.shuffle(generator=split_generator).select(range(min_samples))
+        )
     return concatenate_datasets(resampled_data)
 
 

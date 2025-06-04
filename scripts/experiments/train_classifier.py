@@ -2,7 +2,7 @@ import argparse
 import json
 import logging
 import os
-
+import copy
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -15,13 +15,16 @@ from transformers import (
 from arc_tigers.data.reddit_data import get_reddit_data
 from arc_tigers.eval.utils import compute_metrics
 from arc_tigers.training.utils import WeightedLossTrainer, get_label_weights
-from arc_tigers.utils import get_configs, load_yaml
+from arc_tigers.utils import get_configs, load_yaml, seed_everything
 
 logger = logging.getLogger(__name__)
 
 
 def main(args):
     exp_config = load_yaml(args.exp_config)
+    exp_config["train_kwargs"]["learning_rate"] = float(
+        exp_config["train_kwargs"]["learning_rate"]
+    )
     data_config, model_config = get_configs(exp_config)
     exp_name = args.exp_name if args.exp_name else exp_config["exp_name"]
     save_dir = (
@@ -30,6 +33,9 @@ def main(args):
         f"/{data_config['data_args']['target_config']}"
         f"/{model_config['model_id']}/{exp_name}"
     )
+
+    seed_everything(exp_config["random_seed"])
+
     if os.path.exists(save_dir):
         base_save_dir = save_dir
         counter = 1
@@ -38,12 +44,15 @@ def main(args):
             counter += 1
 
     os.makedirs(save_dir, exist_ok=False)
-    exp_config[save_dir] = save_dir
-    # Save experiment configuration to the save directory
+    exp_config["save_dir"] = save_dir
+
+    # Save a copy for logging
+    exp_config_copy = copy.deepcopy(exp_config)
     exp_config_path = os.path.join(save_dir, "experiment_config.json")
     with open(exp_config_path, "w") as f:
-        json.dump(exp_config, f, indent=4)
+        json.dump(exp_config_copy, f, indent=4)
     print(f"Experiment configuration saved to {exp_config_path}")
+
     # set up logging
     logging.basicConfig(filename=f"{save_dir}/logs.log", level=logging.INFO)
 
@@ -60,7 +69,6 @@ def main(args):
     train_dataset, eval_dataset, _, _ = get_reddit_data(
         **data_config["data_args"], tokenizer=tokenizer
     )
-
     training_args = TrainingArguments(
         output_dir=save_dir,
         logging_dir=f"{save_dir}/logs",
@@ -75,7 +83,7 @@ def main(args):
         tokenizer=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
-        loss_weights=get_label_weights(train_dataset),
+        loss_weights=get_label_weights(train_dataset)[0],
     )
 
     # Train the model

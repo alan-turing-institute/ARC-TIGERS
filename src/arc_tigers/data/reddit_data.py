@@ -49,7 +49,6 @@ def get_reddit_data(
     balanced: bool,
     n_rows: int,
     tokenizer: PreTrainedTokenizer | None,
-    random_seed: int,
     class_balance: float | None = None,
     all_classes: bool = False,
 ) -> tuple[Dataset, Dataset, Dataset, dict[str, dict[str, Any]]]:
@@ -78,7 +77,9 @@ def get_reddit_data(
         tuple: A tuple containing the training dataset, evaluation dataset, and test
         dataset.
     """
-    split_generator = np.random.default_rng(seed=random_seed)
+    # This needs to be reproducible across all experiments
+    # so hardcode seed in this case
+    split_generator = np.random.default_rng(seed=42)
 
     data_dir = f"{DATA_DIR}/reddit_dataset_12/{n_rows}_rows/splits/{target_config}/"
 
@@ -162,8 +163,12 @@ def get_reddit_data(
     # balance the dataset
     if balanced:
         print("Balancing the datasets...")
-        tokenized_train_dataset = balance_dataset(tokenized_train_dataset)
-        tokenized_test_dataset = balance_dataset(tokenized_test_dataset)
+        tokenized_train_dataset = balance_dataset(
+            tokenized_train_dataset, split_generator
+        )
+        tokenized_test_dataset = balance_dataset(
+            tokenized_test_dataset, split_generator
+        )
     else:
         # perform imbalanced sampling if class_balance is not None:
         if class_balance:
@@ -171,14 +176,14 @@ def get_reddit_data(
             print("Training dataset:")
             tokenized_train_dataset = imbalance_binary_dataset(
                 tokenized_train_dataset,
-                seed=random_seed,
                 class_balance=class_balance,
+                generator=split_generator,
             )
             print("Test dataset:")
             tokenized_test_dataset = imbalance_binary_dataset(
                 tokenized_test_dataset,
-                seed=random_seed,
                 class_balance=class_balance,
+                generator=split_generator,
             )
         # otherwise leave natural imbalance
 
