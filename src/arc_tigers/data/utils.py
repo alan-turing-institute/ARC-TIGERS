@@ -1,10 +1,12 @@
 from collections import Counter
+from collections.abc import Generator
 from copy import deepcopy
-from typing import Any, Generator
+from typing import Any
 
 import numpy as np
-from numpy.random import BitGenerator
 from datasets import Dataset, concatenate_datasets
+from numpy.random import BitGenerator
+from tqdm import tqdm
 from transformers import PreTrainedTokenizer
 
 from arc_tigers.eval.utils import evaluate
@@ -13,7 +15,6 @@ from arc_tigers.sample.acquisition import AcquisitionFunction
 
 def imbalance_binary_dataset(
     dataset: Dataset,
-    seed: int,
     class_balance: float,
     generator: BitGenerator,
 ) -> Dataset:
@@ -180,7 +181,7 @@ def sample_dataset_metrics(
     evaluate_steps = deepcopy(evaluate_steps)
     metrics = []
     next_eval_step = evaluate_steps.pop(0)
-    for n in range(max_labels):
+    for n in tqdm(range(max_labels)):
         sampler.sample()
         if (n + 1) == next_eval_step:
             metric = evaluate(

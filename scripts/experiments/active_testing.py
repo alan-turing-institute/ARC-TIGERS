@@ -9,11 +9,35 @@ from tqdm import tqdm
 from arc_tigers.data.utils import sample_dataset_metrics
 from arc_tigers.eval.reddit_eval import get_preds
 from arc_tigers.eval.utils import evaluate, get_stats
-from arc_tigers.sample.acquisition import DistanceSampler
+from arc_tigers.sample.acquisition import (
+    DistanceSampler,
+    InformationGainSampler,
+    RFSampler,
+)
+
+
+def config_path_to_config_name(config_path: str) -> str:
+    return config_path.split("/")[-1].rstrip(".yaml")
+
+
+def create_dir(
+    save_dir: str, data_config_path: str, class_balance: float, acq_strat: str
+) -> str:
+    data_config = config_path_to_config_name(data_config_path)
+    eval_dir = f"{save_dir}/eval_outputs/{data_config}/"
+    if class_balance != 1.0:
+        output_dir = (
+            f"{eval_dir}/imbalanced_{acq_strat}_sampling_outputs_"
+            f"{str(class_balance).replace('.', '')}/"
+        )
+    else:
+        output_dir = f"{eval_dir}/{acq_strat}_sampling_outputs/"
+    os.makedirs(output_dir, exist_ok=True)
+    return output_dir
 
 
 def main(
-    save_dir,
+    output_dir,
     n_repeats,
     dataset,
     acq_strat,
@@ -21,20 +45,15 @@ def main(
     init_seed,
     max_labels,
     evaluate_steps,
-    class_balance,
 ):
     rng = np.random.default_rng(init_seed)
-    if class_balance != 1.0:
-        output_dir = (
-            f"{save_dir}/imbalanced_{acq_strat}_sampling_outputs_"
-            f"{str(class_balance).replace('.', '')}/"
-        )
-    else:
-        output_dir = f"{save_dir}/{acq_strat}_sampling_outputs/"
-
     if acq_strat == "distance":
-        sampler = DistanceSampler
-    os.makedirs(output_dir, exist_ok=True)
+        sampler_class = DistanceSampler
+    elif acq_strat == "random_forest_acc":
+        sampler_class = RFSampler
+    elif acq_strat == "random_forest_ig":
+        sampler_class = InformationGainSampler
+
     # full dataset stats
     metrics = evaluate(dataset, preds)
     stats = get_stats(preds, dataset["label"])
@@ -46,7 +65,9 @@ def main(
     # iteratively sample dataset and compute metrics, repeated n_repeats times
     for _ in tqdm(range(n_repeats)):
         seed = rng.integers(1, 2**32 - 1)  # Generate a random seed
-        acq_func = sampler(data=dataset, sampling_seed=seed)
+        acq_func = sampler_class(data=dataset, sampling_seed=seed, eval_dir=output_dir)
+        if hasattr(sampler_class, "set_model_preds"):
+            acq_func.set_model_preds(predictions)
         metrics = sample_dataset_metrics(
             dataset,
             predictions,
@@ -110,18 +131,39 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    preds, test_dataset = get_preds(
-        data_config_path=args.data_config,
-        model_config_path=args.model_config,
+    output_dir = create_dir(
         save_dir=args.save_dir,
+        data_config_path=args.data_config,
+        acq_strat=args.acq_strat,
         class_balance=args.class_balance,
-        seed=args.seed,
-        synthetic_args=None,
     )
-    print("obtained predictions")
+
+    if os.path.isfile(output_dir + "predictions.npy"):
+        print("loading saved predictions..")
+        preds = np.load(output_dir + "predictions.npy")
+        _, test_dataset = get_preds(
+            data_config_path=args.data_config,
+            model_config_path=args.model_config,
+            save_dir=args.save_dir,
+            class_balance=args.class_balance,
+            seed=args.seed,
+            synthetic_args=None,
+            preds_exist=True,
+        )
+    else:
+        preds, test_dataset = get_preds(
+            data_config_path=args.data_config,
+            model_config_path=args.model_config,
+            save_dir=args.save_dir,
+            class_balance=args.class_balance,
+            seed=args.seed,
+            synthetic_args=None,
+        )
+        print("saving predictions..")
+        np.save(output_dir + "predictions.npy", preds)
 
     main(
-        save_dir=args.save_dir,
+        output_dir=output_dir,
         n_repeats=args.n_repeats,
         dataset=test_dataset,
         acq_strat=args.acq_strat,
@@ -131,5 +173,4 @@ if __name__ == "__main__":
         evaluate_steps=np.arange(
             args.min_labels, args.max_labels, args.eval_every
         ).tolist(),
-        class_balance=args.class_balance,
     )

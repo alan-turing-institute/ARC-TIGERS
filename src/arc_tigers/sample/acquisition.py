@@ -2,8 +2,10 @@ from collections import namedtuple
 
 import numpy as np
 from datasets import Dataset
+from scipy.spatial.distance import cdist
 from sklearn.ensemble import RandomForestClassifier
 
+from arc_tigers.eval.utils import softmax
 from arc_tigers.sample.utils import get_distilbert_embeddings
 
 DummyAcqFunc = namedtuple("DummyAcqFunc", ["observed_idx", "remaining_idx", "rng"])
@@ -48,6 +50,7 @@ class AcquisitionFunction:
         idx = np.where(sample)[0][0]
         test_idx = self.remaining_idx[idx]
         self.observed_idx.append(int(test_idx))
+        self.remaining_idx.remove(int(test_idx))
 
         return test_idx
 
@@ -56,7 +59,7 @@ class AcquisitionFunction:
 
 
 class DistanceSampler(AcquisitionFunction):
-    def __init__(self, data: Dataset, sampling_seed: int):
+    def __init__(self, data: Dataset, sampling_seed: int, eval_dir: str):
         """Samples a dataset based on distance between observed and unobserved
         embeddings.
 
@@ -69,13 +72,13 @@ class DistanceSampler(AcquisitionFunction):
             unlabelled_idx: Indices of the samples that haven't been labelled.
         """
         self.observed_idx: list[int] = []
-        self.remaining_idx = np.arange(len(data))
+        self.remaining_idx: list[int] = np.arange(len(data)).tolist()
         self.n_sampled = 0
         self.rng = np.random.default_rng(seed=sampling_seed)
 
         self.data = data
         # Get embeddings for whole dataset
-        self.embeddings = get_distilbert_embeddings(data)
+        self.embeddings = get_distilbert_embeddings(data, eval_dir)
 
     def sample(self) -> int:
         """
@@ -93,18 +96,23 @@ class DistanceSampler(AcquisitionFunction):
 
         else:
             # Subset embeddings
-            remaining = self.embeddings[self.remaining_idx]
-            observed = self.embeddings[self.observed_idx]
+            remaining = self.embeddings[np.array(self.remaining_idx)]
+            observed = self.embeddings[np.array(self.observed_idx)]
 
-            # Broadcasting to get all paired differences
-            d = remaining[:, np.newaxis, :] - observed
-            d = d**2
-            # Sum over feature dimension
-            d = d.sum(-1)
-            # sqrt to get distance
-            d = np.sqrt(d)
-            # Mean over other pairs
-            distances = d.mean(1)
+            # # Broadcasting to get all paired differences
+            # d = remaining[:, np.newaxis, :] - observed
+            # d = d**2
+            # # Sum over feature dimension
+            # d = d.sum(-1)
+            # # sqrt to get distance
+            # d = np.sqrt(d)
+            # # Mean over other pairs
+            # distances = d.mean(1)
+
+            # Compute all pairwise Euclidean distances
+            dists = cdist(remaining, observed, metric="euclidean")
+            # Mean distance to observed for each remaining sample
+            distances = dists.mean(axis=1)
 
             # Constract PDF via softmax
             pmf = np.exp(distances)
@@ -114,7 +122,7 @@ class DistanceSampler(AcquisitionFunction):
 
 
 class RFSampler(AcquisitionFunction):
-    def __init__(self, data: Dataset):
+    def __init__(self, data: Dataset, eval_dir: str):
         """Samples a dataset based on distance between model loss and surrogate loss,
         where the surrogate is a Random Forest classifier.
 
@@ -133,28 +141,36 @@ class RFSampler(AcquisitionFunction):
         self.surrogate_preds = np.array([])
         self.data = data
         # Get embeddings for use with RF classifier
-        self.embeddings = get_distilbert_embeddings(data)
+        self.embeddings = get_distilbert_embeddings(data, eval_dir)
 
         # Train Random Forest classifier
         self.rf_classifier = RandomForestClassifier().fit(
             self.embeddings, self.data["label"]
         )
 
-        # TODO: Get predictions for model and surrogate over all remaining *test* points
-        # self.model_preds =
-        # self.surrogate_preds =
+        # Get surrogate predictions (probabilities) for all samples
+        self.surrogate_preds = self.rf_classifier.predict_proba(self.embeddings)
+
+        # Placeholder for model predictions (should be set externally)
+        self.model_preds = np.zeros_like(self.surrogate_preds)
+
+    def set_model_preds(self, preds: np.ndarray):
+        """Set model predictions externally (shape: [n_samples, n_classes])."""
+        self.model_preds = softmax(preds)
 
     def accuracy_loss(self):
+        # Use only remaining (unlabelled) samples
         # we need higher values = higher loss
         # so we will return 1 - accuracy
+        rem_idx = np.array(self.remaining_idx)
+        model_probs = self.model_preds[rem_idx]
+        surrogate_probs = self.surrogate_preds[rem_idx]
 
-        pred_classes = np.argmax(self.model_preds, axis=1)
+        pred_classes = np.argmax(model_probs, axis=1)
 
         # instead of 0,1 loss we get p_surr(y|x) for accuracy
 
-        res = (
-            1 - self.surrogate_preds[np.arange(len(self.surrogate_preds)), pred_classes]
-        )
+        res = 1 - surrogate_probs[np.arange(len(surrogate_probs)), pred_classes]
 
         return np.maximum(res, np.max(res) * 0.05)
 
@@ -171,3 +187,56 @@ class RFSampler(AcquisitionFunction):
             expected_loss /= expected_loss.sum()
 
         return self.sample_pmf(expected_loss)
+
+
+class InformationGainSampler(AcquisitionFunction):
+    def __init__(self, data: Dataset, eval_dir: str, sampling_seed: int = 42):
+        """
+        Samples based on information gain (cross-entropy between surrogate and model
+        predictions).
+
+        Args:
+            data: The dataset to sample from.
+        """
+        self.observed_idx: list[int] = []
+        self.remaining_idx: list[int] = np.arange(len(data)).tolist()
+        self.n_sampled = 0
+        self.rng = np.random.default_rng(seed=sampling_seed)
+        self.data = data
+
+        # Get embeddings for use with surrogate classifier
+        self.embeddings = get_distilbert_embeddings(data, eval_dir)
+
+        # Train surrogate Random Forest classifier
+        self.surrogate = RandomForestClassifier(
+            random_state=sampling_seed, n_estimators=100, n_jobs=-1
+        ).fit(self.embeddings, self.data["label"])
+        self.surrogate_preds = self.surrogate.predict_proba(self.embeddings)
+
+        # Placeholder for model predictions (should be set externally)
+        self.model_preds = np.zeros_like(self.surrogate_preds)
+
+    def set_model_preds(self, preds: np.ndarray):
+        """Set model predictions externally (shape: [n_samples, n_classes])."""
+        self.model_preds = softmax(preds)
+
+    def information_gain(self):
+        rem_idx = np.array(self.remaining_idx)
+        surrogate_probs = self.surrogate_preds[rem_idx]  # π(y | x)
+        model_probs = self.model_preds[rem_idx]  # f(x)_y
+
+        # Add small epsilon for numerical stability in log
+        eps = 1e-12
+        log_model_probs = np.log(model_probs + eps)
+        # Cross-entropy: -sum_y π(y|x) * log f(x)_y
+        info_gain = -np.sum(surrogate_probs * log_model_probs, axis=1)
+        # Make all values positive and nonzero for sampling
+        return np.maximum(info_gain, np.max(info_gain) * 0.05)
+
+    def sample(self):
+        info_gain = self.information_gain()
+        if (info_gain < 0).sum() > 0:
+            info_gain += np.abs(info_gain.min())
+        if info_gain.sum() != 0:
+            info_gain /= info_gain.sum()
+        return self.sample_pmf(info_gain)

@@ -1,3 +1,6 @@
+import os
+
+import numpy as np
 import torch
 from sentence_transformers import SentenceTransformer
 from torch.utils.data import DataLoader, Dataset
@@ -16,7 +19,9 @@ class RedditTextDataset(Dataset):
         return self.texts[idx], self.labels[idx]
 
 
-def get_distilbert_embeddings(dataset):
+def get_distilbert_embeddings(dataset, eval_dir):
+    if os.path.isfile(eval_dir + "distilbert_embeddings.npy"):
+        return np.load(eval_dir + "distilbert_embeddings.npy")
     train_texts = dataset["text"]
     train_labels = dataset["label"]
 
@@ -33,4 +38,7 @@ def get_distilbert_embeddings(dataset):
         all_embeddings.append(embeddings_batch)
         all_labels.append(labels)
 
-    return torch.vstack(all_embeddings).detach().cpu().numpy()
+    embeddings = torch.vstack(all_embeddings).detach().cpu().numpy()
+    np.save(eval_dir + "distilbert_embeddings.npy", embeddings)
+
+    return embeddings
