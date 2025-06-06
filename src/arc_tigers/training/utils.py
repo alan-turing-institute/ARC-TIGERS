@@ -22,7 +22,15 @@ class WeightedLossTrainer(Trainer):
 
     def __init__(self, *args, **kwargs) -> None:
         assert "loss_weights" in kwargs, "loss_weights must be provided"
-        self.loss_weights = kwargs.pop("loss_weights", None)
+        loss_weights = kwargs.pop("loss_weights", None)
+        # compute custom loss
+        if loss_weights:
+            print(loss_weights)
+            self.loss_fct = nn.CrossEntropyLoss(
+                weight=torch.tensor(loss_weights).to(get_device())
+            )
+        else:
+            self.loss_fct = nn.CrossEntropyLoss()
         super().__init__(*args, **kwargs)
 
     def compute_loss(self, model, inputs, return_outputs=False, **kwargs) -> tuple:
@@ -43,11 +51,9 @@ class WeightedLossTrainer(Trainer):
         # forward pass
         outputs = model(**inputs)
         logits = outputs.get("logits")
-        # compute custom loss
-        loss_fct = nn.CrossEntropyLoss(
-            weight=torch.tensor(self.loss_weights).to(get_device())
+        loss = self.loss_fct(
+            logits.view(-1, self.model.config.num_labels), labels.view(-1)
         )
-        loss = loss_fct(logits.view(-1, self.model.config.num_labels), labels.view(-1))
         return (loss, outputs) if return_outputs else loss
 
 

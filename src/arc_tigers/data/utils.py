@@ -1,19 +1,22 @@
 from collections import Counter
+from collections.abc import Generator
 from copy import deepcopy
 from typing import Any
 
 import numpy as np
 from datasets import Dataset, concatenate_datasets
+from numpy.random import BitGenerator
+from tqdm import tqdm
 from transformers import PreTrainedTokenizer
 
 from arc_tigers.eval.utils import evaluate
-from arc_tigers.sample.random import RandomSampler
+from arc_tigers.sample.acquisition import AcquisitionFunction
 
 
 def imbalance_binary_dataset(
     dataset: Dataset,
-    seed: int,
     class_balance: float,
+    generator: BitGenerator,
 ) -> Dataset:
     """
     Imbalance the dataset based on the class_balance variable.
@@ -50,9 +53,12 @@ def imbalance_binary_dataset(
             raise ValueError(err_msg)
 
     # Randomly sample indices for each class
-    rng = np.random.default_rng(seed)
-    sampled_class_0_indices = rng.choice(class_0_indices, n_class_0, replace=False)
-    sampled_class_1_indices = rng.choice(class_1_indices, n_class_1, replace=False)
+    sampled_class_0_indices = generator.choice(
+        class_0_indices, n_class_0, replace=False
+    )
+    sampled_class_1_indices = generator.choice(
+        class_1_indices, n_class_1, replace=False
+    )
 
     # Combine the sampled indices and sort them
     sampled_indices = np.sort(
@@ -90,7 +96,7 @@ def flag_row(row: dict) -> bool:
     return row["dataType"] == "post"
 
 
-def balance_dataset(dataset: Dataset) -> Dataset:
+def balance_dataset(dataset: Dataset, split_generator: Generator) -> Dataset:
     # Get the number of samples in each class
     label_counts = Counter(dataset["label"])
     # Calculate the number for each class
@@ -98,7 +104,9 @@ def balance_dataset(dataset: Dataset) -> Dataset:
     resampled_data = []
     for label in label_counts:
         label_data = dataset.filter(lambda x, label=label: x["label"] == label)
-        resampled_data.append(label_data.shuffle().select(range(min_samples)))
+        resampled_data.append(
+            label_data.shuffle(generator=split_generator).select(range(min_samples))
+        )
     return concatenate_datasets(resampled_data)
 
 
@@ -146,8 +154,8 @@ def preprocess_function(
 
 def sample_dataset_metrics(
     dataset: Dataset,
-    preds,
-    seed: int,
+    preds: np.ndarray,
+    sampler: AcquisitionFunction,
     max_labels: int | None = None,
     evaluate_steps: list[int] | None = None,
 ) -> list[dict[str, float]]:
@@ -171,10 +179,9 @@ def sample_dataset_metrics(
     if evaluate_steps is None:
         evaluate_steps = list(range(1, max_labels + 1))
     evaluate_steps = deepcopy(evaluate_steps)
-    sampler = RandomSampler(dataset, seed)
     metrics = []
     next_eval_step = evaluate_steps.pop(0)
-    for n in range(max_labels):
+    for n in tqdm(range(max_labels)):
         sampler.sample()
         if (n + 1) == next_eval_step:
             metric = evaluate(
