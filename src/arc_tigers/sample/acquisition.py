@@ -11,6 +11,23 @@ from arc_tigers.sample.utils import get_distilbert_embeddings
 DummyAcqFunc = namedtuple("DummyAcqFunc", ["observed_idx", "remaining_idx", "rng"])
 
 
+def compute_weighting_factor(q_im, N, M, m):
+    """
+    Compute the weighting factor v_m for the selected sample.
+
+    Args:
+        q_im: The pmf value for the selected sample (float)
+        N: Total number of samples (int)
+        M: Total number of samples to be labelled (int)
+        m: Number of samples labelled so far (int)
+
+    Returns:
+        v_m: Weighting factor (float)
+    """
+    inner = (1 / ((N - m + 1) * q_im)) - 1
+    return 1 + ((N - M) / (N - m)) * inner
+
+
 class AcquisitionFunction:
     def __init__(self):
         self.remaining_idx: list[int] = []

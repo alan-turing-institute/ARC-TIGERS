@@ -11,17 +11,17 @@ from arc_tigers.data.utils import sample_dataset_metrics
 from arc_tigers.eval.reddit_eval import get_preds
 from arc_tigers.eval.utils import evaluate, get_stats
 from arc_tigers.sample.random import RandomSampler
+from arc_tigers.utils import create_dir
 
 
 def main(
-    save_dir: str,
+    output_dir: str,
     n_repeats: int,
     dataset: Dataset,
     preds,
     init_seed: int,
     max_labels: int | None = None,
     evaluate_steps: list[int] | None = None,
-    class_balance: float = 1.0,
 ):
     """
     Iteratively sample a dataset and compute metrics for the labelled subset.
@@ -39,14 +39,6 @@ def main(
     """
 
     rng = np.random.default_rng(init_seed)
-    if class_balance != 1.0:
-        output_dir = (
-            f"{save_dir}/imbalanced_random_sampling_outputs_"
-            f"{str(class_balance).replace('.', '')}/"
-        )
-    else:
-        output_dir = f"{save_dir}/random_sampling_outputs/"
-    os.makedirs(output_dir, exist_ok=True)
 
     # full dataset stats
     metrics = evaluate(dataset, preds)
@@ -159,17 +151,39 @@ if __name__ == "__main__":
         "negative_error_rate": args.neg_error_rate,
     }
 
-    preds, test_dataset = get_preds(
-        data_config_path=args.data_config,
-        model_config_path=args.model_config,
+    output_dir = create_dir(
         save_dir=args.save_dir,
+        data_config_path=args.data_config,
+        acq_strat="random",
         class_balance=args.class_balance,
-        seed=args.seed,
-        synthetic_args=synthetic_args,
     )
 
+    if os.path.isfile(output_dir + "predictions.npy"):
+        print("loading saved predictions..")
+        preds = np.load(output_dir + "predictions.npy")
+        _, test_dataset = get_preds(
+            data_config_path=args.data_config,
+            model_config_path=args.model_config,
+            save_dir=args.save_dir,
+            class_balance=args.class_balance,
+            seed=args.seed,
+            synthetic_args=synthetic_args,
+            preds_exist=True,
+        )
+    else:
+        preds, test_dataset = get_preds(
+            data_config_path=args.data_config,
+            model_config_path=args.model_config,
+            save_dir=args.save_dir,
+            class_balance=args.class_balance,
+            seed=args.seed,
+            synthetic_args=synthetic_args,
+        )
+        print("saving predictions..")
+        np.save(output_dir + "predictions.npy", preds)
+
     main(
-        args.save_dir,
+        output_dir,
         args.n_repeats,
         test_dataset,
         preds,
@@ -178,5 +192,4 @@ if __name__ == "__main__":
         evaluate_steps=np.arange(
             args.min_labels, args.max_labels, args.eval_every
         ).tolist(),
-        class_balance=args.class_balance,
     )
