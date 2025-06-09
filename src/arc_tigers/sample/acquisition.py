@@ -264,8 +264,10 @@ class RFSampler(AcquisitionFunction):
         self.rng = np.random.default_rng(seed=sampling_seed)
 
         # initialise surrogate predictions
-        num_classes = len(np.unique(self.data["label"]))
-        self.surrogate_preds = np.full((len(self.data), num_classes), 1.0 / num_classes)
+        self.num_classes = len(np.unique(self.data["label"]))
+        self.surrogate_preds = np.full(
+            (len(self.data), self.num_classes), 1.0 / self.num_classes
+        )
 
         # Placeholder for model predictions (should be set externally)
         self.model_preds = np.zeros_like(self.surrogate_preds)
@@ -283,19 +285,29 @@ class RFSampler(AcquisitionFunction):
         self.rf_classifier = RandomForestClassifier(
             random_state=self.rng.integers(1e9), n_estimators=100, n_jobs=-1
         ).fit(X_train, y_train)
-        self.surrogate_preds = self.rf_classifier.predict_proba(self.embeddings)
+        # Get surrogate predictions for all samples
+        intermediate_surrogate_preds = self.rf_classifier.predict_proba(self.embeddings)
+        classes_ = self.rf_classifier.classes_
+        # Fill a full array with zeros for all classes
+        full_proba = np.zeros((len(self.data), self.num_classes))
+        # fill the full array with surrogate predictions
+        # for each class in the surrogate predictions
+        for i, c in enumerate(classes_):
+            full_proba[:, c] = intermediate_surrogate_preds[:, i]
+        self.surrogate_preds = full_proba
 
     def accuracy_loss(self):
         # Use only remaining (unlabelled) samples
         # we need higher values = higher loss
         # so we will return 1 - accuracy
         rem_idx = np.array(self.remaining_idx)
+        if len(self.observed_idx) == 0:
+            # No surrogate, so return uniform loss
+            return np.ones(len(rem_idx), dtype=np.float64)
         model_probs = self.model_preds[rem_idx]
         surrogate_probs = self.surrogate_preds[rem_idx]
 
         pred_classes = np.argmax(model_probs, axis=1)
-
-        # instead of 0,1 loss we get p_surr(y|x) for accuracy
 
         res = 1 - surrogate_probs[np.arange(len(surrogate_probs)), pred_classes]
 
@@ -357,8 +369,10 @@ class InformationGainSampler(AcquisitionFunction):
         self.embeddings = get_distilbert_embeddings(data, eval_dir)
 
         # initialise surrogate predictions
-        num_classes = len(np.unique(self.data["label"]))
-        self.surrogate_preds = np.full((len(self.data), num_classes), 1.0 / num_classes)
+        self.num_classes = len(np.unique(self.data["label"]))
+        self.surrogate_preds = np.full(
+            (len(self.data), self.num_classes), 1.0 / self.num_classes
+        )
 
         # Placeholder for model predictions (should be set externally)
         self.model_preds = np.zeros_like(self.surrogate_preds)
@@ -376,7 +390,16 @@ class InformationGainSampler(AcquisitionFunction):
         self.rf_classifier = RandomForestClassifier(
             random_state=self.rng.integers(1e9), n_estimators=100, n_jobs=-1
         ).fit(X_train, y_train)
-        self.surrogate_preds = self.rf_classifier.predict_proba(self.embeddings)
+        # Get surrogate predictions for all samples
+        intermediate_surrogate_preds = self.rf_classifier.predict_proba(self.embeddings)
+        classes_ = self.rf_classifier.classes_
+        # Fill a full array with zeros for all classes
+        full_proba = np.zeros((len(self.data), self.num_classes))
+        # fill the full array with surrogate predictions
+        # for each class in the surrogate predictions
+        for i, c in enumerate(classes_):
+            full_proba[:, c] = intermediate_surrogate_preds[:, i]
+        self.surrogate_preds = full_proba
 
     def information_gain(self):
         rem_idx = np.array(self.remaining_idx)
