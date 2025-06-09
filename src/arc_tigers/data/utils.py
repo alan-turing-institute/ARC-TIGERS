@@ -42,13 +42,13 @@ def imbalance_binary_dataset(
         class_balance = -1.0 * class_balance
         n_class_1 = len(class_1_indices)
         n_class_0 = int(n_class_1 * class_balance)
-        if n_class_0 <= len(class_0_indices):
+        if n_class_0 >= len(class_0_indices):
             err_msg = "class balance is too large for class 0"
             raise ValueError(err_msg)
     else:
         n_class_0 = len(class_0_indices)
         n_class_1 = int(n_class_0 * class_balance)
-        if n_class_1 <= len(class_1_indices):
+        if n_class_1 >= len(class_1_indices):
             err_msg = "class balance is too large for class 0"
             raise ValueError(err_msg)
 
