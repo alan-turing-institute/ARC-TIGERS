@@ -38,6 +38,7 @@ def get_transformers_preds(
     class_balance: float,
     seed: int,
     synthetic_args: dict,
+    preds_exist: bool = False,
 ) -> tuple[np.ndarray, Dataset]:
     """
     Get the predictions from a model using the transformers library. This function is
@@ -61,13 +62,13 @@ def get_transformers_preds(
     """
     if model_config_path == "beta_model":
         # Arbitrary tokenizer only loaded for compatibility with other functions, not
-        # used by the ssynthetic Beta model.
+        # used by the synthetic Beta model.
         tokenizer = AutoTokenizer.from_pretrained("roberta-base")
         use_cpu = True
     else:
+        # calculate predictions for whole dataset
         print(f"Loading model and tokenizer from {save_dir}...")
         model_config = load_yaml(model_config_path)
-        # calculate predictions for whole dataset
         tokenizer = AutoTokenizer.from_pretrained(model_config["model_id"])
         model = AutoModelForSequenceClassification.from_pretrained(save_dir)
         use_cpu = False
@@ -98,9 +99,10 @@ def get_transformers_preds(
         _, _, test_dataset, meta_data = get_reddit_data(
             **data_config["data_args"],
             tokenizer=tokenizer,
-            random_seed=seed,
             class_balance=class_balance,
         )
+    if preds_exist:
+        return _, test_dataset
 
     # Data collator
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
@@ -148,8 +150,8 @@ def get_transformers_preds(
         data_collator=data_collator,
         compute_metrics=compute_metrics,
     )
-
     preds = trainer.predict(test_dataset, metric_key_prefix="").predictions
+
     return preds, test_dataset
 
 
@@ -157,7 +159,6 @@ def get_tfidf_preds(
     data_config_path: str,
     save_dir: str,
     class_balance: float,
-    seed: int,
     **kwargs,
 ) -> tuple[np.ndarray, Dataset]:
     """
@@ -192,7 +193,6 @@ def get_tfidf_preds(
     _, _, test_dataset, meta_data = get_reddit_data(
         **data_config["data_args"],
         tokenizer=tokenizer,
-        random_seed=seed,
         class_balance=class_balance,
     )
     # Save meta_data to the save_dir
