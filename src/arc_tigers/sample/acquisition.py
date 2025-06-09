@@ -263,13 +263,9 @@ class RFSampler(AcquisitionFunction):
         self.embeddings = get_distilbert_embeddings(data, eval_dir)
         self.rng = np.random.default_rng(seed=sampling_seed)
 
-        # Train Random Forest classifier
-        self.rf_classifier = RandomForestClassifier(
-            random_state=sampling_seed, n_estimators=100, n_jobs=-1
-        ).fit(self.embeddings, self.data["label"])
-
-        # Get surrogate predictions (probabilities) for all samples
-        self.surrogate_preds = self.rf_classifier.predict_proba(self.embeddings)
+        # initialise surrogate predictions
+        num_classes = len(np.unique(self.data["label"]))
+        self.surrogate_preds = np.full((len(self.data), num_classes), 1.0 / num_classes)
 
         # Placeholder for model predictions (should be set externally)
         self.model_preds = np.zeros_like(self.surrogate_preds)
@@ -277,6 +273,17 @@ class RFSampler(AcquisitionFunction):
     def set_model_preds(self, preds: np.ndarray):
         """Set model predictions externally (shape: [n_samples, n_classes])."""
         self.model_preds = softmax(preds)
+
+    def update_surrogate(self):
+        if len(self.observed_idx) == 0:
+            self.surrogate_preds = np.zeros_like(self.surrogate_preds)
+            return
+        X_train = self.embeddings[np.array(self.observed_idx)]
+        y_train = np.array(self.data["label"])[np.array(self.observed_idx)]
+        self.rf_classifier = RandomForestClassifier(
+            random_state=self.rng.integers(1e9), n_estimators=100, n_jobs=-1
+        ).fit(X_train, y_train)
+        self.surrogate_preds = self.rf_classifier.predict_proba(self.embeddings)
 
     def accuracy_loss(self):
         # Use only remaining (unlabelled) samples
@@ -306,7 +313,10 @@ class RFSampler(AcquisitionFunction):
         if expected_loss.sum() != 0:
             expected_loss /= expected_loss.sum()
 
-        return self.sample_pmf(expected_loss)
+        # Sample according to the expected loss pmf
+        sample = self.sample_pmf(expected_loss)
+        self.update_surrogate()
+        return sample
 
 
 class InformationGainSampler(AcquisitionFunction):
@@ -346,11 +356,9 @@ class InformationGainSampler(AcquisitionFunction):
         # Get embeddings for use with surrogate classifier
         self.embeddings = get_distilbert_embeddings(data, eval_dir)
 
-        # Train surrogate Random Forest classifier
-        self.surrogate = RandomForestClassifier(
-            random_state=sampling_seed, n_estimators=100, n_jobs=-1
-        ).fit(self.embeddings, self.data["label"])
-        self.surrogate_preds = self.surrogate.predict_proba(self.embeddings)
+        # initialise surrogate predictions
+        num_classes = len(np.unique(self.data["label"]))
+        self.surrogate_preds = np.full((len(self.data), num_classes), 1.0 / num_classes)
 
         # Placeholder for model predictions (should be set externally)
         self.model_preds = np.zeros_like(self.surrogate_preds)
@@ -358,6 +366,17 @@ class InformationGainSampler(AcquisitionFunction):
     def set_model_preds(self, preds: np.ndarray):
         """Set model predictions externally (shape: [n_samples, n_classes])."""
         self.model_preds = softmax(preds)
+
+    def update_surrogate(self):
+        if len(self.observed_idx) == 0:
+            self.surrogate_preds = np.zeros_like(self.surrogate_preds)
+            return
+        X_train = self.embeddings[np.array(self.observed_idx)]
+        y_train = np.array(self.data["label"])[np.array(self.observed_idx)]
+        self.rf_classifier = RandomForestClassifier(
+            random_state=self.rng.integers(1e9), n_estimators=100, n_jobs=-1
+        ).fit(X_train, y_train)
+        self.surrogate_preds = self.rf_classifier.predict_proba(self.embeddings)
 
     def information_gain(self):
         rem_idx = np.array(self.remaining_idx)
@@ -378,4 +397,7 @@ class InformationGainSampler(AcquisitionFunction):
             info_gain += np.abs(info_gain.min())
         if info_gain.sum() != 0:
             info_gain /= info_gain.sum()
-        return self.sample_pmf(info_gain)
+        # Sample according to the expected loss pmf
+        sample = self.sample_pmf(info_gain)
+        self.update_surrogate()
+        return sample
