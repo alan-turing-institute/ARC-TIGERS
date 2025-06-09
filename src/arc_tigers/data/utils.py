@@ -10,7 +10,7 @@ from tqdm import tqdm
 from transformers import PreTrainedTokenizer
 
 from arc_tigers.eval.utils import evaluate
-from arc_tigers.sample.acquisition import AcquisitionFunction
+from arc_tigers.sample.acquisition import AcquisitionFunction, BiasCorrector
 
 
 def imbalance_binary_dataset(
@@ -158,6 +158,7 @@ def sample_dataset_metrics(
     sampler: AcquisitionFunction,
     max_labels: int | None = None,
     evaluate_steps: list[int] | None = None,
+    bias_corrector: BiasCorrector | None = None,
 ) -> list[dict[str, float]]:
     """
     Simulate iteratively random sampling the whole dataset, re-computing metrics
@@ -182,11 +183,15 @@ def sample_dataset_metrics(
     metrics = []
     next_eval_step = evaluate_steps.pop(0)
     for n in tqdm(range(max_labels)):
-        sampler.sample()
+        q = sampler.sample()
         if (n + 1) == next_eval_step:
             metric = evaluate(
                 dataset[sampler.labelled_idx], preds[sampler.labelled_idx]
             )
+            if bias_corrector:
+                metric = bias_corrector.apply_weighting_to_dict(
+                    q=q, m=n, metrics=metric
+                )
             metric["n"] = n + 1
             metrics.append(metric)
             if evaluate_steps:
