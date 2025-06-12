@@ -1,8 +1,10 @@
 from collections import namedtuple
+
 import numpy as np
 from datasets import Dataset
 from scipy.spatial.distance import cdist
 from sklearn.ensemble import RandomForestClassifier
+
 from arc_tigers.eval.utils import softmax
 from arc_tigers.sample.utils import get_distilbert_embeddings
 

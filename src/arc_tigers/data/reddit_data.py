@@ -1,8 +1,9 @@
-from typing import Any
 import glob
-import pyarrow as pa
+from typing import Any
+
 import numpy as np
-from datasets import Dataset, load_dataset, DatasetDict
+import pyarrow as pa
+from datasets import Dataset, DatasetDict, load_dataset
 from transformers import PreTrainedTokenizer
 
 from arc_tigers.constants import DATA_DIR
@@ -10,8 +11,8 @@ from arc_tigers.data.utils import (
     balance_dataset,
     get_target_mapping,
     imbalance_binary_dataset,
-    preprocess_function,
     load_arrow_table,
+    preprocess_function,
 )
 from arc_tigers.training.utils import get_label_weights
 
@@ -50,9 +51,11 @@ def load_data(data_dir) -> DatasetDict:
     train_shards = sorted(glob.glob(f"{data_dir}/train_shard_*.csv"))
     test_shards = sorted(glob.glob(f"{data_dir}/test_shard_*.csv"))
 
+    # if shards are found, load them
     if train_shards and test_shards:
         print(
-            f"Found {len(train_shards)} train shards and {len(test_shards)} test shards."
+            f"Found {len(train_shards)} train shards "
+            f"and {len(test_shards)} test shards."
         )
         print("loading train shards...")
         train_table = load_arrow_table(train_shards)
@@ -64,14 +67,14 @@ def load_data(data_dir) -> DatasetDict:
                 "test": Dataset(pa.Table.from_batches(test_table.to_batches())),
             }
         )
-    else:
-        return load_dataset(
-            "csv",
-            data_files={
-                "train": f"{data_dir}/train.csv",
-                "test": f"{data_dir}/test.csv",
-            },
-        )
+    # otherwise load the full csv files
+    return load_dataset(
+        "csv",
+        data_files={
+            "train": f"{data_dir}/train.csv",
+            "test": f"{data_dir}/test.csv",
+        },
+    )
 
 
 def get_reddit_data(

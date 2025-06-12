@@ -1,8 +1,10 @@
+import glob
 import json
 import os
-import glob
+
 import pandas as pd
 from tqdm import tqdm
+
 from arc_tigers.data.reddit_data import ONE_VS_ALL_COMBINATIONS
 from arc_tigers.data.utils import clean_row, flag_row, is_valid_row
 
@@ -88,7 +90,8 @@ def process_data(data, target_categories, args, save_path, shard_id=None):
     train_data.to_csv(train_csv, index=False)
     test_data.to_csv(test_csv, index=False)
     print(
-        f"Shard {shard_id if shard_id is not None else ''}: Train data: {len(train_data)} | Test data: {len(test_data)}"
+        f"Shard {shard_id if shard_id is not None else ''}: "
+        f"Train data: {len(train_data)} | Test data: {len(test_data)}"
     )
     print(f"Saved: {train_csv}, {test_csv}")
 

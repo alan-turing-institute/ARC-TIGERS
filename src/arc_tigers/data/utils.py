@@ -1,12 +1,11 @@
 from collections import Counter
 from collections.abc import Generator
 from copy import deepcopy
-from typing import Any, Generator
-import pyarrow.csv as pv
-from pyarrow.csv import ParseOptions
-import pyarrow as pa
+from typing import Any
 
 import numpy as np
+import pyarrow as pa
+import pyarrow.csv as pv
 from datasets import Dataset, concatenate_datasets
 from numpy.random import BitGenerator
 from tqdm import tqdm
@@ -14,7 +13,6 @@ from transformers import PreTrainedTokenizer
 
 from arc_tigers.eval.utils import evaluate
 from arc_tigers.sample.acquisition import AcquisitionFunction, BiasCorrector
-
 
 EXPECTED_KEYS = {"text", "label", "len"}
 

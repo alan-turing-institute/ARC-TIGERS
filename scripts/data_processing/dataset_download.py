@@ -54,20 +54,19 @@ def main(args):
         print(f"All data saved to {save_pth}")
         return
 
-    # Save the filtered data to JSON files
-    else:
-        shard_idx = 0
-        for i, example in enumerate(tqdm(ds, desc="Loading dataset", total=max_rows)):
-            data.append(example)
-            if (i + 1) % shard_size == 0 or i + 1 == max_rows:
-                save_pth = f"{output_dir}/filtered_rows_shard_{shard_idx}.json"
-                with open(save_pth, "w") as f:
-                    json.dump(data, f, indent=2)
-                print(f"Shard {shard_idx} saved to {save_pth}")
-                data = []
-                shard_idx += 1
-            if i + 1 >= max_rows:
-                break
+    # orhterwise save the filtered data to individual JSON files
+    shard_idx = 0
+    for i, example in enumerate(tqdm(ds, desc="Loading dataset", total=max_rows)):
+        data.append(example)
+        if (i + 1) % shard_size == 0 or i + 1 == max_rows:
+            save_pth = f"{output_dir}/filtered_rows_shard_{shard_idx}.json"
+            with open(save_pth, "w") as f:
+                json.dump(data, f, indent=2)
+            print(f"Shard {shard_idx} saved to {save_pth}")
+            data = []
+            shard_idx += 1
+        if i + 1 >= max_rows:
+            break
     return
 
 
