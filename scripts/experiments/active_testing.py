@@ -4,41 +4,36 @@ import os
 
 import numpy as np
 import pandas as pd
-from datasets import Dataset
 from tqdm import tqdm
 
 from arc_tigers.data.utils import sample_dataset_metrics
 from arc_tigers.eval.reddit_eval import get_preds
 from arc_tigers.eval.utils import evaluate, get_stats
-from arc_tigers.sample.random import RandomSampler
+from arc_tigers.sample.acquisition import (
+    DistanceSampler,
+    InformationGainSampler,
+    RFSampler,
+)
 from arc_tigers.utils import create_dir
 
 
 def main(
-    output_dir: str,
-    n_repeats: int,
-    dataset: Dataset,
-    preds,
-    init_seed: int,
-    max_labels: int | None = None,
-    evaluate_steps: list[int] | None = None,
+    output_dir,
+    n_repeats,
+    dataset,
+    acq_strat,
+    predictions,
+    init_seed,
+    max_labels,
+    evaluate_steps,
 ):
-    """
-    Iteratively sample a dataset and compute metrics for the labelled subset.
-
-    Args:
-        save_dir: Directory to save the metrics files.
-        n_repeats: Number of times to repeat the sampling.
-        dataset: The dataset to sample from
-        preds: The predictions for the dataset.
-        model: The model to compute metrics with.
-        init_seed: The initial seed for random sampling (determines the seed used for
-            each repeat).
-        max_labels: The maximum number of labels to sample. If None, the whole dataset
-            will be sampled.
-    """
-
     rng = np.random.default_rng(init_seed)
+    if acq_strat == "distance":
+        sampler_class = DistanceSampler
+    elif acq_strat == "random_forest_acc":
+        sampler_class = RFSampler
+    elif acq_strat == "random_forest_ig":
+        sampler_class = InformationGainSampler
 
     # full dataset stats
     metrics = evaluate(dataset, preds)
@@ -48,16 +43,16 @@ def main(
         json.dump(metrics, f, indent=2)
     with open(f"{output_dir}/stats_full.json", "w") as f:
         json.dump(stats, f, indent=2)
-
     # iteratively sample dataset and compute metrics, repeated n_repeats times
     for _ in tqdm(range(n_repeats)):
-        # initialise the random sampler for this run
         seed = rng.integers(1, 2**32 - 1)  # Generate a random seed
-        random_sampler = RandomSampler(dataset, seed)
+        acq_func = sampler_class(data=dataset, sampling_seed=seed, eval_dir=output_dir)
+        if hasattr(sampler_class, "set_model_preds"):
+            acq_func.set_model_preds(predictions)
         metrics = sample_dataset_metrics(
             dataset,
-            preds,
-            random_sampler,
+            predictions,
+            acq_func,
             max_labels=max_labels,
             evaluate_steps=evaluate_steps,
         )
@@ -87,6 +82,13 @@ if __name__ == "__main__":
         help="Path to save the model and results",
     )
     parser.add_argument(
+        "acq_strat",
+        type=str,
+        default=None,
+        help="Acquisition function to use",
+    )
+
+    parser.add_argument(
         "--class_balance",
         type=float,
         default=1.0,
@@ -95,39 +97,6 @@ if __name__ == "__main__":
     parser.add_argument("--n_repeats", type=int, required=True)
     parser.add_argument("--max_labels", type=int, required=True)
     parser.add_argument("--seed", type=int, required=True)
-    parser.add_argument(
-        "--model_adv",
-        type=float,
-        default=3.0,
-        help=(
-            "Model advantage parameter used to parameterize the performance of the "
-            "synthetic Beta models (use either this or error rates)."
-        ),
-    )
-    parser.add_argument(
-        "--pos_error_rate",
-        type=float,
-        required=False,
-        help=(
-            "Error rate for positive samples if using a synthetic model "
-            "(use either this and neg_error_rate or model_adv)"
-        ),
-    )
-    parser.add_argument(
-        "--neg_error_rate",
-        type=float,
-        required=False,
-        help=(
-            "Error rate for negative samples if using a synthetic model "
-            "(use either this and pos_error_rate or model_adv)"
-        ),
-    )
-    parser.add_argument(
-        "--synthetic_samples",
-        type=int,
-        default=10000,
-        help="Number of samples to generate if using a synthetic dataset",
-    )
     parser.add_argument(
         "--eval_every",
         type=int,
@@ -143,18 +112,10 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # only used if using a synthetic model or dataset
-    synthetic_args = {
-        "model_adv": args.model_adv,
-        "synthetic_samples": args.synthetic_samples,
-        "positive_error_rate": args.pos_error_rate,
-        "negative_error_rate": args.neg_error_rate,
-    }
-
     output_dir = create_dir(
         save_dir=args.save_dir,
         data_config_path=args.data_config,
-        acq_strat="random",
+        acq_strat=args.acq_strat,
         class_balance=args.class_balance,
     )
 
@@ -167,7 +128,7 @@ if __name__ == "__main__":
             save_dir=args.save_dir,
             class_balance=args.class_balance,
             seed=args.seed,
-            synthetic_args=synthetic_args,
+            synthetic_args=None,
             preds_exist=True,
         )
     else:
@@ -177,18 +138,19 @@ if __name__ == "__main__":
             save_dir=args.save_dir,
             class_balance=args.class_balance,
             seed=args.seed,
-            synthetic_args=synthetic_args,
+            synthetic_args=None,
         )
         print("saving predictions..")
         np.save(output_dir + "predictions.npy", preds)
 
     main(
-        output_dir,
-        args.n_repeats,
-        test_dataset,
-        preds,
-        args.seed,
-        args.max_labels,
+        output_dir=output_dir,
+        n_repeats=args.n_repeats,
+        dataset=test_dataset,
+        acq_strat=args.acq_strat,
+        predictions=preds,
+        init_seed=args.seed,
+        max_labels=args.max_labels,
         evaluate_steps=np.arange(
             args.min_labels, args.max_labels, args.eval_every
         ).tolist(),

@@ -1,11 +1,32 @@
-from typing import Any
-import numpy as np
-import random
 import os
+import random
+from typing import Any
+
+import numpy as np
 import torch
 import yaml
 
 from arc_tigers.constants import DATA_CONFIG_DIR, MODEL_CONFIG_DIR
+
+
+def config_path_to_config_name(config_path: str) -> str:
+    return config_path.split("/")[-1].rstrip(".yaml")
+
+
+def create_dir(
+    save_dir: str, data_config_path: str, class_balance: float, acq_strat: str
+) -> str:
+    data_config = config_path_to_config_name(data_config_path)
+    eval_dir = f"{save_dir}/eval_outputs/{data_config}/"
+    if class_balance != 1.0:
+        output_dir = (
+            f"{eval_dir}/imbalanced_{acq_strat}_sampling_outputs_"
+            f"{str(class_balance).replace('.', '')}/"
+        )
+    else:
+        output_dir = f"{eval_dir}/{acq_strat}_sampling_outputs/"
+    os.makedirs(output_dir, exist_ok=True)
+    return output_dir
 
 
 def seed_everything(seed: int) -> None:

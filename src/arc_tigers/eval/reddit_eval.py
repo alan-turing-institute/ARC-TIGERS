@@ -1,8 +1,11 @@
 import json
 import os
+from glob import glob
 
+import joblib
 import numpy as np
 from datasets import Dataset
+from sklearn.pipeline import Pipeline
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -18,24 +21,54 @@ from arc_tigers.model.beta_model import BetaModel
 from arc_tigers.utils import load_yaml
 
 
-def get_preds(
+def get_preds(*args, **kwargs):
+    """
+    Wrapper function to get predictions from either a transformer model or a tfidf
+    model.
+    """
+    if len(glob(f"{kwargs['save_dir']}/*.joblib")) > 0:
+        return get_tfidf_preds(*args, **kwargs)
+    return get_transformers_preds(*args, **kwargs)
+
+
+def get_transformers_preds(
     data_config_path: str,
     model_config_path: str,
     save_dir: str,
     class_balance: float,
     seed: int,
     synthetic_args: dict,
+    preds_exist: bool = False,
 ) -> tuple[np.ndarray, Dataset]:
+    """
+    Get the predictions from a model using the transformers library. This function is
+    also used when synthetic data is used. Model weights are loaded from the save_dir
+    data and model config data are loaded from the data_config_path and
+    model_config_path. The seed should be set to the same value as used in the training.
+
+    Args:
+        data_config_path: Data config path
+        model_config_path: Model config path
+        save_dir: Model weights directory
+        class_balance: The class balance to use in evaluation.
+        seed: The seed to use for the random number generator, this should be the same
+            as the seed used in training.
+        synthetic_args: arguments to use for synthetic data generation if being used.
+            Defaults to None.
+
+    Returns:
+        tuple `preds` the predictions from the model on the test dataset. `test_dataset`
+        the test dataset used for predictions.
+    """
     if model_config_path == "beta_model":
         # Arbitrary tokenizer only loaded for compatibility with other functions, not
-        # used by the ssynthetic Beta model.
+        # used by the synthetic Beta model.
         tokenizer = AutoTokenizer.from_pretrained("roberta-base")
         use_cpu = True
     else:
-        print(f"Loading model and tokenizer from {save_dir}...")
-        model_config = load_yaml(model_config_path)
         # calculate predictions for whole dataset
         print(f"Loading model and tokenizer from {save_dir}...")
+        model_config = load_yaml(model_config_path)
         tokenizer = AutoTokenizer.from_pretrained(model_config["model_id"])
         model = AutoModelForSequenceClassification.from_pretrained(save_dir)
         use_cpu = False
@@ -66,9 +99,10 @@ def get_preds(
         _, _, test_dataset, meta_data = get_reddit_data(
             **data_config["data_args"],
             tokenizer=tokenizer,
-            random_seed=seed,
             class_balance=class_balance,
         )
+    if preds_exist:
+        return _, test_dataset
 
     # Data collator
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
@@ -116,6 +150,56 @@ def get_preds(
         data_collator=data_collator,
         compute_metrics=compute_metrics,
     )
-
     preds = trainer.predict(test_dataset, metric_key_prefix="").predictions
+
+    return preds, test_dataset
+
+
+def get_tfidf_preds(
+    data_config_path: str,
+    save_dir: str,
+    class_balance: float,
+    **kwargs,
+) -> tuple[np.ndarray, Dataset]:
+    """
+    Function to get the predictions from a tfidf model. The model is loaded from the
+    save_dir and the data is loaded from the data_config_path. The seed should be set
+    to the same value as used in the training.
+
+    Args:
+        data_config_path: data config path
+        save_dir: directory where the model is saved
+        class_balance: The class balance to use in evaluation.
+        seed: The seed to use for the random number generator, this should be the same
+            as the seed used in training.
+
+    Returns:
+        tuple `preds` the predictions from the model on the test dataset. `test_dataset`
+        the test dataset used for predictions.
+    """
+    data_config = load_yaml(data_config_path)
+
+    print(f"Loading model and tokenizer from {save_dir} ...")
+
+    tokenizer = None
+    # Load the model from the joblib file
+    model_path = glob(f"{save_dir}/*.joblib")[0]
+    model: Pipeline = joblib.load(model_path)
+
+    # Data collator
+    if class_balance != 1.0:
+        data_config["data_args"]["balanced"] = False
+
+    _, _, test_dataset, meta_data = get_reddit_data(
+        **data_config["data_args"],
+        tokenizer=tokenizer,
+        class_balance=class_balance,
+    )
+    # Save meta_data to the save_dir
+    meta_data_path = os.path.join(save_dir, "data_stats.json")
+    with open(meta_data_path, "w") as meta_file:
+        json.dump(meta_data, meta_file, indent=2)
+
+    preds = model.predict(test_dataset["text"])
+
     return preds, test_dataset

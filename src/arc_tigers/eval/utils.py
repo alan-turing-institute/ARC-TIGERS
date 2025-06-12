@@ -3,7 +3,11 @@ from typing import Any
 
 import numpy as np
 import torch
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    precision_recall_fscore_support,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -127,3 +131,22 @@ def get_stats(preds, labels):
         "softmax": softmax(logits).tolist(),
         "entropy": entropy_values.tolist(),
     }
+
+
+def tfidf_evaluation(eval_labels, eval_predictions):
+    eval_results = classification_report(
+        eval_labels, eval_predictions, output_dict=True
+    )
+    output_dict = {}
+    output_dict["eval_accuracy"] = eval_results["accuracy"]
+    n_classes = len(eval_results) - 3
+    output_dict["eval_f1"] = [
+        eval_results[str(i)]["f1-score"] for i in range(n_classes)
+    ]
+    output_dict["eval_precision"] = [
+        eval_results[str(i)]["precision"] for i in range(n_classes)
+    ]
+    output_dict["eval_recall"] = [
+        eval_results[str(i)]["recall"] for i in range(n_classes)
+    ]
+    return output_dict

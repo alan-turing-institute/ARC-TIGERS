@@ -1,8 +1,9 @@
 import argparse
+import copy
 import json
 import logging
 import os
-import copy
+
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -115,4 +116,5 @@ if __name__ == "__main__":
         default=None,
     )
     args = parser.parse_args()
+    main(args)
     main(args)

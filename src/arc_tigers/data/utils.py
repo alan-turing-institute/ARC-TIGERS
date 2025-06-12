@@ -1,16 +1,18 @@
 from collections import Counter
+from collections.abc import Generator
 from copy import deepcopy
 from typing import Any, Generator
 import pyarrow.csv as pv
 import pyarrow as pa
 
 import numpy as np
-from numpy.random import BitGenerator
 from datasets import Dataset, concatenate_datasets
+from numpy.random import BitGenerator
+from tqdm import tqdm
 from transformers import PreTrainedTokenizer
 
 from arc_tigers.eval.utils import evaluate
-from arc_tigers.sample.random import RandomSampler
+from arc_tigers.sample.acquisition import AcquisitionFunction, BiasCorrector
 
 
 def load_arrow_table(shard_files):
@@ -21,7 +23,6 @@ def load_arrow_table(shard_files):
 
 def imbalance_binary_dataset(
     dataset: Dataset,
-    seed: int,
     class_balance: float,
     generator: BitGenerator,
 ) -> Dataset:
@@ -49,13 +50,13 @@ def imbalance_binary_dataset(
         class_balance = -1.0 * class_balance
         n_class_1 = len(class_1_indices)
         n_class_0 = int(n_class_1 * class_balance)
-        if n_class_0 <= len(class_0_indices):
+        if n_class_0 >= len(class_0_indices):
             err_msg = "class balance is too large for class 0"
             raise ValueError(err_msg)
     else:
         n_class_0 = len(class_0_indices)
         n_class_1 = int(n_class_0 * class_balance)
-        if n_class_1 <= len(class_1_indices):
+        if n_class_1 >= len(class_1_indices):
             err_msg = "class balance is too large for class 0"
             raise ValueError(err_msg)
 
@@ -161,10 +162,11 @@ def preprocess_function(
 
 def sample_dataset_metrics(
     dataset: Dataset,
-    preds,
-    seed: int,
+    preds: np.ndarray,
+    sampler: AcquisitionFunction,
     max_labels: int | None = None,
     evaluate_steps: list[int] | None = None,
+    bias_corrector: BiasCorrector | None = None,
 ) -> list[dict[str, float]]:
     """
     Simulate iteratively random sampling the whole dataset, re-computing metrics
@@ -186,15 +188,18 @@ def sample_dataset_metrics(
     if evaluate_steps is None:
         evaluate_steps = list(range(1, max_labels + 1))
     evaluate_steps = deepcopy(evaluate_steps)
-    sampler = RandomSampler(dataset, seed)
     metrics = []
     next_eval_step = evaluate_steps.pop(0)
-    for n in range(max_labels):
-        sampler.sample()
+    for n in tqdm(range(max_labels)):
+        q = sampler.sample()
         if (n + 1) == next_eval_step:
             metric = evaluate(
                 dataset[sampler.labelled_idx], preds[sampler.labelled_idx]
             )
+            if bias_corrector:
+                metric = bias_corrector.apply_weighting_to_dict(
+                    q=q, m=n, metrics=metric
+                )
             metric["n"] = n + 1
             metrics.append(metric)
             if evaluate_steps:
