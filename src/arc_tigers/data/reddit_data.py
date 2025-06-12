@@ -1,7 +1,8 @@
 from typing import Any
-
+import glob
+import pyarrow as pa
 import numpy as np
-from datasets import Dataset, load_dataset
+from datasets import Dataset, load_dataset, DatasetDict
 from transformers import PreTrainedTokenizer
 
 from arc_tigers.constants import DATA_DIR
@@ -10,6 +11,7 @@ from arc_tigers.data.utils import (
     get_target_mapping,
     imbalance_binary_dataset,
     preprocess_function,
+    load_arrow_table,
 )
 from arc_tigers.training.utils import get_label_weights
 
@@ -41,6 +43,30 @@ BINARY_COMBINATIONS = {
         "test": ["r/soccer", "r/FantasyPL"],
     },
 }
+
+
+def load_data(data_dir) -> DatasetDict:
+    # Check for shards
+    train_shards = sorted(glob.glob(f"{data_dir}/train_shard_*.csv"))
+    test_shards = sorted(glob.glob(f"{data_dir}/test_shard_*.csv"))
+
+    if train_shards and test_shards:
+        train_table = load_arrow_table(train_shards)
+        test_table = load_arrow_table(test_shards)
+        return DatasetDict(
+            {
+                "train": Dataset(pa.Table.from_batches(train_table.to_batches())),
+                "test": Dataset(pa.Table.from_batches(test_table.to_batches())),
+            }
+        )
+    else:
+        return load_dataset(
+            "csv",
+            data_files={
+                "train": f"{data_dir}/train.csv",
+                "test": f"{data_dir}/test.csv",
+            },
+        )
 
 
 def get_reddit_data(
@@ -83,11 +109,8 @@ def get_reddit_data(
 
     data_dir = f"{DATA_DIR}/reddit_dataset_12/{n_rows}_rows/splits/{target_config}/"
 
-    # load dataset
-    dataset: dict[str, Dataset] = load_dataset(
-        "csv",
-        data_files={"train": f"{data_dir}/train.csv", "eval": f"{data_dir}/test.csv"},
-    )
+    dataset = load_data(data_dir)
+
     meta_data = {}
 
     if setting == "multi-class":

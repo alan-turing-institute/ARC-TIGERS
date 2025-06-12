@@ -1,6 +1,6 @@
 import json
 import os
-
+import glob
 import pandas as pd
 from tqdm import tqdm
 
@@ -8,30 +8,29 @@ from arc_tigers.data.reddit_data import ONE_VS_ALL_COMBINATIONS
 from arc_tigers.data.utils import clean_row, flag_row
 
 
-def main(args):
+def process_data(data, target_categories, args, save_path, shard_id=None):
     """
-    Takes as an argument a json file containing reddit comments and posts, and generates
-      a dataset which uses the associated subreddit as a label. The dataset comprsises
-      of a train set, and a test set, which have related but different subreddits for
-      the purposes of evaluation. The target class in a given dataset is poorly
-      represented, with the ratio of target classes to non target classes being defined
-      by the imbalance ratio
+    Processes a list of reddit data rows and generates train and test splits
+    based on the provided target categories.
+
+    This function can be used for both single large JSON files and individual shards.
+    It separates rows into train and test sets according to the subreddit, applies
+    optional class imbalance, and saves the resulting splits as CSV files.
+
+    Args:
+        data (list): List of reddit data rows (dicts) to process.
+        target_categories (dict): Dictionary with 'train' and 'test' subreddit lists.
+        args (argparse.Namespace): Arguments including optional imbalance ratio.
+        save_path (str): Directory where output CSVs will be saved.
+        shard_id (int, optional): If processing a shard, the shard index (used in output
+          filenames). If None, outputs are named 'train.csv' and 'test.csv'.
     """
-
-    target_categories = ONE_VS_ALL_COMBINATIONS[args.target_config]
-    save_dir = "/".join(args.data_dir.split("/")[:-1])
-
-    with open(args.data_dir) as f:
-        data = json.load(f)
 
     train_data_targets = []
     test_data_targets = []
-
     non_targets = [[], []]
 
     for row_index, row in enumerate(tqdm(data)):
-        # flag the row if it is empty, deleted, removed, or too short
-        # and skip it
         if flag_row(row):
             continue
         if row["communityName"] in target_categories["train"]:
@@ -48,22 +47,18 @@ def main(args):
             n_targets = int(imbalance_ratio)
         else:
             n_targets = int(len(non_targets[0]) * imbalance_ratio)
-
         n_train_targets = n_targets
         n_test_targets = n_targets
     else:
-        # None will just use all values in array
         n_train_targets = len(train_data_targets)
         n_test_targets = len(test_data_targets)
 
     train_targets_df = pd.DataFrame.from_dict(
         train_data_targets[:n_train_targets]
     ).sort_values("len", ascending=False, inplace=False)
-
     test_targets_df = pd.DataFrame.from_dict(
         test_data_targets[:n_test_targets]
     ).sort_values("len", ascending=False, inplace=False)
-
     train_non_targets_df = pd.DataFrame.from_dict(non_targets[0]).sort_values(
         "len", ascending=False, inplace=False
     )
@@ -74,13 +69,43 @@ def main(args):
     train_data = pd.concat([train_targets_df, train_non_targets_df])
     test_data = pd.concat([test_targets_df, test_non_targets_df])
 
+    if shard_id is not None:
+        train_csv = f"{save_path}/train_shard_{shard_id}.csv"
+        test_csv = f"{save_path}/test_shard_{shard_id}.csv"
+    else:
+        train_csv = f"{save_path}/train.csv"
+        test_csv = f"{save_path}/test.csv"
+
+    train_data.to_csv(train_csv, index=False)
+    test_data.to_csv(test_csv, index=False)
+    print(
+        f"Shard {shard_id if shard_id is not None else ''}: Train data: {len(train_data)} | Test data: {len(test_data)}"
+    )
+    print(f"Saved: {train_csv}, {test_csv}")
+
+
+def main(args):
+    target_categories = ONE_VS_ALL_COMBINATIONS[args.target_config]
+    save_dir = (
+        args.data_dir
+        if os.path.isdir(args.data_dir)
+        else os.path.dirname(args.data_dir)
+    )
     save_path = f"{save_dir}/splits/{args.target_config}/"
     os.makedirs(save_path, exist_ok=True)
-    train_data.to_csv(f"{save_path}/train.csv", index=False)
-    test_data.to_csv(f"{save_path}/test.csv", index=False)
-    print(f"Train data: {len(train_data)} total | {n_train_targets} targets")
-    print(f"Test data: {len(test_data)} total | {n_test_targets} targets")
-    print(f"Train data saved to {save_path}")
+
+    if os.path.isdir(args.data_dir):
+        shard_files = sorted(
+            glob.glob(os.path.join(args.data_dir, "filtered_rows_shard_*.json"))
+        )
+        for i, shard_file in enumerate(shard_files):
+            with open(shard_file) as f:
+                data = json.load(f)
+            process_data(data, target_categories, args, save_path, shard_id=i)
+    else:
+        with open(args.data_dir) as f:
+            data = json.load(f)
+        process_data(data, target_categories, args, save_path)
 
 
 if __name__ == "__main__":
@@ -90,8 +115,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "data_dir",
         type=str,
-        default="data/reddit_dataset_12/15000000_rows/filtered_rows.json",
-        help="Path to the data used for generation",
+        default="data/reddit_dataset_12/10000000_rows/filtered_rows",
+        help="Path to the data file or directory containing shards",
     )
     parser.add_argument(
         "target_config",

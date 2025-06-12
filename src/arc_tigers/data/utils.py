@@ -1,6 +1,8 @@
 from collections import Counter
 from copy import deepcopy
 from typing import Any, Generator
+import pyarrow.csv as pv
+import pyarrow as pa
 
 import numpy as np
 from numpy.random import BitGenerator
@@ -9,6 +11,12 @@ from transformers import PreTrainedTokenizer
 
 from arc_tigers.eval.utils import evaluate
 from arc_tigers.sample.random import RandomSampler
+
+
+def load_arrow_table(shard_files):
+    # Read all shards as Arrow tables and concatenate
+    tables = [pv.read_csv(f) for f in shard_files]
+    return pa.concat_tables(tables)
 
 
 def imbalance_binary_dataset(
