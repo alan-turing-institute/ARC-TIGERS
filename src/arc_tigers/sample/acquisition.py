@@ -3,7 +3,7 @@ from collections import namedtuple
 import numpy as np
 from datasets import Dataset
 from scipy.spatial.distance import cdist
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import IsolationForest, RandomForestClassifier
 
 from arc_tigers.eval.utils import softmax
 from arc_tigers.sample.utils import get_distilbert_embeddings
@@ -424,3 +424,44 @@ class InformationGainSampler(AcquisitionFunction):
         sample = self.sample_pmf(info_gain)
         self.update_surrogate()
         return sample
+
+
+class AnomalySampler(AcquisitionFunction):
+    """
+    Acquisition function that selects samples based on anomaly scores using an isolation
+    forest in embedding space.
+
+    Args:
+        data (Dataset): The dataset to sample from.
+        eval_dir (str): Directory for evaluation outputs.
+        sampling_seed (int): Random seed for reproducibility.
+
+    Methods:
+        sample(): Selects the next sample to label based on anomaly score.
+    """
+
+    def __init__(self, data: Dataset, eval_dir: str, sampling_seed: int):
+        self.observed_idx: list[int] = []
+        self.remaining_idx: list[int] = np.arange(len(data)).tolist()
+        self.n_sampled = 0
+        self.rng = np.random.default_rng(seed=sampling_seed)
+        self.data = data
+        self.embeddings = get_distilbert_embeddings(data, eval_dir)
+
+    def sample(self):
+        if len(self.observed_idx) == 0:
+            # Uniform sampling if nothing is labelled yet
+            N = len(self.data)
+            pmf = np.ones(N, dtype=np.float64) / N
+        else:
+            # Fit anomaly detector on observed embeddings
+            observed = self.embeddings[np.array(self.observed_idx)]
+            remaining = self.embeddings[np.array(self.remaining_idx)]
+            iso = IsolationForest(random_state=self.rng.integers(1e9))
+            iso.fit(observed)
+            # Higher score = more normal, so invert for anomaly
+            anomaly_scores = -iso.score_samples(remaining)
+            # Convert to pmf (softmax or normalized positive scores)
+            anomaly_scores = anomaly_scores - anomaly_scores.min()  # make positive
+            pmf = anomaly_scores / anomaly_scores.sum()
+        return self.sample_pmf(pmf)
