@@ -3,9 +3,8 @@ import os
 import glob
 import pandas as pd
 from tqdm import tqdm
-
 from arc_tigers.data.reddit_data import ONE_VS_ALL_COMBINATIONS
-from arc_tigers.data.utils import clean_row, flag_row
+from arc_tigers.data.utils import clean_row, flag_row, is_valid_row
 
 
 def process_data(data, target_categories, args, save_path, shard_id=None):
@@ -53,16 +52,26 @@ def process_data(data, target_categories, args, save_path, shard_id=None):
         n_train_targets = len(train_data_targets)
         n_test_targets = len(test_data_targets)
 
-    train_targets_df = pd.DataFrame.from_dict(
-        train_data_targets[:n_train_targets]
-    ).sort_values("len", ascending=False, inplace=False)
-    test_targets_df = pd.DataFrame.from_dict(
-        test_data_targets[:n_test_targets]
-    ).sort_values("len", ascending=False, inplace=False)
-    train_non_targets_df = pd.DataFrame.from_dict(non_targets[0]).sort_values(
+    # Filter out invalid rows
+    train_targets_clean = [
+        r for r in train_data_targets[:n_train_targets] if is_valid_row(r)
+    ]
+    test_targets_clean = [
+        r for r in test_data_targets[:n_test_targets] if is_valid_row(r)
+    ]
+    train_non_targets_clean = [r for r in non_targets[0] if is_valid_row(r)]
+    test_non_targets_clean = [r for r in non_targets[1] if is_valid_row(r)]
+
+    train_targets_df = pd.DataFrame.from_dict(train_targets_clean).sort_values(
         "len", ascending=False, inplace=False
     )
-    test_non_targets_df = pd.DataFrame.from_dict(non_targets[1]).sort_values(
+    test_targets_df = pd.DataFrame.from_dict(test_targets_clean).sort_values(
+        "len", ascending=False, inplace=False
+    )
+    train_non_targets_df = pd.DataFrame.from_dict(train_non_targets_clean).sort_values(
+        "len", ascending=False, inplace=False
+    )
+    test_non_targets_df = pd.DataFrame.from_dict(test_non_targets_clean).sort_values(
         "len", ascending=False, inplace=False
     )
 

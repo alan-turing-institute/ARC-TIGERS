@@ -51,7 +51,12 @@ def load_data(data_dir) -> DatasetDict:
     test_shards = sorted(glob.glob(f"{data_dir}/test_shard_*.csv"))
 
     if train_shards and test_shards:
+        print(
+            f"Found {len(train_shards)} train shards and {len(test_shards)} test shards."
+        )
+        print("loading train shards...")
         train_table = load_arrow_table(train_shards)
+        print("loading test shards...")
         test_table = load_arrow_table(test_shards)
         return DatasetDict(
             {
