@@ -426,7 +426,7 @@ class InformationGainSampler(AcquisitionFunction):
         return sample
 
 
-class AnomalySampler(AcquisitionFunction):
+class IsolationForestSampler(AcquisitionFunction):
     """
     Acquisition function that selects samples based on anomaly scores using an isolation
     forest in embedding space.
@@ -461,7 +461,5 @@ class AnomalySampler(AcquisitionFunction):
             iso.fit(observed)
             # Higher score = more normal, so invert for anomaly
             anomaly_scores = -iso.score_samples(remaining)
-            # Convert to pmf (softmax or normalized positive scores)
-            anomaly_scores = anomaly_scores - anomaly_scores.min()  # make positive
-            pmf = anomaly_scores / anomaly_scores.sum()
+            pmf = softmax(anomaly_scores)
         return self.sample_pmf(pmf)

@@ -12,6 +12,7 @@ from arc_tigers.eval.utils import evaluate, get_stats
 from arc_tigers.sample.acquisition import (
     DistanceSampler,
     InformationGainSampler,
+    IsolationForestSampler,
     RFSampler,
 )
 from arc_tigers.utils import create_dir
@@ -34,6 +35,8 @@ def main(
         sampler_class = RFSampler
     elif acq_strat == "random_forest_ig":
         sampler_class = InformationGainSampler
+    elif acq_strat == "iForest":
+        sampler_class = IsolationForestSampler
 
     # full dataset stats
     metrics = evaluate(dataset, preds)
