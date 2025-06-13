@@ -1,0 +1,6 @@
+data_name: reddit_dataset_12
+data_args:
+  n_rows: 50000000
+  setting: multi-class
+  target_config: sport
+  balanced: True

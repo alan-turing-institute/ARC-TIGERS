@@ -4,6 +4,8 @@ from copy import deepcopy
 from typing import Any
 
 import numpy as np
+import pyarrow as pa
+import pyarrow.csv as pv
 from datasets import Dataset, concatenate_datasets
 from numpy.random import BitGenerator
 from tqdm import tqdm
@@ -11,6 +13,23 @@ from transformers import PreTrainedTokenizer
 
 from arc_tigers.eval.utils import evaluate
 from arc_tigers.sample.acquisition import AcquisitionFunction, BiasCorrector
+
+EXPECTED_KEYS = {"text", "label", "len"}
+
+
+def is_valid_row(row):
+    # Check the row is a dictionary and contains the expected keys
+    return isinstance(row, dict) and EXPECTED_KEYS.issubset(row.keys())
+
+
+def load_arrow_table(shard_files):
+    parse_options = pv.ParseOptions(newlines_in_values=True)
+    # Read all shards as Arrow tables and concatenate
+    tables = []
+    for table_index, f in enumerate(shard_files):
+        print(f"Loading shard {table_index + 1}/{len(shard_files)}: {f}")
+        tables.append(pv.read_csv(f, parse_options=parse_options))
+    return pa.concat_tables(tables)
 
 
 def imbalance_binary_dataset(
@@ -121,8 +140,9 @@ def clean_row(row: dict) -> dict:
     Returns:
         new_row: a new row with only the relevant fields
     """
+    clean_text = row["text"].replace("\n", " ")
     new_row = {}
-    new_row["text"] = row["text"]
+    new_row["text"] = clean_text
     new_row["label"] = row["communityName"]
     new_row["len"] = len(row["text"])
     return new_row
