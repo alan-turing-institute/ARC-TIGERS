@@ -64,6 +64,7 @@ def process_data(data, target_categories, args, save_path, shard_id=None):
     train_non_targets_clean = [r for r in non_targets[0] if is_valid_row(r)]
     test_non_targets_clean = [r for r in non_targets[1] if is_valid_row(r)]
 
+    # sorr the data by length to get the most informative samples first
     train_targets_df = pd.DataFrame.from_dict(train_targets_clean).sort_values(
         "len", ascending=False, inplace=False
     )
@@ -77,12 +78,15 @@ def process_data(data, target_categories, args, save_path, shard_id=None):
         "len", ascending=False, inplace=False
     )
 
+    # concatenate targets with non-targets
     train_data = pd.concat([train_targets_df, train_non_targets_df])
     test_data = pd.concat([test_targets_df, test_non_targets_df])
 
+    # if using sharding save data to corresponding shard id
     if shard_id is not None:
         train_csv = f"{save_path}/train_shard_{shard_id}.csv"
         test_csv = f"{save_path}/test_shard_{shard_id}.csv"
+    # otherwise save to train.csv and test.csv
     else:
         train_csv = f"{save_path}/train.csv"
         test_csv = f"{save_path}/test.csv"
@@ -106,6 +110,7 @@ def main(args):
     save_path = f"{save_dir}/splits/{args.target_config}/"
     os.makedirs(save_path, exist_ok=True)
 
+    # If the data_dir is a directory, process each shard
     if os.path.isdir(args.data_dir):
         shard_files = sorted(
             glob.glob(os.path.join(args.data_dir, "filtered_rows_shard_*.json"))
@@ -114,6 +119,7 @@ def main(args):
             with open(shard_file) as f:
                 data = json.load(f)
             process_data(data, target_categories, args, save_path, shard_id=i)
+    # If the data_dir is a file, process the single JSON file
     else:
         with open(args.data_dir) as f:
             data = json.load(f)
@@ -127,7 +133,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "data_dir",
         type=str,
-        default="data/reddit_dataset_12/10000000_rows/filtered_rows",
+        default="data/reddit_dataset_12/10000000_rows/",
         help="Path to the data file or directory containing shards",
     )
     parser.add_argument(

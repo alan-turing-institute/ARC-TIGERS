@@ -18,6 +18,7 @@ EXPECTED_KEYS = {"text", "label", "len"}
 
 
 def is_valid_row(row):
+    # Check the row is a dictionary and contains the expected keys
     return isinstance(row, dict) and EXPECTED_KEYS.issubset(row.keys())
 
 
