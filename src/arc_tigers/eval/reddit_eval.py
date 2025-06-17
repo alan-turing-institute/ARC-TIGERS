@@ -101,8 +101,23 @@ def get_transformers_preds(
             tokenizer=tokenizer,
             class_balance=class_balance,
         )
+
+    # get the training dataset for the surrogate model
+    model_exp_config = load_yaml(f"{save_dir}/experiment_config.json")
+    surrogate_data_config = load_yaml(model_exp_config["data_config_pth"])
+
+    surrogate_training_dataset, _, _, _ = get_reddit_data(
+        **surrogate_data_config["data_args"],
+        tokenizer=tokenizer,
+    )
+
+    data = {
+        "evaluation_dataset": test_dataset,
+        "surrogate_train_dataset": surrogate_training_dataset,
+    }
+
     if preds_exist:
-        return _, test_dataset
+        return _, data
 
     # Data collator
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
@@ -152,7 +167,7 @@ def get_transformers_preds(
     )
     preds = trainer.predict(test_dataset, metric_key_prefix="").predictions
 
-    return preds, test_dataset
+    return preds, data
 
 
 def get_tfidf_preds(
@@ -202,4 +217,18 @@ def get_tfidf_preds(
 
     preds = model.predict(test_dataset["text"])
 
-    return preds, test_dataset
+    # get the training dataset for the surrogate model
+    model_exp_config = load_yaml(f"{save_dir}/experiment_config.json")
+    surrogate_data_config = load_yaml(model_exp_config["data_config_path"])
+
+    surrogate_training_dataset, _, _, _ = get_reddit_data(
+        **surrogate_data_config["data_args"],
+        tokenizer=tokenizer,
+    )
+
+    data = {
+        "evaluation_dataset": test_dataset,
+        "surrogate_train_dataset": surrogate_training_dataset,
+    }
+
+    return preds, data

@@ -8,8 +8,32 @@ from sklearn.metrics import (
     classification_report,
     precision_recall_fscore_support,
 )
+from torch.nn.functional import cross_entropy
 
 logger = logging.getLogger(__name__)
+
+
+def compute_loss(
+    logits: np.ndarray,
+    labels: np.ndarray,
+) -> float:
+    """
+    Compute the cross-entropy loss between logits and labels.
+
+    Args:
+        logits: logits from the model, shape (n_samples, n_classes)
+        labels: labels for the dataset, shape (n_samples,)
+
+    Returns:
+        loss: The computed cross-entropy loss.
+    """
+    # compute cross-entropy loss
+    loss = cross_entropy(
+        torch.tensor(logits, dtype=torch.float32),
+        torch.tensor(labels),
+        reduction="mean",
+    )
+    return loss.item()
 
 
 def evaluate(dataset, preds) -> dict[str, Any]:
@@ -27,6 +51,11 @@ def evaluate(dataset, preds) -> dict[str, Any]:
     # Placeholder for actual metric computation
     eval_pred = (preds, dataset["label"])
     metrics = compute_metrics(eval_pred)
+    loss = compute_loss(
+        logits=preds,
+        labels=dataset["label"],
+    )
+    metrics["loss"] = loss
     metric_names = list(metrics.keys())
     for key in metric_names:
         if isinstance(metrics[key], list):

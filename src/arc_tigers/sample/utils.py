@@ -19,9 +19,14 @@ class RedditTextDataset(Dataset):
         return self.texts[idx], self.labels[idx]
 
 
-def get_distilbert_embeddings(dataset, eval_dir):
-    if os.path.isfile(eval_dir + "distilbert_embeddings.npy"):
-        return np.load(eval_dir + "distilbert_embeddings.npy")
+def get_distilbert_embeddings(
+    dataset, eval_dir, embedding_savename="distilbert_embeddings"
+):
+    if os.path.isfile(eval_dir + f"{embedding_savename}.npy"):
+        print(f"{embedding_savename}.npy Found in {eval_dir}")
+        return np.load(eval_dir + f"{embedding_savename}.npy")
+
+    print(f"{embedding_savename}.npy not found in {eval_dir}. Generating embeddings...")
     train_texts = dataset["text"]
     train_labels = dataset["label"]
 
@@ -39,6 +44,6 @@ def get_distilbert_embeddings(dataset, eval_dir):
         all_labels.append(labels)
 
     embeddings = torch.vstack(all_embeddings).detach().cpu().numpy()
-    np.save(eval_dir + "distilbert_embeddings.npy", embeddings)
+    np.save(eval_dir + f"{embedding_savename}.npy", embeddings)
 
     return embeddings

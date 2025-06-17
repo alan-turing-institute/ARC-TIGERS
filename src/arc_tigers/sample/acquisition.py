@@ -1,5 +1,7 @@
+import os
 from collections import namedtuple
 
+import joblib
 import numpy as np
 from datasets import Dataset
 from scipy.spatial.distance import cdist
@@ -99,6 +101,7 @@ class AcquisitionFunction:
         self.remaining_idx: list[int] = []
         self.observed_idx: list[int] = []
         self.rng: np.random.BitGenerator = None
+        self.name: str = "AcquisitionFunction"
 
     @property
     def labelled_idx(self) -> list[int]:
@@ -159,7 +162,7 @@ class DistanceSampler(AcquisitionFunction):
         sample(): Selects the next sample to label based on distance.
     """
 
-    def __init__(self, data: Dataset, sampling_seed: int, eval_dir: str):
+    def __init__(self, data: dict[str, Dataset], sampling_seed: int, eval_dir: str):
         """Samples a dataset based on distance between observed and unobserved
         embeddings.
 
@@ -176,9 +179,10 @@ class DistanceSampler(AcquisitionFunction):
         self.n_sampled = 0
         self.rng = np.random.default_rng(seed=sampling_seed)
 
-        self.data = data
+        self.data = data["evaluation_dataset"]
         # Get embeddings for whole dataset
         self.embeddings = get_distilbert_embeddings(data, eval_dir)
+        self.name = "distance"
 
     def sample(self) -> int:
         """
@@ -241,7 +245,7 @@ class RFSampler(AcquisitionFunction):
         sample(): Selects the next sample to label based on expected loss.
     """
 
-    def __init__(self, data: Dataset, eval_dir: str, sampling_seed: int):
+    def __init__(self, data: dict[str, Dataset], eval_dir: str, sampling_seed: int):
         """Samples a dataset based on distance between model loss and surrogate loss,
         where the surrogate is a Random Forest classifier.
 
@@ -258,38 +262,63 @@ class RFSampler(AcquisitionFunction):
         self.n_sampled = 0
         self.model_preds = np.array([])
         self.surrogate_preds = np.array([])
-        self.data = data
+        self.eval_data = data["evaluation_dataset"]
+        self.surrogate_train_data = data["surrogate_train_dataset"]
+        self.eval_dir = eval_dir
+        self.surrogate_model = RandomForestClassifier(
+            random_state=self.rng.integers(1e9), n_estimators=100, n_jobs=-1
+        )
+
         # Get embeddings for use with RF classifier
         self.embeddings = get_distilbert_embeddings(data, eval_dir)
         self.rng = np.random.default_rng(seed=sampling_seed)
 
         # initialise surrogate predictions
-        self.num_classes = len(np.unique(self.data["label"]))
+        self.num_classes = len(np.unique(self.eval_data["label"]))
         self.surrogate_preds = np.full(
-            (len(self.data), self.num_classes), 1.0 / self.num_classes
+            (len(self.eval_data), self.num_classes), 1.0 / self.num_classes
         )
 
         # Placeholder for model predictions (should be set externally)
         self.model_preds = np.zeros_like(self.surrogate_preds)
+        self.name = "random_forest_acc"
 
     def set_model_preds(self, preds: np.ndarray):
         """Set model predictions externally (shape: [n_samples, n_classes])."""
         self.model_preds = softmax(preds)
+
+    def surrogate_pretrain(self):
+        X_train = get_distilbert_embeddings(
+            self.surrogate_train_data,
+            self.eval_dir,
+            embedding_savename="surrogate_embeddings",
+        )
+        y_train = np.array(self.surrogate_train_data["label"])
+        surrogate_path = os.path.join(self.eval_dir, "pretrained_surrogate.joblib")
+        if os.path.exists(surrogate_path):
+            print(f"Loading pre-trained surrogate model from {surrogate_path} ...")
+            self.surrogate_model = joblib.load(surrogate_path)
+        else:
+            print(f"Pre-training surrogate model and saving to {surrogate_path} ...")
+            self.surrogate_model = self.surrogate_model.fit(X_train, y_train)
+            joblib.dump(self.surrogate_model, surrogate_path)
 
     def update_surrogate(self):
         if len(self.observed_idx) == 0:
             self.surrogate_preds = np.zeros_like(self.surrogate_preds)
             return
         X_train = self.embeddings[np.array(self.observed_idx)]
-        y_train = np.array(self.data["label"])[np.array(self.observed_idx)]
-        self.rf_classifier = RandomForestClassifier(
+        y_train = np.array(self.eval_data["label"])[np.array(self.observed_idx)]
+        self.surrogate_model = RandomForestClassifier(
             random_state=self.rng.integers(1e9), n_estimators=100, n_jobs=-1
         ).fit(X_train, y_train)
         # Get surrogate predictions for all samples
-        intermediate_surrogate_preds = self.rf_classifier.predict_proba(self.embeddings)
-        classes_ = self.rf_classifier.classes_
+        intermediate_surrogate_preds = self.surrogate_model.predict_proba(
+            self.embeddings
+        )
+        classes_ = self.surrogate_model.classes_
         # Fill a full array with zeros for all classes
-        full_proba = np.zeros((len(self.data), self.num_classes))
+        full_proba = np.zeros((len(self.eval_data), self.num_classes))
         # fill the full array with surrogate predictions
         # for each class in the surrogate predictions
         for i, c in enumerate(classes_):
@@ -363,38 +392,62 @@ class InformationGainSampler(AcquisitionFunction):
         self.remaining_idx: list[int] = np.arange(len(data)).tolist()
         self.n_sampled = 0
         self.rng = np.random.default_rng(seed=sampling_seed)
-        self.data = data
+        self.eval_data = data["evaluation_dataset"]
+        self.surrogate_train_data = data["surrogate_train_dataset"]
+        self.eval_dir = eval_dir
+        self.surrogate_model = RandomForestClassifier(
+            random_state=self.rng.integers(1e9), n_estimators=100, n_jobs=-1
+        )
 
         # Get embeddings for use with surrogate classifier
         self.embeddings = get_distilbert_embeddings(data, eval_dir)
 
         # initialise surrogate predictions
-        self.num_classes = len(np.unique(self.data["label"]))
+        self.num_classes = len(np.unique(self.eval_data["label"]))
         self.surrogate_preds = np.full(
-            (len(self.data), self.num_classes), 1.0 / self.num_classes
+            (len(self.eval_data), self.num_classes), 1.0 / self.num_classes
         )
 
         # Placeholder for model predictions (should be set externally)
         self.model_preds = np.zeros_like(self.surrogate_preds)
+        self.name = "random_forest_ig"
 
     def set_model_preds(self, preds: np.ndarray):
         """Set model predictions externally (shape: [n_samples, n_classes])."""
         self.model_preds = softmax(preds)
+
+    def surrogate_pretrain(self):
+        X_train = get_distilbert_embeddings(
+            self.surrogate_train_data,
+            self.eval_dir,
+            embedding_savename="surrogate_embeddings",
+        )
+        y_train = np.array(self.surrogate_train_data["label"])
+        surrogate_path = os.path.join(self.eval_dir, "pretrained_surrogate.joblib")
+        if os.path.exists(surrogate_path):
+            print(f"Loading pre-trained surrogate model from {surrogate_path} ...")
+            self.surrogate_model = joblib.load(surrogate_path)
+        else:
+            print(f"Pre-training surrogate model and saving to {surrogate_path} ...")
+            self.surrogate_model = self.surrogate_model.fit(X_train, y_train)
+            joblib.dump(self.surrogate_model, surrogate_path)
 
     def update_surrogate(self):
         if len(self.observed_idx) == 0:
             self.surrogate_preds = np.zeros_like(self.surrogate_preds)
             return
         X_train = self.embeddings[np.array(self.observed_idx)]
-        y_train = np.array(self.data["label"])[np.array(self.observed_idx)]
-        self.rf_classifier = RandomForestClassifier(
+        y_train = np.array(self.eval_data["label"])[np.array(self.observed_idx)]
+        self.surrogate_model = RandomForestClassifier(
             random_state=self.rng.integers(1e9), n_estimators=100, n_jobs=-1
         ).fit(X_train, y_train)
         # Get surrogate predictions for all samples
-        intermediate_surrogate_preds = self.rf_classifier.predict_proba(self.embeddings)
-        classes_ = self.rf_classifier.classes_
+        intermediate_surrogate_preds = self.surrogate_model.predict_proba(
+            self.embeddings
+        )
+        classes_ = self.surrogate_model.classes_
         # Fill a full array with zeros for all classes
-        full_proba = np.zeros((len(self.data), self.num_classes))
+        full_proba = np.zeros((len(self.eval_data), self.num_classes))
         # fill the full array with surrogate predictions
         # for each class in the surrogate predictions
         for i, c in enumerate(classes_):
