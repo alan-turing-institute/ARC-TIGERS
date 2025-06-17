@@ -10,12 +10,12 @@ from tqdm import tqdm
 
 from arc_tigers.data.utils import sample_dataset_metrics
 from arc_tigers.eval.reddit_eval import get_preds
-from arc_tigers.eval.utils import evaluate, get_stats
+from arc_tigers.eval.utils import BiasCorrector, evaluate, get_stats
 from arc_tigers.sample.acquisition import (
+    AccSampler,
     AcquisitionFunction,
     DistanceSampler,
     InformationGainSampler,
-    RFSampler,
 )
 from arc_tigers.utils import create_dir
 
@@ -31,15 +31,16 @@ def main(
     evaluate_steps,
 ):
     evaluation_dataset = data_dict["evaluation_dataset"]
-    surrogate_train_dataset = data_dict["surrogate_train_dataset"]
 
     rng = np.random.default_rng(init_seed)
     if acq_strat == "distance":
         sampler_class = DistanceSampler
     elif acq_strat == "random_forest_acc":
-        sampler_class = RFSampler
+        sampler_class = AccSampler
+        bias_correction = True
     elif acq_strat == "random_forest_ig":
         sampler_class = InformationGainSampler
+        bias_correction = True
     else:
         # raise error if acq_strat is not one of the available strategies
         # uses the __str__ method of the sampler classes to get the available strategies
@@ -50,7 +51,7 @@ def main(
                 strat.name
                 for strat in cast(
                     Iterable[AcquisitionFunction],
-                    [DistanceSampler, RFSampler, InformationGainSampler],
+                    [DistanceSampler, AccSampler, InformationGainSampler],
                 )
             ]
         )
@@ -68,12 +69,12 @@ def main(
     for _ in tqdm(range(n_repeats)):
         seed = rng.integers(1, 2**32 - 1)  # Generate a random seed
         acq_func = sampler_class(
-            data=evaluation_dataset, sampling_seed=seed, eval_dir=output_dir
+            data=data_dict, sampling_seed=seed, eval_dir=output_dir
         )
         if hasattr(sampler_class, "set_model_preds"):
             acq_func.set_model_preds(predictions)
         if hasattr(sampler_class, "surrogate_pretrain"):
-            acq_func.surrogate_pretrain(surrogate_train_dataset)
+            acq_func.surrogate_pretrain()
 
         metrics = sample_dataset_metrics(
             evaluation_dataset,
@@ -81,6 +82,12 @@ def main(
             acq_func,
             max_labels=max_labels,
             evaluate_steps=evaluate_steps,
+            bias_corrector=BiasCorrector(
+                N=len(preds),
+                M=max_labels,
+            )
+            if bias_correction
+            else None,
         )
         pd.DataFrame(metrics).to_csv(f"{output_dir}/metrics_{seed}.csv", index=False)
 

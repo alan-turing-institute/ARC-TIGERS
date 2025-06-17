@@ -13,9 +13,80 @@ from torch.nn.functional import cross_entropy
 logger = logging.getLogger(__name__)
 
 
+class BiasCorrector:
+    """
+    Implements a bias correction weighting factor for active learning sampling.
+
+    The BiasCorrector computes a weighting factor (v_m) for a selected sample
+    during active learning, as described in the formula:
+
+        v_m = 1 + (N - M) / (N - m) * (1 / ((N - m + 1) * q_im) - 1)
+
+    where:
+        N    : Total number of samples in the dataset.
+        M    : Total number of samples to be labelled (target number).
+        m    : Number of samples labelled so far.
+        q_im : The probability (from the acquisition function's pmf) of selecting the
+        sample at step m.
+
+    This correction is used to adjust for the sampling bias introduced by non-uniform
+    acquisition functions, ensuring unbiased estimation of metrics or statistics
+    over the dataset.
+
+    Args:
+        N (int): Total number of samples in the dataset.
+        M (int): Total number of samples to be labelled.
+
+    Methods:
+        call(q_im, m): Computes the weighting factor for the selected sample.
+    """
+
+    def __init__(self, N, M):
+        self.N = N
+        self.M = M
+        self.v_values = []
+
+    def compute_weighting_factor(self, q_im, m):
+        """
+        Compute the weighting factor v_m for the selected sample.
+
+        Args:
+            q_im: The pmf value for the selected sample (float)
+            N: Total number of samples (int)
+            M: Total number of samples to be labelled (int)
+            m: Number of samples labelled so far (int)
+
+        Returns:
+            v_m: Weighting factor (float)
+        """
+        inner = (1 / ((self.N - m + 1) * q_im)) - 1
+        v = 1 + ((self.N - self.M) / (self.N - m)) * inner
+        self.v_values.append(v)
+        return v
+
+    def apply_weighting_to_dict(
+        self, q: float, m: int, metrics: dict[str, float]
+    ) -> dict[str, float]:
+        """
+        Apply the weighting factor to all values in the metrics dictionary.
+
+        Args:
+            q: The pmf value for the selected sample (float)
+            m: Number of samples labelled so far (int)
+            metrics: Dictionary of metric values to be weighted {metric_name: value}
+
+        Returns:
+            dict: Dictionary with weighted metric values.
+        """
+
+        weighting = self.compute_weighting_factor(q, m)
+        return {k: v * weighting for k, v in metrics.items()}
+
+
 def compute_loss(
     logits: np.ndarray,
     labels: np.ndarray,
+    bias_corrector: BiasCorrector | None = None,
 ) -> float:
     """
     Compute the cross-entropy loss between logits and labels.
@@ -28,15 +99,28 @@ def compute_loss(
         loss: The computed cross-entropy loss.
     """
     # compute cross-entropy loss
-    loss = cross_entropy(
-        torch.tensor(logits, dtype=torch.float32),
-        torch.tensor(labels),
-        reduction="mean",
-    )
+    if bias_corrector:
+        # apply bias correction to logits
+        loss = cross_entropy(
+            torch.tensor(logits, dtype=torch.float32),
+            torch.tensor(labels),
+            reduction="none",
+        )
+        loss = (loss * torch.tensor(bias_corrector.v_values, dtype=loss.dtype)).mean()
+    else:
+        loss = cross_entropy(
+            torch.tensor(logits, dtype=torch.float32),
+            torch.tensor(labels),
+            reduction="mean",
+        )
     return loss.item()
 
 
-def evaluate(dataset, preds) -> dict[str, Any]:
+def evaluate(
+    dataset,
+    preds,
+    bias_corrector: BiasCorrector | None = None,
+) -> dict[str, Any]:
     """
     Compute metrics for a given dataset with preds.
 
@@ -52,8 +136,7 @@ def evaluate(dataset, preds) -> dict[str, Any]:
     eval_pred = (preds, dataset["label"])
     metrics = compute_metrics(eval_pred)
     loss = compute_loss(
-        logits=preds,
-        labels=dataset["label"],
+        logits=preds, labels=dataset["label"], bias_corrector=bias_corrector
     )
     metrics["loss"] = loss
     metric_names = list(metrics.keys())

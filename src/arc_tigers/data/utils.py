@@ -9,8 +9,8 @@ from numpy.random import BitGenerator
 from tqdm import tqdm
 from transformers import PreTrainedTokenizer
 
-from arc_tigers.eval.utils import evaluate
-from arc_tigers.sample.acquisition import AcquisitionFunction, BiasCorrector
+from arc_tigers.eval.utils import BiasCorrector, evaluate
+from arc_tigers.sample.acquisition import AcquisitionFunction
 
 
 def imbalance_binary_dataset(
@@ -184,14 +184,14 @@ def sample_dataset_metrics(
     next_eval_step = evaluate_steps.pop(0)
     for n in tqdm(range(max_labels)):
         q = sampler.sample()
+        if bias_corrector is not None:
+            bias_corrector.compute_weighting_factor(q_im=q, m=n + 1)
         if (n + 1) == next_eval_step:
             metric = evaluate(
-                dataset[sampler.labelled_idx], preds[sampler.labelled_idx]
+                dataset[sampler.labelled_idx],
+                preds[sampler.labelled_idx],
+                bias_corrector=bias_corrector,
             )
-            if bias_corrector:
-                metric = bias_corrector.apply_weighting_to_dict(
-                    q=q, m=n, metrics=metric
-                )
             metric["n"] = n + 1
             metrics.append(metric)
             if evaluate_steps:
