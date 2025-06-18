@@ -12,7 +12,7 @@ def main(args):
     dataset_name = args.dataset_name
     max_rows = args.max_rows
     target_subreddits = args.target_subreddits
-    shard_size = args.shard_size
+    sharding = args.sharding
 
     # Load the dataset in streaming mode to avoid downloading the entire dataset
     unfiltered = load_dataset(dataset_name, streaming=True)["train"]
@@ -43,7 +43,7 @@ def main(args):
 
     data = []
     # If shard_size is None or 0, process without sharding
-    if not shard_size:
+    if not sharding:
         for i, example in enumerate(tqdm(ds, desc="Loading dataset", total=max_rows)):
             data.append(example)
             if i + 1 >= max_rows:
@@ -57,6 +57,7 @@ def main(args):
     # orhterwise save the filtered data to individual JSON files
     shard_idx = 0
     for i, example in enumerate(tqdm(ds, desc="Loading dataset", total=max_rows)):
+        shard_size = int(min(5000000, max_rows // 10))
         data.append(example)
         # if the current shard is full or we have reached the max_rows, save the shard
         if (i + 1) % shard_size == 0 or i + 1 == max_rows:
@@ -91,10 +92,10 @@ if __name__ == "__main__":
         help="Optional: Path to a JSON file containing a list of target subreddits.",
     )
     parser.add_argument(
-        "--shard_size",
+        "--sharding",
         type=int,
-        default=None,
-        help="Optional: Number of rows per shard.",
+        default=False,
+        help="Optional: Is data sharding going to be used.",
     )
     args = parser.parse_args()
 

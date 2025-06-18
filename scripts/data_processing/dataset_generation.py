@@ -120,10 +120,13 @@ def main(args):
                 data = json.load(f)
             process_data(data, target_categories, args, save_path, shard_id=i)
     # If the data_dir is a file, process the single JSON file
-    else:
+    elif args.data_dir.endswith(".json"):
         with open(args.data_dir) as f:
             data = json.load(f)
         process_data(data, target_categories, args, save_path)
+    else:
+        err_msg = f"Error: '{args.data_dir}' is not a directory or a JSON file."
+        raise ValueError(err_msg)
 
 
 if __name__ == "__main__":
