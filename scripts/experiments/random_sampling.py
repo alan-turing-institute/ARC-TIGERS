@@ -17,8 +17,8 @@ from arc_tigers.utils import create_dir
 def main(
     output_dir: str,
     n_repeats: int,
-    dataset: Dataset,
-    preds,
+    data_dict: dict[str, Dataset],
+    predictions,
     init_seed: int,
     max_labels: int | None = None,
     evaluate_steps: list[int] | None = None,
@@ -39,10 +39,10 @@ def main(
     """
 
     rng = np.random.default_rng(init_seed)
-
+    dataset = data_dict["evaluation_dataset"]
     # full dataset stats
-    metrics = evaluate(dataset, preds)
-    stats = get_stats(preds, dataset["label"])
+    metrics = evaluate(dataset, predictions)
+    stats = get_stats(predictions, dataset["label"])
 
     with open(f"{output_dir}/metrics_full.json", "w") as f:
         json.dump(metrics, f, indent=2)
@@ -50,13 +50,14 @@ def main(
         json.dump(stats, f, indent=2)
 
     # iteratively sample dataset and compute metrics, repeated n_repeats times
+    max_labels = int(max_labels) if max_labels < len(predictions) else len(predictions)
     for _ in tqdm(range(n_repeats)):
         # initialise the random sampler for this run
         seed = rng.integers(1, 2**32 - 1)  # Generate a random seed
         random_sampler = RandomSampler(dataset, seed)
         metrics = sample_dataset_metrics(
             dataset,
-            preds,
+            predictions,
             random_sampler,
             max_labels=max_labels,
             evaluate_steps=evaluate_steps,
@@ -181,7 +182,6 @@ if __name__ == "__main__":
         )
         print("saving predictions..")
         np.save(output_dir + "predictions.npy", preds)
-
     main(
         output_dir,
         args.n_repeats,

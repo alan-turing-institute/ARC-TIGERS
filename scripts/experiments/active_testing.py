@@ -31,6 +31,7 @@ def main(
     evaluate_steps,
 ):
     evaluation_dataset = data_dict["evaluation_dataset"]
+    bias_correction = False
 
     rng = np.random.default_rng(init_seed)
     if acq_strat == "distance":
@@ -66,6 +67,9 @@ def main(
     with open(f"{output_dir}/stats_full.json", "w") as f:
         json.dump(stats, f, indent=2)
     # iteratively sample dataset and compute metrics, repeated n_repeats times
+
+    # set max_labels to the minimum of max_labels and the number of predictions
+    max_labels = int(max_labels) if max_labels < len(predictions) else len(predictions)
     for _ in tqdm(range(n_repeats)):
         seed = rng.integers(1, 2**32 - 1)  # Generate a random seed
         acq_func = sampler_class(
