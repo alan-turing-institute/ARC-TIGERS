@@ -60,9 +60,9 @@ class BiasCorrector:
             v_m: Weighting factor (float)
         """
         inner = (1 / ((self.N - m + 1) * q_im)) - 1
-        v = 1 + ((self.N - self.M) / (self.N - m)) * inner
-        self.v_values.append(v)
-        return v
+        v_m = 1 + ((self.N - self.M) / (self.N - m)) * inner
+        self.v_values.append(v_m)
+        return v_m
 
     def apply_weighting_to_dict(
         self, q: float, m: int, metrics: dict[str, float]

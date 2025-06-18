@@ -107,12 +107,13 @@ class DistanceSampler(AcquisitionFunction):
             labelled_idx: Indices of the samples that have been labelled.
             unlabelled_idx: Indices of the samples that haven't been labelled.
         """
+        self.eval_data = data["evaluation_dataset"]
+
         self.observed_idx: list[int] = []
-        self.remaining_idx: list[int] = np.arange(len(data)).tolist()
+        self.remaining_idx: list[int] = np.arange(len(self.eval_data)).tolist()
         self.n_sampled = 0
         self.rng = np.random.default_rng(seed=sampling_seed)
 
-        self.data = data["evaluation_dataset"]
         # Get embeddings for whole dataset
         self.embeddings = get_distilbert_embeddings(data, eval_dir)
         self.name = "distance"
@@ -127,7 +128,7 @@ class DistanceSampler(AcquisitionFunction):
 
         # If no samples have been selected yet, sample from a uniform distribution
         if len(self.observed_idx) == 0:
-            N = len(self.data)
+            N = len(self.eval_data)
             # float16 causes an underflow error for large datasets
             pmf = np.ones(N, dtype=np.float64) / N
 

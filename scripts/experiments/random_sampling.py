@@ -8,7 +8,7 @@ from datasets import Dataset
 from tqdm import tqdm
 
 from arc_tigers.data.utils import sample_dataset_metrics
-from arc_tigers.eval.reddit_eval import get_preds
+from arc_tigers.eval.reddit_eval import get_preds, get_train_data_from_exp_dir
 from arc_tigers.eval.utils import evaluate, get_stats
 from arc_tigers.sample.random import RandomSampler
 from arc_tigers.utils import create_dir
@@ -162,7 +162,7 @@ if __name__ == "__main__":
     if os.path.isfile(output_dir + "predictions.npy"):
         print("loading saved predictions..")
         preds = np.load(output_dir + "predictions.npy")
-        _, test_dataset = get_preds(
+        _, eval_data = get_preds(
             data_config_path=args.data_config,
             model_config_path=args.model_config,
             save_dir=args.save_dir,
@@ -172,7 +172,7 @@ if __name__ == "__main__":
             preds_exist=True,
         )
     else:
-        preds, test_dataset = get_preds(
+        preds, eval_data = get_preds(
             data_config_path=args.data_config,
             model_config_path=args.model_config,
             save_dir=args.save_dir,
@@ -182,10 +182,16 @@ if __name__ == "__main__":
         )
         print("saving predictions..")
         np.save(output_dir + "predictions.npy", preds)
+
+    data_dict = {
+        "evaluation_dataset": eval_data,
+        "surrogate_train_dataset": get_train_data_from_exp_dir(exp_dir=args.save_dir),
+    }
+
     main(
         output_dir,
         args.n_repeats,
-        test_dataset,
+        data_dict,
         preds,
         args.seed,
         args.max_labels,
