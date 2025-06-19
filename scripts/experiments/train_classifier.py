@@ -23,9 +23,8 @@ logger = logging.getLogger(__name__)
 
 def main(args):
     exp_config = load_yaml(args.exp_config)
-    exp_config["train_kwargs"]["learning_rate"] = float(
-        exp_config["train_kwargs"]["learning_rate"]
-    )
+    learning_rate = float(exp_config["train_kwargs"].get("learning_rate", 1e-5))
+    exp_config["train_kwargs"]["learning_rate"] = learning_rate
     data_config, model_config = get_configs(exp_config)
     exp_name = args.exp_name if args.exp_name else exp_config["exp_name"]
     save_dir = (
@@ -116,5 +115,4 @@ if __name__ == "__main__":
         default=None,
     )
     args = parser.parse_args()
-    main(args)
     main(args)

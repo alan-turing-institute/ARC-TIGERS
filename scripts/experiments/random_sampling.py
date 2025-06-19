@@ -8,7 +8,7 @@ from datasets import Dataset
 from tqdm import tqdm
 
 from arc_tigers.data.utils import sample_dataset_metrics
-from arc_tigers.eval.reddit_eval import get_preds
+from arc_tigers.eval.reddit_eval import get_preds, get_train_data_from_exp_dir
 from arc_tigers.eval.utils import evaluate, get_stats
 from arc_tigers.sample.random import RandomSampler
 from arc_tigers.utils import create_dir
@@ -17,8 +17,8 @@ from arc_tigers.utils import create_dir
 def main(
     output_dir: str,
     n_repeats: int,
-    dataset: Dataset,
-    preds,
+    data_dict: dict[str, Dataset],
+    predictions,
     init_seed: int,
     max_labels: int | None = None,
     evaluate_steps: list[int] | None = None,
@@ -39,10 +39,10 @@ def main(
     """
 
     rng = np.random.default_rng(init_seed)
-
+    dataset = data_dict["evaluation_dataset"]
     # full dataset stats
-    metrics = evaluate(dataset, preds)
-    stats = get_stats(preds, dataset["label"])
+    metrics = evaluate(dataset, predictions)
+    stats = get_stats(predictions, dataset["label"])
 
     with open(f"{output_dir}/metrics_full.json", "w") as f:
         json.dump(metrics, f, indent=2)
@@ -50,13 +50,14 @@ def main(
         json.dump(stats, f, indent=2)
 
     # iteratively sample dataset and compute metrics, repeated n_repeats times
+    max_labels = int(max_labels) if max_labels < len(predictions) else len(predictions)
     for _ in tqdm(range(n_repeats)):
         # initialise the random sampler for this run
         seed = rng.integers(1, 2**32 - 1)  # Generate a random seed
         random_sampler = RandomSampler(dataset, seed)
         metrics = sample_dataset_metrics(
             dataset,
-            preds,
+            predictions,
             random_sampler,
             max_labels=max_labels,
             evaluate_steps=evaluate_steps,
@@ -161,7 +162,7 @@ if __name__ == "__main__":
     if os.path.isfile(output_dir + "predictions.npy"):
         print("loading saved predictions..")
         preds = np.load(output_dir + "predictions.npy")
-        _, test_dataset = get_preds(
+        _, eval_data = get_preds(
             data_config_path=args.data_config,
             model_config_path=args.model_config,
             save_dir=args.save_dir,
@@ -171,7 +172,7 @@ if __name__ == "__main__":
             preds_exist=True,
         )
     else:
-        preds, test_dataset = get_preds(
+        preds, eval_data = get_preds(
             data_config_path=args.data_config,
             model_config_path=args.model_config,
             save_dir=args.save_dir,
@@ -182,10 +183,15 @@ if __name__ == "__main__":
         print("saving predictions..")
         np.save(output_dir + "predictions.npy", preds)
 
+    data_dict = {
+        "evaluation_dataset": eval_data,
+        "surrogate_train_dataset": get_train_data_from_exp_dir(exp_dir=args.save_dir),
+    }
+
     main(
         output_dir,
         args.n_repeats,
-        test_dataset,
+        data_dict,
         preds,
         args.seed,
         args.max_labels,
