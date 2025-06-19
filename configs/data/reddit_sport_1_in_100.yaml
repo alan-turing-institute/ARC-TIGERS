@@ -4,4 +4,4 @@ data_args:
   setting: multi-class
   target_config: sport
   balanced: False
-  class_balance: 0.01
+  class_balance: 0.001
