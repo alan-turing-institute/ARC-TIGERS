@@ -116,7 +116,7 @@ class DistanceSampler(AcquisitionFunction):
         self.rng = np.random.default_rng(seed=sampling_seed)
 
         # Get embeddings for whole dataset
-        self.embeddings = get_distilbert_embeddings(data, eval_dir)
+        self.embeddings = get_distilbert_embeddings(self.eval_data, eval_dir)
         self.name = "distance"
 
     def sample(self) -> int:
@@ -204,7 +204,7 @@ class AccSampler(AcquisitionFunction):
         self.eval_dir = eval_dir
 
         # Get embeddings for use with RF classifier
-        self.embeddings = get_distilbert_embeddings(data, eval_dir)
+        self.embeddings = get_distilbert_embeddings(self.eval_data, eval_dir)
         self.rng = np.random.default_rng(seed=sampling_seed)
 
         # initialise surrogate predictions and model
@@ -348,7 +348,7 @@ class InformationGainSampler(AcquisitionFunction):
         self.eval_dir = eval_dir
 
         # Get embeddings for use with surrogate classifier
-        self.embeddings = get_distilbert_embeddings(data, eval_dir)
+        self.embeddings = get_distilbert_embeddings(self.eval_data, eval_dir)
 
         # initialise surrogate predictions and model
         self.num_classes = len(np.unique(self.eval_data["label"]))
@@ -461,13 +461,13 @@ class IsolationForestSampler(AcquisitionFunction):
         self.remaining_idx: list[int] = np.arange(len(data)).tolist()
         self.n_sampled = 0
         self.rng = np.random.default_rng(seed=sampling_seed)
-        self.data = data
-        self.embeddings = get_distilbert_embeddings(data, eval_dir)
+        self.eval_data = data["evaluation_dataset"]
+        self.embeddings = get_distilbert_embeddings(self.eval_data, eval_dir)
 
     def sample(self):
         if len(self.observed_idx) == 0:
             # Uniform sampling if nothing is labelled yet
-            N = len(self.data)
+            N = len(self.eval_data)
             pmf = np.ones(N, dtype=np.float64) / N
         else:
             # Fit anomaly detector on observed embeddings

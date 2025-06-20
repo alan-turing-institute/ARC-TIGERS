@@ -42,9 +42,9 @@ def main(
         bias_correction = True
     elif acq_strat == "random_forest_ig":
         sampler_class = InformationGainSampler
+        bias_correction = True
     elif acq_strat == "iForest":
         sampler_class = IsolationForestSampler
-        bias_correction = True
     else:
         # raise error if acq_strat is not one of the available strategies
         # uses the __str__ method of the sampler classes to get the available strategies
