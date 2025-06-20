@@ -10,6 +10,7 @@ import pandas as pd
 import torch
 from sklearn.metrics import (
     accuracy_score,
+    average_precision_score,
     classification_report,
     precision_recall_fscore_support,
 )
@@ -297,7 +298,7 @@ class BiasCorrector:
 def compute_loss(
     logits: np.ndarray,
     labels: np.ndarray,
-    bias_corrector: BiasCorrector | None = None,
+    sample_weight: np.ndarray | None = None,
 ) -> float:
     """
     Compute the cross-entropy loss between logits and labels.
@@ -310,14 +311,14 @@ def compute_loss(
         loss: The computed cross-entropy loss.
     """
     # compute cross-entropy loss
-    if bias_corrector:
+    if sample_weight:
         # apply bias correction to logits
         loss = cross_entropy(
             torch.tensor(logits, dtype=torch.float32),
             torch.tensor(labels),
             reduction="none",
         )
-        loss = (loss * torch.tensor(bias_corrector.v_values, dtype=loss.dtype)).mean()
+        loss = (loss * torch.tensor(sample_weight, dtype=loss.dtype)).mean()
     else:
         loss = cross_entropy(
             torch.tensor(logits, dtype=torch.float32),
@@ -345,11 +346,7 @@ def evaluate(
     """
     # Placeholder for actual metric computation
     eval_pred = (preds, dataset["label"])
-    metrics = compute_metrics(eval_pred)
-    loss = compute_loss(
-        logits=preds, labels=dataset["label"], bias_corrector=bias_corrector
-    )
-    metrics["loss"] = loss
+    metrics = compute_metrics(eval_pred, bias_corrector=bias_corrector)
     metric_names = list(metrics.keys())
     for key in metric_names:
         if isinstance(metrics[key], list):
@@ -367,6 +364,7 @@ def evaluate(
 # Define metrics
 def compute_metrics(
     eval_pred: tuple[np.ndarray, np.ndarray],
+    bias_corrector: BiasCorrector | None,
 ) -> dict[str, Any]:
     logits, labels = eval_pred
     if logits.ndim == 1:
@@ -378,12 +376,26 @@ def compute_metrics(
             predictions = (logits > 0.5).astype(int)
     else:
         predictions = np.argmax(logits, axis=-1)
+
+    sample_weight = bias_corrector.v_values if bias_corrector else None
     precision, recall, f1, _ = precision_recall_fscore_support(
         labels,
         predictions,
         labels=[0, 1],  # assumed binary labels (0 and 1) here
+        sample_weight=sample_weight,
     )
-    acc = accuracy_score(labels, predictions)
+    acc = accuracy_score(
+        labels,
+        predictions,
+        sample_weight=sample_weight,
+    )
+
+    loss = compute_loss(logits=logits, labels=labels, sample_weight=sample_weight)
+
+    ap = average_precision_score(
+        labels, logits, average="micro", sample_weight=sample_weight
+    )
+
     # no. of samples per class in the eval data (also assumed binary labels here,
     # minlength should be set to the number of classes to ensure
     # len(samples_per_class) == n_classes)
@@ -397,6 +409,8 @@ def compute_metrics(
         "f1": f1.tolist(),
         "precision": precision.tolist(),
         "recall": recall.tolist(),
+        "loss": loss,
+        "average_precision": ap,
         "n_class": n_class.tolist(),
     }
     logger.info("Eval metrics: %s", eval_scores)
