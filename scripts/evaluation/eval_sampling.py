@@ -67,6 +67,9 @@ def get_metric_stats(
         metric_stats[metric]["mean"] = np.mean(metric_repeats, axis=0)
         metric_stats[metric]["median"] = np.median(metric_repeats, axis=0)
         metric_stats[metric]["std"] = np.std(metric_repeats, axis=0)
+        metric_stats[metric]["mse"] = np.mean(
+            (metric_repeats - full_metrics[metric]) ** 2, axis=0
+        )
 
         for quantile in quantiles:
             metric_stats[metric][f"quantile_{quantile * 100}"] = np.quantile(
