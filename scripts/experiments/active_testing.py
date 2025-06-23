@@ -1,8 +1,6 @@
 import argparse
 import json
 import os
-from collections.abc import Iterable
-from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -13,10 +11,10 @@ from arc_tigers.eval.reddit_eval import get_preds, get_train_data_from_exp_dir
 from arc_tigers.eval.utils import BiasCorrector, evaluate, get_stats
 from arc_tigers.sample.acquisition import (
     AccSampler,
-    AcquisitionFunction,
     DistanceSampler,
     InformationGainSampler,
     IsolationForestSampler,
+    MinorityClassSampler,
 )
 from arc_tigers.utils import create_dir
 
@@ -46,19 +44,15 @@ def main(
     elif acq_strat == "iForest":
         sampler_class = IsolationForestSampler
         bias_correction = True
+    elif acq_strat == "minority_class":
+        sampler_class = MinorityClassSampler
+        bias_correction = True
     else:
         # raise error if acq_strat is not one of the available strategies
         # uses the __str__ method of the sampler classes to get the available strategies
-        err_msg = f"Unknown acquisition strategy: {acq_strat}. Available strategies: "
-        # get the names of the available acquisition strategies and join them
-        err_msg += ", ".join(
-            [
-                strat.name
-                for strat in cast(
-                    Iterable[AcquisitionFunction],
-                    [DistanceSampler, AccSampler, InformationGainSampler],
-                )
-            ]
+        err_msg = (
+            f"Unknown acquisition strategy: {acq_strat}. Available strategies: "
+            "distance, random_forest_acc, random_forest_ig, iForest, minority_class"
         )
         raise ValueError(err_msg)
 
