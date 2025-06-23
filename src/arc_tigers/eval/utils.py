@@ -10,7 +10,6 @@ import pandas as pd
 import torch
 from sklearn.metrics import (
     accuracy_score,
-    average_precision_score,
     classification_report,
     precision_recall_fscore_support,
 )
@@ -196,6 +195,9 @@ def get_metric_stats(
         metric_stats[metric]["median"] = np.median(metric_repeats, axis=0)
         metric_stats[metric]["std"] = np.std(metric_repeats, axis=0)
         metric_stats[metric]["mse"] = np.mean(
+            (metric_repeats - full_metrics[metric]) ** 2, axis=0
+        )
+        metric_stats[metric]["mse_std"] = np.std(
             (metric_repeats - full_metrics[metric]) ** 2, axis=0
         )
 
@@ -395,10 +397,6 @@ def compute_metrics(
 
     loss = compute_loss(logits=logits, labels=labels, sample_weight=sample_weight)
 
-    ap = average_precision_score(
-        labels, logits, average="micro", sample_weight=sample_weight
-    )
-
     # no. of samples per class in the eval data (also assumed binary labels here,
     # minlength should be set to the number of classes to ensure
     # len(samples_per_class) == n_classes)
@@ -413,7 +411,6 @@ def compute_metrics(
         "precision": precision.tolist(),
         "recall": recall.tolist(),
         "loss": loss,
-        "average_precision": ap,
         "n_class": n_class.tolist(),
     }
     logger.info("Eval metrics: %s", eval_scores)

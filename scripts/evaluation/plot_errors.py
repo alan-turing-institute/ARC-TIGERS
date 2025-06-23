@@ -43,9 +43,7 @@ if __name__ == "__main__":
     data_dir = args.data_dir
     imbalance_stats = {}
     for imb in args.imbalances:
-        imb_dir = (
-            f"{data_dir}/imbalanced_random_sampling_outputs_{str(imb).replace('.', '')}"
-        )
+        imb_dir = f"{data_dir}/{args.experiment_prefix}_{str(imb).replace('.', '')}"
         imbalance_stats[imb] = get_metric_stats(imb_dir, plot=False)
 
     for metric in imbalance_stats[args.imbalances[0]]:
