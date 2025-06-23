@@ -493,6 +493,7 @@ class MinorityClassSampler(AcquisitionFunction):
         data: dict[str, Dataset],
         minority_class: int,
         sampling_seed: int,
+        **kwargs,
     ):
         self.eval_data = data["evaluation_dataset"]
         self.observed_idx: list[int] = []
