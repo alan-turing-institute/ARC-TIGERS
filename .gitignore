@@ -161,4 +161,5 @@ Thumbs.db
 data/*
 outputs/
 tmp/
+.tmp/
 slurm_logs/

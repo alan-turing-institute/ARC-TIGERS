@@ -5,6 +5,7 @@ import joblib
 import numpy as np
 from datasets import Dataset
 from scipy.spatial.distance import cdist
+from sklearn.ensemble import IsolationForest
 from sklearn.linear_model import SGDClassifier
 
 from arc_tigers.eval.utils import softmax
@@ -115,7 +116,7 @@ class DistanceSampler(AcquisitionFunction):
         self.rng = np.random.default_rng(seed=sampling_seed)
 
         # Get embeddings for whole dataset
-        self.embeddings = get_distilbert_embeddings(data, eval_dir)
+        self.embeddings = get_distilbert_embeddings(self.eval_data, eval_dir)
         self.name = "distance"
 
     def sample(self) -> int:
@@ -203,7 +204,7 @@ class AccSampler(AcquisitionFunction):
         self.eval_dir = eval_dir
 
         # Get embeddings for use with RF classifier
-        self.embeddings = get_distilbert_embeddings(data, eval_dir)
+        self.embeddings = get_distilbert_embeddings(self.eval_data, eval_dir)
         self.rng = np.random.default_rng(seed=sampling_seed)
 
         # initialise surrogate predictions and model
@@ -248,16 +249,6 @@ class AccSampler(AcquisitionFunction):
             return
         X_acquired = self.embeddings[np.array(self.observed_idx)]
         y_acquired = np.array(self.eval_data["label"])[np.array(self.observed_idx)]
-
-        # # Concatenate surrogate_train_data points before model fitting
-        # X_training = get_distilbert_embeddings(
-        #     self.surrogate_train_data,
-        #     self.eval_dir,
-        #     embedding_savename="surrogate_embeddings",
-        # )
-        # y_training = np.array(self.surrogate_train_data["label"])
-        # X_data = np.concatenate([X_acquired, X_training], axis=0)
-        # y_data = np.concatenate([y_acquired, y_training], axis=0)
 
         self.surrogate_model = self.surrogate_model.partial_fit(X_acquired, y_acquired)
         # Get surrogate predictions for all samples
@@ -347,7 +338,7 @@ class InformationGainSampler(AcquisitionFunction):
         self.eval_dir = eval_dir
 
         # Get embeddings for use with surrogate classifier
-        self.embeddings = get_distilbert_embeddings(data, eval_dir)
+        self.embeddings = get_distilbert_embeddings(self.eval_data, eval_dir)
 
         # initialise surrogate predictions and model
         self.num_classes = len(np.unique(self.eval_data["label"]))
@@ -439,3 +430,98 @@ class InformationGainSampler(AcquisitionFunction):
         sample = self.sample_pmf(info_gain)
         self.update_surrogate()
         return sample
+
+
+class IsolationForestSampler(AcquisitionFunction):
+    """
+    Acquisition function that selects samples based on anomaly scores using an isolation
+    forest in embedding space.
+
+    Args:
+        data (dict[str, Dataset]): Dictionary containing datasets.
+        eval_dir (str): Directory for evaluation outputs.
+        sampling_seed (int): Random seed for reproducibility.
+
+    Methods:
+        sample(): Selects the next sample to label based on anomaly score.
+    """
+
+    def __init__(self, data: dict[str, Dataset], eval_dir: str, sampling_seed: int):
+        self.observed_idx: list[int] = []
+        self.remaining_idx: list[int] = np.arange(
+            len(data["evaluation_dataset"])
+        ).tolist()
+        self.n_sampled = 0
+        self.rng = np.random.default_rng(seed=sampling_seed)
+        self.eval_data = data["evaluation_dataset"]
+        self.embeddings = get_distilbert_embeddings(self.eval_data, eval_dir)
+        self.eval_dir = eval_dir
+        self.name = "isolation_forest_sampler"
+
+    def sample(self):
+        if len(self.observed_idx) == 0:
+            N = len(self.eval_data)
+            pmf = np.ones(N, dtype=np.float64) / N
+        else:
+            observed = self.embeddings[np.array(self.observed_idx)]
+            remaining = self.embeddings[np.array(self.remaining_idx)]
+            iso = IsolationForest(random_state=self.rng.integers(1e9))
+            iso.fit(observed)
+            # Higher score = more normal, so invert for anomaly
+            anomaly_scores = -iso.score_samples(remaining)
+            pmf = softmax(anomaly_scores)
+        return self.sample_pmf(pmf)
+
+
+class MinorityClassSampler(AcquisitionFunction):
+    """
+    Acquisition function that selects samples based on the predicted probability
+    of a specified minority class.
+
+    Args:
+        data (dict[str, Dataset]): Dictionary containing datasets.
+        minority_class (int): The class label considered as the minority class.
+        sampling_seed (int): Random seed for reproducibility.
+
+    Methods:
+        set_model_preds(preds): Sets the model's predicted probabilities.
+        sample(): Selects the next sample to label based on minority class probability.
+    """
+
+    def __init__(
+        self,
+        data: dict[str, Dataset],
+        minority_class: int,
+        sampling_seed: int,
+        **kwargs,
+    ):
+        self.eval_data = data["evaluation_dataset"]
+        self.observed_idx: list[int] = []
+        self.remaining_idx: list[int] = np.arange(len(self.eval_data)).tolist()
+        self.n_sampled = 0
+        self.rng = np.random.default_rng(seed=sampling_seed)
+        self.minority_class = minority_class
+        self.name = "minority_class_sampler"
+
+    def set_model_preds(self, preds: np.ndarray):
+        """
+        Set model predictions externally (shape: [n_samples, n_classes]).
+        """
+        self.model_preds = softmax(preds)
+
+    def sample(self):
+        if self.model_preds is None:
+            err_msg = "Model predictions must be set before sampling."
+            raise ValueError(err_msg)
+        rem_idx = np.array(self.remaining_idx)
+        # Use the probability of the minority class for each unlabelled sample
+        minority_probs = self.model_preds[rem_idx, self.minority_class]
+        # Avoid all-zero pmf
+        if np.all(minority_probs == 0):
+            pmf = np.ones_like(minority_probs, dtype=np.float64)
+        else:
+            pmf = minority_probs
+        pmf = np.asarray(pmf, dtype=np.float64)
+        if pmf.sum() != 0:
+            pmf /= pmf.sum()
+        return self.sample_pmf(pmf)

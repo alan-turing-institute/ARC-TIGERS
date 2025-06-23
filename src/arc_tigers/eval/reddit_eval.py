@@ -14,6 +14,7 @@ from transformers import (
     TrainingArguments,
 )
 
+from arc_tigers.constants import DATA_CONFIG_DIR, MODEL_CONFIG_DIR
 from arc_tigers.data.reddit_data import get_reddit_data
 from arc_tigers.data.synthetic import get_synthetic_data
 from arc_tigers.eval.utils import compute_metrics
@@ -24,8 +25,12 @@ from arc_tigers.utils import load_yaml
 def get_train_data_from_exp_dir(exp_dir: str) -> Dataset:
     # get the training dataset for the surrogate model
     model_exp_config = load_yaml(f"{exp_dir}/experiment_config.json")
-    surrogate_data_config = load_yaml(model_exp_config["data_config_pth"])
-    surrogate_model_config = load_yaml(model_exp_config["model_config_pth"])
+    surrogate_model_config = load_yaml(
+        f"{MODEL_CONFIG_DIR}/{model_exp_config['model_config']}.yaml"
+    )
+    surrogate_data_config = load_yaml(
+        f"{DATA_CONFIG_DIR}/{model_exp_config['data_config']}.yaml"
+    )
     tokenizer = AutoTokenizer.from_pretrained(surrogate_model_config["model_id"])
 
     surrogate_training_dataset, _, _, _ = get_reddit_data(
