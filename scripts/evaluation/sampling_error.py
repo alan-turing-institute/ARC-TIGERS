@@ -116,9 +116,9 @@ def plot_improvement(
         plt.close()
 
 
-def main(directory, experiment_names):
-    save_dir = f"{directory}/figures/"
-    os.makedirs(save_dir, exist_ok=True)
+def main(directory, experiment_names, combination_name):
+    save_dir = f"{directory}/figures/{combination_name}/"
+    os.makedirs(save_dir, exist_ok=False)
     full_metrics = {}
     metric_stats = {}
     for experiment_name in experiment_names:
@@ -143,6 +143,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "directory",
         help="Directories with /eval_outputs/",
+    )
+    parser.add_argument(
+        "combination_name",
+        help="Name of the combination of experiments, e.g. 'reddit_balanced'",
     )
     parser.add_argument(
         "--experiments",
