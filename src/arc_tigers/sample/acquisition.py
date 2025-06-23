@@ -435,7 +435,7 @@ class InformationGainSampler(AcquisitionFunction):
 class IsolationForestSampler(AcquisitionFunction):
     """
     Acquisition function that selects samples based on anomaly scores using an isolation
-    forest in embedding space, with a surrogate classifier trained on observed data.
+    forest in embedding space.
 
     Args:
         data (dict[str, Dataset]): Dictionary containing datasets.
@@ -443,8 +443,6 @@ class IsolationForestSampler(AcquisitionFunction):
         sampling_seed (int): Random seed for reproducibility.
 
     Methods:
-        surrogate_pretrain(): Pre-trains the surrogate model if not already trained.
-        update_surrogate(): Updates surrogate predictions based on labelled data.
         sample(): Selects the next sample to label based on anomaly score.
     """
 
@@ -456,64 +454,15 @@ class IsolationForestSampler(AcquisitionFunction):
         self.n_sampled = 0
         self.rng = np.random.default_rng(seed=sampling_seed)
         self.eval_data = data["evaluation_dataset"]
-        self.surrogate_train_data = data["surrogate_train_dataset"]
         self.embeddings = get_distilbert_embeddings(self.eval_data, eval_dir)
         self.eval_dir = eval_dir
-
-        # initialise surrogate predictions and model
-        self.num_classes = len(np.unique(self.eval_data["label"]))
-        self.surrogate_preds = np.full(
-            (len(self.eval_data), self.num_classes), 1.0 / self.num_classes
-        )
-        self.surrogate_model = SGDClassifier(
-            loss="log_loss", random_state=self.rng.integers(1e9)
-        )
         self.name = "isolation_forest_sampler"
-
-    def surrogate_pretrain(self):
-        if self.surrogate_train_data is None:
-            return
-        X_train = get_distilbert_embeddings(
-            self.surrogate_train_data,
-            self.eval_dir,
-            embedding_savename="surrogate_embeddings",
-        )
-        y_train = np.array(self.surrogate_train_data["label"])
-        surrogate_path = os.path.join(
-            self.eval_dir,
-            f"pretrained_surrogate_{self.surrogate_model.__class__.__name__}.joblib",
-        )
-        if os.path.exists(surrogate_path):
-            print(f"Loading pre-trained surrogate model from {surrogate_path} ...")
-            self.surrogate_model = joblib.load(surrogate_path)
-        else:
-            print(f"Pre-training surrogate model and saving to {surrogate_path} ...")
-            self.surrogate_model = self.surrogate_model.fit(X_train, y_train)
-            joblib.dump(self.surrogate_model, surrogate_path)
-
-    def update_surrogate(self):
-        if len(self.observed_idx) == 0:
-            self.surrogate_preds = np.zeros_like(self.surrogate_preds)
-            return
-        X_acquired = self.embeddings[np.array(self.observed_idx)]
-        y_acquired = np.array(self.eval_data["label"])[np.array(self.observed_idx)]
-        self.surrogate_model = self.surrogate_model.partial_fit(X_acquired, y_acquired)
-        # Get surrogate predictions for all samples
-        intermediate_surrogate_preds = self.surrogate_model.predict_proba(
-            self.embeddings
-        )
-        classes_ = self.surrogate_model.classes_
-        full_proba = np.zeros((len(self.eval_data), self.num_classes))
-        for i, c in enumerate(classes_):
-            full_proba[:, c] = intermediate_surrogate_preds[:, i]
-        self.surrogate_preds = full_proba
 
     def sample(self):
         if len(self.observed_idx) == 0:
             N = len(self.eval_data)
             pmf = np.ones(N, dtype=np.float64) / N
         else:
-            # Fit anomaly detector on observed embeddings
             observed = self.embeddings[np.array(self.observed_idx)]
             remaining = self.embeddings[np.array(self.remaining_idx)]
             iso = IsolationForest(random_state=self.rng.integers(1e9))
@@ -521,7 +470,6 @@ class IsolationForestSampler(AcquisitionFunction):
             # Higher score = more normal, so invert for anomaly
             anomaly_scores = -iso.score_samples(remaining)
             pmf = softmax(anomaly_scores)
-        self.update_surrogate()
         return self.sample_pmf(pmf)
 
 
@@ -541,7 +489,10 @@ class MinorityClassSampler(AcquisitionFunction):
     """
 
     def __init__(
-        self, data: dict[str, Dataset], minority_class: int, sampling_seed: int
+        self,
+        data: dict[str, Dataset],
+        minority_class: int,
+        sampling_seed: int,
     ):
         self.eval_data = data["evaluation_dataset"]
         self.observed_idx: list[int] = []

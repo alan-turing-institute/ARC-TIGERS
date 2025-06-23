@@ -33,6 +33,9 @@ def main(
     bias_correction = False
 
     rng = np.random.default_rng(init_seed)
+
+    sampler_args = {"data": data_dict, "eval_dir": output_dir}
+
     if acq_strat == "distance":
         sampler_class = DistanceSampler
     elif acq_strat == "random_forest_acc":
@@ -47,6 +50,7 @@ def main(
     elif acq_strat == "minority_class":
         sampler_class = MinorityClassSampler
         bias_correction = True
+        sampler_args["minority_class"] = 1  # Assuming class 1 is the minority class
     else:
         # raise error if acq_strat is not one of the available strategies
         # uses the __str__ method of the sampler classes to get the available strategies
@@ -70,9 +74,8 @@ def main(
     max_labels = int(max_labels) if max_labels < len(predictions) else len(predictions)
     for _ in tqdm(range(n_repeats)):
         seed = rng.integers(1, 2**32 - 1)  # Generate a random seed
-        acq_func = sampler_class(
-            data=data_dict, sampling_seed=seed, eval_dir=output_dir
-        )
+        sampler_args["sampling_seed"] = seed
+        acq_func = sampler_class(**sampler_args)
         if hasattr(sampler_class, "set_model_preds"):
             acq_func.set_model_preds(predictions)
         if hasattr(sampler_class, "surrogate_pretrain"):
