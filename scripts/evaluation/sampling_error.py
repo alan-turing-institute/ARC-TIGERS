@@ -145,8 +145,11 @@ if __name__ == "__main__":
         help="Directories with /eval_outputs/",
     )
     parser.add_argument(
-        "combination_name",
-        help="Name of the combination of experiments, e.g. 'reddit_balanced'",
+        "save_folder",
+        help=(
+            "Name of the combination of experiments, e.g. 'reddit_balanced',"
+            " under which the figures will be saved."
+        ),
     )
     parser.add_argument(
         "--experiments",
