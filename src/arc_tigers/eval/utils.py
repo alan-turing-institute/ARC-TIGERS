@@ -369,7 +369,7 @@ def evaluate(
 # Define metrics
 def compute_metrics(
     eval_pred: tuple[np.ndarray, np.ndarray],
-    bias_corrector: BiasCorrector | None,
+    bias_corrector: BiasCorrector | None = None,
 ) -> dict[str, Any]:
     logits, labels = eval_pred
     if logits.ndim == 1:
