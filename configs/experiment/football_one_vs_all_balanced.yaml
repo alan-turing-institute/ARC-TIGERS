@@ -1,0 +1,14 @@
+model_config: distilbert
+data_config: football_one_vs_all_balanced
+exp_name: football_distilbert_one_vs_all
+random_seed: 42
+train_kwargs:
+  num_train_epochs: 3
+  per_device_train_batch_size: 8
+  per_device_eval_batch_size: 8
+  warmup_steps: 500
+  weight_decay: 0.01
+  save_total_limit: 3
+  eval_strategy: epoch
+  save_strategy: epoch
+  load_best_model_at_end : True

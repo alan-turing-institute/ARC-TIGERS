@@ -5,7 +5,7 @@ import os
 import pandas as pd
 from tqdm import tqdm
 
-from arc_tigers.data.reddit_data import ONE_VS_ALL_COMBINATIONS
+from arc_tigers.data.reddit_data import DATA_DRIFT_COMBINATIONS, ONE_VS_ALL_COMBINATIONS
 from arc_tigers.data.utils import clean_row, flag_row, is_valid_row
 
 
@@ -34,12 +34,23 @@ def process_data(data, target_categories, args, save_path, shard_id=None):
     for row_index, row in enumerate(tqdm(data)):
         if flag_row(row):
             continue
-        if row["communityName"] in target_categories["train"]:
-            train_data_targets.append(clean_row(row))
-        elif row["communityName"] in target_categories["test"]:
-            test_data_targets.append(clean_row(row))
+        if args.mode == "one-vs-all":
+            # Split target classes evenly between train and test
+            if row["communityName"] in target_categories["train"]:
+                # Alternate assignment for even split
+                if row_index % 2 == 0:
+                    train_data_targets.append(clean_row(row))
+                else:
+                    test_data_targets.append(clean_row(row))
+            else:
+                non_targets[row_index % 2].append(clean_row(row))
         else:
-            non_targets[row_index % 2].append(clean_row(row))
+            if row["communityName"] in target_categories["train"]:
+                train_data_targets.append(clean_row(row))
+            elif row["communityName"] in target_categories["test"]:
+                test_data_targets.append(clean_row(row))
+            else:
+                non_targets[row_index % 2].append(clean_row(row))
 
     # Imbalance the dataset
     if args.r is not None:
@@ -101,13 +112,17 @@ def process_data(data, target_categories, args, save_path, shard_id=None):
 
 
 def main(args):
-    target_categories = ONE_VS_ALL_COMBINATIONS[args.target_config]
+    if args.mode == "one-vs-all":
+        target_categories = ONE_VS_ALL_COMBINATIONS[args.target_config]
+    else:
+        target_categories = DATA_DRIFT_COMBINATIONS[args.target_config]
+
     save_dir = (
         args.data_dir
         if os.path.isdir(args.data_dir)
         else os.path.dirname(args.data_dir)
     )
-    save_path = f"{save_dir}/splits/{args.target_config}/"
+    save_path = f"{save_dir}/splits/{args.target_config}_{args.mode}/"
     os.makedirs(save_path, exist_ok=True)
 
     # If the data_dir is a directory, process each shard
@@ -147,7 +162,13 @@ if __name__ == "__main__":
             "advice"
         ),
     )
-
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="one-vs-all",
+        choices=["data-drift", "one-vs-all", "multi-class"],
+        help="Splitting mode: 'data-drift' or 'one-vs-all'.",
+    )
     parser.add_argument(
         "-r",
         default=None,

@@ -153,7 +153,7 @@ def get_target_mapping(
 ) -> dict[str, int]:
     if eval_setting == "multi-class":
         return {subreddit: index for index, subreddit in enumerate(target_subreddits)}
-    if eval_setting == "one-vs-all":
+    if eval_setting == "one-vs-all" or eval_setting == "data-drift":
         return dict.fromkeys(target_subreddits, 1)
     err_msg = f"Invalid evaluation setting: {eval_setting}"
     raise ValueError(err_msg)
