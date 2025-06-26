@@ -16,6 +16,12 @@ from arc_tigers.data.utils import (
 )
 from arc_tigers.training.utils import get_label_weights
 
+# DATA_DRIFT_COMBINATIONS specifies settings for "data-drift" experiments.
+# In this setting, we perform one-vs-all classification, but the set of target classes
+# changes between the train and test splits. Each split has its own exclusive set of
+# target subreddits (as defined in the dictionary), and there is no overlap between
+# the train and test target classes. This allows us to evaluate model generalization
+# to new, unseen target classes under distribution shift.
 DATA_DRIFT_COMBINATIONS = {
     "sport": {
         "train": ["r/soccer", "r/Cricket"],
@@ -34,6 +40,12 @@ DATA_DRIFT_COMBINATIONS = {
     "advice": {"train": ["r/AskReddit"], "test": ["r/AskMenAdvice", "r/Advice"]},
 }
 
+# ONE_VS_ALL_COMBINATIONS specifies settings for "one-vs-all" experiments.
+# In this setting, we perform one-vs-all classification, where the same set of target
+# subreddits (as defined in the dictionary) are used for both the train and test splits.
+# All samples from these target subreddits are considered positive examples, and all
+# other subreddits are considered negative examples. This allows us to evaluate
+# performance when the model is trained and tested on the same set of target classes.
 ONE_VS_ALL_COMBINATIONS = {
     "football": {
         "train": ["r/soccer", "r/FantasyPL", "r/coys", "r/reddevils", "r/LiverpoolFC"],
@@ -46,6 +58,12 @@ ONE_VS_ALL_COMBINATIONS = {
     },
 }
 
+# BINARY_COMBINATIONS specifies settings for standard binary classification experiments.
+# In this setting, only the specified two target subreddits (or classes) are used for
+# both the train and test splits. All samples from these subreddits are included, and
+# the task is to distinguish between them (i.e., no "other" or negative class is
+# present). This allows for straightforward binary classification between two specific
+# classes.
 BINARY_COMBINATIONS = {
     "sport": {
         "train": ["r/soccer", "r/Cricket"],
