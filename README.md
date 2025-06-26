@@ -14,7 +14,7 @@ python -m pip install .
 
 ## Usage
 
-### `scripts/dataset_download.py`
+### `scripts/dataset_download.py`
 This script downloads a reddit dataset and saves in an appropriate place in the parent directory.
 It takes as arguments:
 - `dataset_name`: the name of the dataset to load from huggingface, for example `bit0/reddit_dataset_12`
@@ -22,7 +22,7 @@ It takes as arguments:
 - `max_rows`: The maximum number of rows to use in the resultant dataset, this should be an integer.
 It saves a `.json` file called `filtered_rows` containing the data in a subdirectory named using the dataset name and the maximum number of rows.
 
-### `scripts/dataset_generation.py`
+### `scripts/dataset_generation.py`
 This script generates train and test splits from the downloaded reddit dataset(s).
 It currently takes as arguments:
 - `data_dir`: the path to the dataset being used to form the splits

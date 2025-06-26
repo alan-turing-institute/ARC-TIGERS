@@ -111,6 +111,7 @@ def get_transformers_preds(
             }
         }
     else:
+        print(data_config_path)
         data_config = load_yaml(data_config_path)
         if class_balance != 1.0:
             data_config["data_args"]["balanced"] = False

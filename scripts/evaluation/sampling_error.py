@@ -44,7 +44,6 @@ def plot_sampling_error(
     ],
 ):
     experiment_names = list(metric_stats.keys())
-    experiment_names_plot = ["Random Sampling", "Cross Entropy", "Accuracy"]
     metrics = metric_stats[experiment_names[0]].keys()
     for metric in metrics:
         if metric == "n_labels":
@@ -52,14 +51,12 @@ def plot_sampling_error(
         if "n_class" in metric:
             continue
         plt.axhline(y=0, color="k", linestyle="--", alpha=0.2)
-        for plot_name, experiment_name in zip(
-            experiment_names_plot, experiment_names, strict=True
-        ):
+        for experiment_name in experiment_names:
             mse = metric_stats[experiment_name][metric]["mse"]
             plt.plot(
                 metric_stats[experiment_name]["n_labels"][1:],
                 mse[1:],
-                label=plot_name,
+                label=experiment_name,
                 linestyle="-",
                 linewidth=2,
             )
@@ -83,7 +80,6 @@ def plot_improvement(
     ],
 ):
     experiment_names = list(metric_stats.keys())
-    experiment_names_plot = ["Cross Entropy", "Accuracy"]
     metrics = metric_stats[experiment_names[0]].keys()
     for metric in metrics:
         if metric == "n_labels":
@@ -96,14 +92,12 @@ def plot_improvement(
             plt.cycler(color=plt.rcParams["axes.prop_cycle"].by_key()["color"][1:])
         )
         base_mse = metric_stats[experiment_names[0]][metric]["mse"][1:]
-        for plot_name, experiment_name in zip(
-            experiment_names_plot, experiment_names[1:], strict=True
-        ):
+        for experiment_name in experiment_names:
             mse = metric_stats[experiment_name][metric]["mse"]
             plt.plot(
                 metric_stats[experiment_name]["n_labels"][1:],
                 base_mse / mse[1:],
-                label=plot_name,
+                label=experiment_name,
                 linestyle="-",
                 linewidth=2,
             )
@@ -123,7 +117,7 @@ def main(directory, experiment_names, combination_name):
     metric_stats = {}
     for experiment_name in experiment_names:
         metric_stats[experiment_name], full_metrics[experiment_name] = get_metric_stats(
-            f"{directory}/eval_outputs/reddit_balanced/{experiment_name}", plot=False
+            f"{directory}/eval_outputs/{experiment_name}", plot=False
         )
     plot_sampling_error(
         save_dir=save_dir,
@@ -158,4 +152,4 @@ if __name__ == "__main__":
         help="Directories within /eval_outputs/ containing .csv metric files",
     )
     args = parser.parse_args()
-    main(args.directory, args.experiments)
+    main(args.directory, args.experiments, args.save_folder)

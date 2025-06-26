@@ -21,7 +21,7 @@ This generates the actual dataset, csv files used in our experiments.
 
 Eg. Generate one-vs-all splits for the "football" configuration, using the 10000000 rows downloaded above:
 ```
-python dataset_generation.py data/reddit_dataset_12/10000000_rows/ football --mode one-vs-all
+python scripts/data_processing/dataset_generation.py data/reddit_dataset_12/10000000_rows/ football --mode one-vs-all
 ```
 
 You should now specify data configs which are defined like so:
@@ -40,7 +40,7 @@ data_args:
 This is for training models on the generated datasets, for this you need to pass `train_classifier.py` an experiment config, which is composed of a `data_config` a `model_config` and training arguments:
 
 ```
-python train_classifier.py football_one_vs_all_balanced.yaml
+python scripts/experiments/train_classifier.py configs/experiment/football_one_vs_all_balanced.yaml
 ```
 
 Where the yaml might be structured like so:
@@ -84,7 +84,7 @@ You should now have a trained transformers model saved in an appropriately convo
 You can run active testing like so:
 
 ```
-python active_testing.py football_one_vs_all_balanced.yaml distilbert.yaml outputs/reddit_dataset_12/one-vs-all/football/distilbert-base-uncased/football_distilbert_one_vs_all distance --n_repeats 10 --max_labels 500 --seed 42
+python scripts/experiments/active_testing.py configs/data/football_one_vs_all_balanced.yaml configs/model/distilbert.yaml outputs/reddit_dataset_12/one-vs-all/football/distilbert-base-uncased/football_distilbert_one_vs_all distance --n_repeats 10 --max_labels 500 --seed 42
 ```
 Where the arguments are the `<data_config>`, the `<model_config>`, the directory where the above model should be saved, using the distance-based sampling strategy. We also perform 10 repeats with a labelling budget of 500.
 
