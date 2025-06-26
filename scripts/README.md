@@ -101,18 +101,18 @@ The outputs are saved similarly to `active_testing.py`.
 
 You should now rapidly be approaching your path length limit for your chosen operating system. To make matter worse we will now generate some figures.. saved in another subdirectory.. `figures`.
 
-To get plots/analysis for an individual model you can run `eval_sampling.py`.
+To get plots/analysis for an individual model you can run `scripts/evaluation/eval_sampling.py`.
 
 For example, to get the random sampling outputs from the above experiment:
 
 ```
-python eval_sampling.py outputs/reddit_dataset_12/one-vs-all/football/distilbert-base-uncased/football_distilbert_one_vs_all/eval_outputs/football_one_vs_all_balanced/random_sampling_outputs
+python scripts/evaluation/eval_sampling.py outputs/reddit_dataset_12/one-vs-all/football/distilbert-base-uncased/football_distilbert_one_vs_all/eval_outputs/football_one_vs_all_balanced/random_sampling_outputs
 ```
 
-If you wish to compare multiple different configurations you can run `sampling_error.py`, this will produce figures comparing the mean squared error of different sampling strategies to the baseline value.
+If you wish to compare multiple different configurations you can run `scripts/evaluation/sampling_error.py`, this will produce figures comparing the mean squared error of different sampling strategies to the baseline value.
 
 It can be run like below. For exampling, comparing distance-based sampling to random sampling:
 
 ```
-python sampling_error.py outputs/reddit_dataset_12/one-vs-all/football/distilbert-base-uncased/football_distilbert_one_vs_all/ sport_one_vs_all_balanced --experiments <full_path_to_random_sampling_output_folder> <full_path_to_distance_based_sampling_output_folder>
+python scripts/evaluation/sampling_error.py outputs/reddit_dataset_12/one-vs-all/football/distilbert-base-uncased/football_distilbert_one_vs_all/ sport_one_vs_all_balanced --experiments <full_path_to_random_sampling_output_folder> <full_path_to_distance_based_sampling_output_folder>
 ```
