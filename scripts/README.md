@@ -7,10 +7,10 @@ First a dataset should be generated, this is done by first running `data_process
 
 ### `dataset_download.py`
 
-This downloads data and saves it in the `data` directory, it us used like below. Eg. downloading 1000000 rows from the top subreddits defined in `data/top_subreddits.json`:
+This downloads data and saves it in the `data` directory, it us used like below. Eg. downloading 10000000 rows from the top subreddits defined in `data/top_subreddits.json`:
 ```
 python scripts/data_processing/dataset_download.py
-    --max_rows 1000000
+    --max_rows 10000000
     --target_subreddits data/top_subreddits.json
 ```
 More information can be found in `scripts/data_processing/README.md`
