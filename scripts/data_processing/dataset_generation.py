@@ -125,22 +125,27 @@ def main(args):
     save_path = f"{save_dir}/splits/{args.target_config}_{args.mode}/"
     os.makedirs(save_path, exist_ok=True)
 
-    # If the data_dir is a directory, process each shard
-    if os.path.isdir(args.data_dir):
-        shard_files = sorted(
-            glob.glob(os.path.join(args.data_dir, "filtered_rows_shard_*.json"))
-        )
+    # check for shards
+    if not os.path.isdir(args.data_dir):
+        err_msg = f"{args.data_dir} does not exist"
+        raise FileNotFoundError(err_msg)
+
+    shard_files = sorted(
+        glob.glob(os.path.join(args.data_dir, "filtered_rows_shard_*.json"))
+    )
+    noshards_filename = f"{args.data_dir}/filtered_rows.json"
+    if len(shard_files) > 0:
         for i, shard_file in enumerate(shard_files):
             with open(shard_file) as f:
                 data = json.load(f)
             process_data(data, target_categories, args, save_path, shard_id=i)
-    # If the data_dir is a file, process the single JSON file
-    elif args.data_dir.endswith(".json"):
-        with open(args.data_dir) as f:
+
+    elif os.path.isfile(noshards_filename):
+        with open(noshards_filename) as f:
             data = json.load(f)
-        process_data(data, target_categories, args, save_path)
+            process_data(data, target_categories, args, save_path)
     else:
-        err_msg = f"Error: '{args.data_dir}' is not a directory or a JSON file."
+        err_msg = f"Error: '{args.data_dir}' does not contain data files"
         raise ValueError(err_msg)
 
 

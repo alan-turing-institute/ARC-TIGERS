@@ -5,13 +5,17 @@ from collections import Counter
 
 import matplotlib.pyplot as plt
 import numpy as np
+from nltk.corpus import stopwords
 from tqdm import tqdm
 
+from arc_tigers.constants import DATA_CONFIG_DIR
 from arc_tigers.data.reddit_data import get_reddit_data
 from arc_tigers.utils import load_yaml
 
 
 def main(args):
+    stop_words = set(stopwords.words("english"))
+
     counter_dict = {
         "all": Counter(),
         "correct": {0: Counter(), 1: Counter()},
@@ -57,18 +61,21 @@ def main(args):
     plt.savefig(experiment_dir + "/entropy_histogram.pdf")
     plt.clf()
 
-    exp_config = os.path.join(experiment_dir, "../experiment_config.json")
+    exp_config = os.path.join(experiment_dir, "../../../experiment_config.json")
     with open(exp_config) as f:
         exp_config = json.load(f)
-    data_config = load_yaml(exp_config["data_config_pth"])
+    data_config = load_yaml(f"{DATA_CONFIG_DIR}/{exp_config['data_config']}.yaml")
     _, _, test_data, meta_data = get_reddit_data(
-        **data_config["data_args"], random_seed=exp_config["seed"], tokenizer=None
+        **data_config["data_args"],
+        tokenizer=None,
     )
+    print(json.dumps(meta_data, indent=2))
     subreddit_label_map: dict[str, int] = meta_data["test_target_map"]
     label_subreddit_map: dict[int, str] = {v: k for k, v in subreddit_label_map.items()}
 
     for input in test_data["text"]:
-        counter_dict["all"].update(input.split())
+        words = [w for w in input.split() if w.lower() not in stop_words]
+        counter_dict["all"].update(words)
 
     correct_inputs = test_data[correct_indices]["text"]
     correct_labels = test_data[correct_indices]["label"]
@@ -77,13 +84,15 @@ def main(args):
     incorrect_labels = test_data[incorrect_indices]["label"]
 
     for label, inp in tqdm(zip(incorrect_labels, incorrect_inputs, strict=True)):
-        counter_dict["incorrect"][label].update(inp.split())
+        words = [w for w in inp.split() if w.lower() not in stop_words]
+        counter_dict["incorrect"][label].update(words)
 
     for label, inp in tqdm(zip(correct_labels, correct_inputs, strict=True)):
-        counter_dict["correct"][label].update(inp.split())
+        words = [w for w in inp.split() if w.lower() not in stop_words]
+        counter_dict["correct"][label].update(words)
 
     # remove the top 50 frequent words from the all counter
-    most_common_words = counter_dict["all"].most_common(100)
+    most_common_words = counter_dict["all"].most_common(50)
     for word, _ in most_common_words:
         for counter in counter_dict["correct"].values():
             if word in counter:
@@ -95,9 +104,6 @@ def main(args):
     for class_label in range(n_classes):
         fig, axes = plt.subplots(2, 1, figsize=(15, 5))
         for ax_idx, acc in enumerate(["incorrect", "correct"]):
-            # print(f"Most common words in {acc} inputs:")
-            # print(label_subreddit_map[class_label])
-            # print(counter_dict[acc][class_label].most_common(50))
             top_50 = counter_dict[acc][class_label].most_common(50)
             words, counts = zip(*top_50, strict=True)
             x_pos = np.arange(len(words))
@@ -107,9 +113,11 @@ def main(args):
             axes[ax_idx].set_ylabel("Counts")
             axes[ax_idx].set_xlabel("Words")
         fig.tight_layout()
+        print(label_subreddit_map.get(class_label))
         fig.savefig(
             experiment_dir
-            + f"/{label_subreddit_map[class_label].lstrip('r/')}_word_counts.pdf"
+            + f"/{label_subreddit_map.get(class_label, 'non_target').lstrip('r/')}"
+            "_word_counts.pdf"
         )
         fig.clear()
 
@@ -122,4 +130,5 @@ if __name__ == "__main__":
         "experiment_dir", type=str, help="Path to the experiment directory."
     )
     args = parser.parse_args()
+    main(args)
     main(args)
