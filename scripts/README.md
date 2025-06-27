@@ -89,21 +89,12 @@ Where it is saved under the name of the data, the evaluation setting, the data c
 
 You should now have a trained transformers model saved in an appropriately convoluted directory structure. Let's evaluate it!
 
-You can run active testing like so:
+You can run sampling using the distance-based strategy like so:
 
 ```
 python scripts/experiments/active_testing.py configs/data/football_one_vs_all_balanced.yaml configs/model/distilbert.yaml outputs/reddit_dataset_12/one-vs-all/football/distilbert-base-uncased/football_distilbert_one_vs_all distance --n_repeats 10 --max_labels 500 --seed 42
 ```
 Where the arguments are the `<data_config>`, the `<model_config>`, the directory where the above model should be saved, using the distance-based sampling strategy. We also perform 10 repeats with a labelling budget of 500.
-
-
-Random sampling is run similarly with identical format at the command line to above, only running `random_sampling.py` instead and omitting the sampling strategy. Eg.:
-
-```
-python random_sampling.py football_one_vs_all_balanced.yaml distilbert.yaml outputs/reddit_dataset_12/one-vs-all/football/distilbert-base-uncased/football_distilbert_one_vs_all --n_repeats 10 --max_labels 500 --seed 42
-```
-
-The outputs are saved similarly to `active_testing.py`.
 
 ## 4. Analysing results
 

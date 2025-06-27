@@ -1,5 +1,4 @@
 from collections import Counter
-from collections.abc import Generator
 from copy import deepcopy
 from typing import Any
 
@@ -7,7 +6,7 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.csv as pv
 from datasets import Dataset, concatenate_datasets
-from numpy.random import BitGenerator
+from numpy.random import Generator
 from tqdm import tqdm
 from transformers import PreTrainedTokenizer
 
@@ -33,9 +32,7 @@ def load_arrow_table(shard_files):
 
 
 def imbalance_binary_dataset(
-    dataset: Dataset,
-    class_balance: float,
-    generator: BitGenerator,
+    dataset: Dataset, class_balance: float, generator: Generator
 ) -> Dataset:
     """
     Imbalance the dataset based on the class_balance variable.
