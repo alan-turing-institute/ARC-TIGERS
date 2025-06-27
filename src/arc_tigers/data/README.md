@@ -91,7 +91,7 @@ The `class_balance` parameter in get_reddit_data controls whether and how the da
     - The sign of `class_balance` determines which class is the minority:
         - Positive value (e.g., 0.1):
           - Class 0 is the majority, class 1 is the minority.
-          - The number of class 1 samples will be `int(n_class_0 * class_balance`).
+          - The number of class 1 samples will be `int(n_class_0 * class_balance)`.
         - Negative value (e.g., -0.1):
           - Class 1 is the majority, class 0 is the minority.
           - The number of class 0 samples will be `int(n_class_1 * abs(class_balance))`.
