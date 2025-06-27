@@ -1,6 +1,12 @@
 # `slurm_scripts`
 This directory contains bash scripts for the `Slurm` workload manager, they are split into their corresponding tasks in this codebase.
 
+One liner for getting a slurm job output:
+
+```
+tail -f $(scontrol show job <JOBID> | awk -F= '/StdOut/ {print $2}')
+```
+
 ## `data_download_scripts`
 
 This sub-directory contains scripts necessary for downloading the data for our experiments.
