@@ -1,16 +1,14 @@
 import os
-from collections import namedtuple
 
 import joblib
 import numpy as np
+import numpy.typing as npt
 from datasets import Dataset
 from scipy.spatial.distance import cdist
 from sklearn.ensemble import IsolationForest, RandomForestClassifier
 
 from arc_tigers.eval.utils import softmax
 from arc_tigers.sample.utils import get_mpnet_embeddings
-
-DummyAcqFunc = namedtuple("DummyAcqFunc", ["observed_idx", "remaining_idx", "rng"])
 
 
 class AcquisitionFunction:
@@ -33,7 +31,8 @@ class AcquisitionFunction:
     def __init__(self):
         self.remaining_idx: list[int] = []
         self.observed_idx: list[int] = []
-        self.rng: np.random.BitGenerator = None
+        self.sample_prob: list[int] = []
+        self.rng: np.random.Generator = None
         self.name: str = "AcquisitionFunction"
 
     @property
@@ -52,7 +51,7 @@ class AcquisitionFunction:
         """
         return self.remaining_idx
 
-    def sample_pmf(self, pmf):
+    def sample_pmf(self, pmf: npt.NDArray[np.floating]) -> tuple[int, float]:
         pmf = np.asarray(pmf, dtype=np.float64)  # Use higher precision
 
         pmf = np.clip(pmf, 0, 1)  # Ensure values are in [0, 1]
@@ -66,15 +65,16 @@ class AcquisitionFunction:
             raise ValueError(err_msg)
 
         prob = self.rng.multinomial(1, pmf)
-        idx = np.where(prob)[0][0]
+        idx: int = np.where(prob)[0][0]
         sample_prob = pmf[idx]
         test_idx = self.remaining_idx[idx]
         self.observed_idx.append(int(test_idx))
+        self.sample_prob.append(sample_prob)
         self.remaining_idx.remove(int(test_idx))
 
-        return sample_prob
+        return test_idx, sample_prob
 
-    def sample(self) -> int:
+    def sample(self) -> tuple[int, float]:
         raise NotImplementedError
 
 
@@ -88,7 +88,7 @@ class DistanceSampler(AcquisitionFunction):
 
     Args:
         data (Dataset): The dataset to sample from.
-        sampling_seed (int): Random seed for reproducibility.
+        seed (int): Random seed for reproducibility.
         eval_dirs (tuple[str]): Directories for evaluation outputs, and embedding
         outputs. (eval_outpur_dir,embedding_dir).
 
@@ -96,30 +96,30 @@ class DistanceSampler(AcquisitionFunction):
         sample(): Selects the next sample to label based on distance.
     """
 
-    def __init__(self, data: dict[str, Dataset], sampling_seed: int, eval_dirs: str):
+    def __init__(self, eval_data: Dataset, seed: int, eval_dirs: str, **kwargs):
         """Samples a dataset based on distance between observed and unobserved
         embeddings.
 
         Args:
-            data: The dataset to sample from.
+            eval_data: The dataset to sample from.
 
         Properties:
             n_sampled: Number of samples that have been labelled so far.
             labelled_idx: Indices of the samples that have been labelled.
             unlabelled_idx: Indices of the samples that haven't been labelled.
         """
-        self.eval_data = data["evaluation_dataset"]
+        self.eval_data = eval_data
 
         self.observed_idx: list[int] = []
         self.remaining_idx: list[int] = np.arange(len(self.eval_data)).tolist()
         self.n_sampled = 0
-        self.rng = np.random.default_rng(seed=sampling_seed)
+        self.rng = np.random.default_rng(seed=seed)
 
         # Get embeddings for whole dataset
         self.embeddings = get_mpnet_embeddings(self.eval_data, eval_dirs[1])
         self.name = "distance"
 
-    def sample(self) -> int:
+    def sample(self) -> tuple[int, float]:
         """
         Updates the n_sampled counter and gets the next sample to label.
 
@@ -137,16 +137,6 @@ class DistanceSampler(AcquisitionFunction):
             # Subset embeddings
             remaining = self.embeddings[np.array(self.remaining_idx)]
             observed = self.embeddings[np.array(self.observed_idx)]
-
-            # # Broadcasting to get all paired differences
-            # d = remaining[:, np.newaxis, :] - observed
-            # d = d**2
-            # # Sum over feature dimension
-            # d = d.sum(-1)
-            # # sqrt to get distance
-            # d = np.sqrt(d)
-            # # Mean over other pairs
-            # distances = d.mean(1)
 
             # Compute all pairwise Euclidean distances
             dists = cdist(remaining, observed, metric="euclidean")
@@ -173,7 +163,7 @@ class AccSampler(AcquisitionFunction):
         data (dict[str, Dataset]): Dictionary containing datasets.
         eval_dirs (tuple[str]): Directories for evaluation outputs, and embedding
         outputs. (eval_outpur_dir,embedding_dir).
-        sampling_seed (int): Random seed for reproducibility.
+        seed (int): Random seed for reproducibility.
 
     Methods:
         set_model_preds(preds): Sets the model's predicted probabilities.
@@ -184,13 +174,19 @@ class AccSampler(AcquisitionFunction):
     """
 
     def __init__(
-        self, data: dict[str, Dataset], eval_dirs: tuple[str, str], sampling_seed: int
+        self,
+        eval_data: Dataset,
+        eval_dirs: tuple[str, str],
+        seed: int,
+        surrogate_data: Dataset,
+        **kwargs,
     ):
         """Samples a dataset based on distance between model loss and surrogate loss,
         where the surrogate is a Random Forest classifier.
 
         Args:
-            data: The dataset to sample from.
+            eval_data: The dataset to sample from.
+            surrogate_data: Dataset used to pre-train the surrogate model.
 
         Properties:
             n_sampled: Number of samples that have been labelled so far.
@@ -200,8 +196,8 @@ class AccSampler(AcquisitionFunction):
         self.n_sampled = 0
         self.model_preds = np.array([])
         self.surrogate_preds = np.array([])
-        self.eval_data = data["evaluation_dataset"]
-        self.surrogate_train_data = data["surrogate_train_dataset"]
+        self.eval_data = eval_data
+        self.surrogate_train_data = surrogate_data
         self.observed_idx: list[int] = []
         self.remaining_idx = np.arange(len(self.eval_data)).tolist()
         self.eval_dir = eval_dirs[0]
@@ -209,7 +205,7 @@ class AccSampler(AcquisitionFunction):
 
         # Get embeddings for use with RF classifier
         self.eval_embs = get_mpnet_embeddings(self.eval_data, self.embedding_dir)
-        self.rng = np.random.default_rng(seed=sampling_seed)
+        self.rng = np.random.default_rng(seed=seed)
 
         # initialise surrogate predictions and model
         self.num_classes = len(np.unique(self.eval_data["label"]))
@@ -291,7 +287,7 @@ class AccSampler(AcquisitionFunction):
 
         return np.maximum(res, np.max(res) * 0.05)
 
-    def sample(self):
+    def sample(self) -> tuple[int, float]:
         expected_loss = self.accuracy_loss()
 
         if (expected_loss < 0).sum() > 0:
@@ -319,10 +315,11 @@ class InformationGainSampler(AcquisitionFunction):
     samples according to a normalized probability over these values.
 
     Args:
-        data (dict[str, Dataset]): Dictionary containing datasets.
-        eval_dirs (tuple[str]): Directories for evaluation outputs, and embedding
-        outputs. (eval_outpur_dir,embedding_dir).
-        sampling_seed (int): Random seed for reproducibility.
+        eval_data: Dataset to sample from.
+        eval_dirs: Directories for evaluation outputs, and embedding outputs.
+            (eval_outpur_dir,embedding_dir).
+        seed: Random seed for reproducibility.
+        surrogate_data: Dataset used to pre-train the surrogate model.
 
     Methods:
         set_model_preds(preds): Sets the model's predicted probabilities.
@@ -332,7 +329,14 @@ class InformationGainSampler(AcquisitionFunction):
         sample(): Selects the next sample to label based on information gain.
     """
 
-    def __init__(self, data: Dataset, eval_dirs: str, sampling_seed: int):
+    def __init__(
+        self,
+        eval_data: Dataset,
+        eval_dirs: str,
+        seed: int,
+        surrogate_data: Dataset,
+        **kwargs,
+    ):
         """
         Samples based on information gain (cross-entropy between surrogate and model
         predictions).
@@ -341,9 +345,9 @@ class InformationGainSampler(AcquisitionFunction):
             data: The dataset to sample from.
         """
         self.n_sampled = 0
-        self.rng = np.random.default_rng(seed=sampling_seed)
-        self.eval_data = data["evaluation_dataset"]
-        self.surrogate_train_data = data["surrogate_train_dataset"]
+        self.rng = np.random.default_rng(seed=seed)
+        self.eval_data = eval_data
+        self.surrogate_train_data = surrogate_data
         self.observed_idx: list[int] = []
         self.remaining_idx: list[int] = np.arange(len(self.eval_data)).tolist()
         self.embedding_dir = eval_dirs[1]
@@ -427,7 +431,7 @@ class InformationGainSampler(AcquisitionFunction):
         # Make all values positive and nonzero for sampling
         return np.maximum(info_gain, np.max(info_gain) * 0.05)
 
-    def sample(self):
+    def sample(self) -> tuple[int, float]:
         info_gain = self.information_gain()
         if (info_gain < 0).sum() > 0:
             info_gain += np.abs(info_gain.min())
@@ -445,28 +449,26 @@ class IsolationForestSampler(AcquisitionFunction):
     forest in embedding space.
 
     Args:
-        data (dict[str, Dataset]): Dictionary containing datasets.
-        eval_dirs (tuple[str]): Directories for evaluation outputs, and embedding
+        eval_data: Dictionary containing datasets.
+        eval_dirs: Directories for evaluation outputs, and embedding
         outputs. (eval_outpur_dir,embedding_dir).
-        sampling_seed (int): Random seed for reproducibility.
+        seed: Random seed for reproducibility.
 
     Methods:
         sample(): Selects the next sample to label based on anomaly score.
     """
 
-    def __init__(self, data: dict[str, Dataset], eval_dirs: str, sampling_seed: int):
+    def __init__(self, eval_data: Dataset, eval_dirs: str, seed: int, **kwargs):
         self.observed_idx: list[int] = []
-        self.remaining_idx: list[int] = np.arange(
-            len(data["evaluation_dataset"])
-        ).tolist()
+        self.remaining_idx: list[int] = np.arange(len(eval_data)).tolist()
         self.n_sampled = 0
-        self.rng = np.random.default_rng(seed=sampling_seed)
-        self.eval_data = data["evaluation_dataset"]
+        self.rng = np.random.default_rng(seed=seed)
+        self.eval_data = eval_data
         self.embedding_dir = eval_dirs[1]
         self.embeddings = get_mpnet_embeddings(self.eval_data, self.embedding_dir)
         self.name = "isolation_forest_sampler"
 
-    def sample(self):
+    def sample(self) -> tuple[int, float]:
         if len(self.observed_idx) == 0:
             N = len(self.eval_data)
             pmf = np.ones(N, dtype=np.float64) / N
@@ -487,27 +489,21 @@ class MinorityClassSampler(AcquisitionFunction):
     of a specified minority class.
 
     Args:
-        data (dict[str, Dataset]): Dictionary containing datasets.
-        minority_class (int): The class label considered as the minority class.
-        sampling_seed (int): Random seed for reproducibility.
+        eval_data: Dictionary containing datasets.
+        minority_class: The class label considered as the minority class.
+        seed: Random seed for reproducibility.
 
     Methods:
         set_model_preds(preds): Sets the model's predicted probabilities.
         sample(): Selects the next sample to label based on minority class probability.
     """
 
-    def __init__(
-        self,
-        data: dict[str, Dataset],
-        minority_class: int,
-        sampling_seed: int,
-        **kwargs,
-    ):
-        self.eval_data = data["evaluation_dataset"]
+    def __init__(self, eval_data: Dataset, minority_class: int, seed: int, **kwargs):
+        self.eval_data = eval_data
         self.observed_idx: list[int] = []
         self.remaining_idx: list[int] = np.arange(len(self.eval_data)).tolist()
         self.n_sampled = 0
-        self.rng = np.random.default_rng(seed=sampling_seed)
+        self.rng = np.random.default_rng(seed=seed)
         self.minority_class = minority_class
         self.name = "minority_class_sampler"
 
@@ -517,7 +513,7 @@ class MinorityClassSampler(AcquisitionFunction):
         """
         self.model_preds = softmax(preds)
 
-    def sample(self):
+    def sample(self) -> tuple[int, float]:
         if self.model_preds is None:
             err_msg = "Model predictions must be set before sampling."
             raise ValueError(err_msg)

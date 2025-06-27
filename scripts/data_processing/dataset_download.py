@@ -6,6 +6,7 @@ from datasets import load_dataset
 from tqdm import tqdm
 
 from arc_tigers.constants import DATA_DIR
+from arc_tigers.utils import to_json
 
 
 def main(args):
@@ -49,22 +50,20 @@ def main(args):
             if i + 1 >= max_rows:
                 break
         save_pth = f"{output_dir}/filtered_rows.json"
-        with open(save_pth, "w") as f:
-            json.dump(data, f, indent=2)
+        to_json(data, save_pth)
         print(f"All data saved to {save_pth}")
         return
 
     # orhterwise save the filtered data to individual JSON files
+    shard_size = int(min(5000000, max_rows // 10))
     shard_idx = 0
     for i, example in enumerate(tqdm(ds, desc="Loading dataset", total=max_rows)):
-        shard_size = int(min(5000000, max_rows // 10))
         data.append(example)
         # if the current shard is full or we have reached the max_rows, save the shard
         if (i + 1) % shard_size == 0 or i + 1 == max_rows:
             # Save the current shard to a JSON file
             save_pth = f"{output_dir}/filtered_rows_shard_{shard_idx}.json"
-            with open(save_pth, "w") as f:
-                json.dump(data, f, indent=2)
+            to_json(data, save_pth)
             print(f"Shard {shard_idx} saved to {save_pth}")
             # Reset the data list for the next shard
             data = []

@@ -1,5 +1,4 @@
 import argparse
-import json
 import os
 
 import numpy as np
@@ -9,69 +8,52 @@ from tqdm import tqdm
 from arc_tigers.data.utils import sample_dataset_metrics
 from arc_tigers.eval.reddit_eval import get_preds, get_train_data_from_exp_dir
 from arc_tigers.eval.utils import BiasCorrector, evaluate, get_stats
-from arc_tigers.sample.acquisition import (
-    AccSampler,
-    DistanceSampler,
-    InformationGainSampler,
-    IsolationForestSampler,
-    MinorityClassSampler,
-)
-from arc_tigers.utils import create_dirs
+from arc_tigers.sample.methods import SAMPLING_STRATEGIES
+from arc_tigers.utils import create_dirs, to_json
 
 
 def main(
     output_dirs,
     n_repeats,
-    data_dict,
+    eval_data,
+    surrogate_data,
     acq_strat,
     predictions,
     init_seed,
     max_labels,
     evaluate_steps,
 ):
-    evaluation_dataset = data_dict["evaluation_dataset"]
-    bias_correction = True
-
     rng = np.random.default_rng(init_seed)
 
-    sampler_args = {"data": data_dict, "eval_dirs": output_dirs}
-
-    if acq_strat == "distance":
-        sampler_class = DistanceSampler
-        # bias_correction = False
-    elif acq_strat == "random_forest_acc":
-        sampler_class = AccSampler
-    elif acq_strat == "random_forest_ig":
-        sampler_class = InformationGainSampler
-    elif acq_strat == "iForest":
-        sampler_class = IsolationForestSampler
-    elif acq_strat == "minority_class":
-        sampler_class = MinorityClassSampler
-        sampler_args["minority_class"] = 1  # Assuming class 1 is the minority class
-    else:
-        # raise error if acq_strat is not one of the available strategies
-        # uses the __str__ method of the sampler classes to get the available strategies
+    if acq_strat not in SAMPLING_STRATEGIES:
         err_msg = (
-            f"Unknown acquisition strategy: {acq_strat}. Available strategies: "
-            "distance, random_forest_acc, random_forest_ig, iForest, minority_class"
+            f"Acquisition strategy {acq_strat} not found. "
+            "Available strategies: " + ", ".join(SAMPLING_STRATEGIES.keys())
         )
-        raise ValueError(err_msg)
+        raise KeyError(err_msg)
+    sampler_class = SAMPLING_STRATEGIES[acq_strat]
+    sampler_args = {
+        "eval_data": eval_data,
+        "surrogate_data": surrogate_data,
+        "eval_dirs": output_dirs,
+        "minority_class": 1,  # Assuming class 1 is the minority class
+    }
+
+    bias_corrector = (
+        BiasCorrector(N=len(preds), M=max_labels) if acq_strat != "random" else None
+    )
 
     # full dataset stats
-    metrics = evaluate(evaluation_dataset, preds)
-    stats = get_stats(preds, evaluation_dataset["label"])
+    metrics = evaluate(eval_data, preds)
+    to_json(metrics, f"{output_dir}/metrics_full.json")
+    stats = get_stats(preds, eval_data["label"])
+    to_json(stats, f"{output_dir}/stats_full.json")
 
-    with open(f"{output_dir}/metrics_full.json", "w") as f:
-        json.dump(metrics, f, indent=2)
-    with open(f"{output_dir}/stats_full.json", "w") as f:
-        json.dump(stats, f, indent=2)
     # iteratively sample dataset and compute metrics, repeated n_repeats times
-
-    # set max_labels to the minimum of max_labels and the number of predictions
     max_labels = int(max_labels) if max_labels < len(predictions) else len(predictions)
     for _ in tqdm(range(n_repeats)):
         seed = rng.integers(1, 2**32 - 1)  # Generate a random seed
-        sampler_args["sampling_seed"] = seed
+        sampler_args["seed"] = seed
         acq_func = sampler_class(**sampler_args)
         if hasattr(sampler_class, "set_model_preds"):
             acq_func.set_model_preds(predictions)
@@ -79,21 +61,24 @@ def main(
             acq_func.surrogate_pretrain()
 
         metrics = sample_dataset_metrics(
-            evaluation_dataset,
+            eval_data,
             predictions,
             acq_func,
             max_labels=max_labels,
             evaluate_steps=evaluate_steps,
-            bias_corrector=(
-                BiasCorrector(
-                    N=len(preds),
-                    M=max_labels,
-                )
-                if bias_correction
-                else None
-            ),
+            bias_corrector=bias_corrector,
         )
+
         pd.DataFrame(metrics).to_csv(f"{output_dir}/metrics_{seed}.csv", index=False)
+        to_json(
+            {
+                "sample_idx": acq_func.labelled_idx,
+                "sample_prob": acq_func.sample_prob,
+                "dataset_size": len(predictions),
+                "n_labels": max_labels,
+            },
+            f"{output_dir}/sample_{seed}.json",
+        )
 
 
 if __name__ == "__main__":
@@ -180,15 +165,17 @@ if __name__ == "__main__":
         print("saving predictions..")
         np.save(predictions_dir + "/predictions.npy", preds)
 
-    data_dict = {
-        "evaluation_dataset": eval_data,
-        "surrogate_train_dataset": get_train_data_from_exp_dir(exp_dir=args.save_dir),
-    }
+    surrogate_train_data = (
+        get_train_data_from_exp_dir(exp_dir=args.save_dir)
+        if args.acq_strat != "random"
+        else None
+    )
 
     main(
         output_dirs=(output_dir, predictions_dir),
         n_repeats=args.n_repeats,
-        data_dict=data_dict,
+        eval_data=eval_data,
+        surrogate_data=surrogate_train_data,
         acq_strat=args.acq_strat,
         predictions=preds,
         init_seed=args.seed,
