@@ -1,6 +1,7 @@
 import json
 import os
 from glob import glob
+from typing import Any
 
 import joblib
 import numpy as np
@@ -111,9 +112,16 @@ def get_transformers_preds(
             }
         }
     else:
-        data_config = load_yaml(data_config_path)
+        data_config: dict[str, dict[str, Any]] = load_yaml(data_config_path)
         if class_balance != 1.0:
             data_config["data_args"]["balanced"] = False
+
+        if data_config["data_args"].get("class_balance") is not None:
+            err_msg = (
+                f"Selected data config '{data_config_path}' already "
+                "has a class imbalance, please specify balanced data config."
+            )
+            raise ValueError(err_msg)
 
         _, _, test_dataset, meta_data = get_reddit_data(
             **data_config["data_args"],
