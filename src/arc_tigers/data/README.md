@@ -38,12 +38,12 @@ A tuple: (`train_data`, `eval_data`, `test_data`, `meta_data`)
 
 ### How it works:
 
-Loads the appropriate data split based on the setting and target_config.
-Applies class mapping and filtering according to the experiment type.
-Tokenizes the data using the provided tokenizer.
-Optionally balances or imbalances the dataset.
-Splits the training data into train/eval splits.
-Returns the processed datasets and metadata.
+- Loads the appropriate data split based on the setting and target_config.
+- Applies class mapping and filtering according to the experiment type.
+- Tokenizes the data using the provided tokenizer.
+- Optionally balances or imbalances the dataset.
+- Splits the training data into train/eval splits.
+- Returns the processed datasets and metadata.
 
 ### Example usage:
 
@@ -85,7 +85,7 @@ The `class_balance` parameter in get_reddit_data controls whether and how the da
    - No artificial balancing or imbalancing is performed.
    - The class distribution will reflect the original data.
 
-3. When `balanced=False` and `class_balance` is set (e.g., `class_balance=0.1` or c`lass_balance=-0.1`)
+3. When `balanced=False` and `class_balance` is set (e.g., `class_balance=0.1` or `class_balance=-0.1`)
     - The dataset is imbalanced using the `imbalance_binary_dataset` function.
     - The `class_balance` parameter must be a float in the range -1.0 to 1.0 (exclusive of zero).
     - The sign of `class_balance` determines which class is the minority:
@@ -115,6 +115,6 @@ The `class_balance` parameter in get_reddit_data controls whether and how the da
     - This ensures that each split has the desired class distribution according to the `class_balance` parameter.
 
 5. Typical Use Cases
-    - Use `balanced=True` for fair comparison between classes.
+    - Use `balanced=True` for equal comparison between classes.
    - Use `class_balance` to simulate rare event detection or to test model robustness to class imbalance.
     - Leave both unset to use the dataset as-is.
