@@ -1,4 +1,4 @@
-## `configs/experiment`
+## `configs/training`
 
 Here the config `.yaml` files should have five fields:
 

@@ -1,8 +1,6 @@
 import argparse
 import json
 import os
-from collections.abc import Iterable
-from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -13,15 +11,16 @@ from arc_tigers.eval.reddit_eval import get_preds, get_train_data_from_exp_dir
 from arc_tigers.eval.utils import BiasCorrector, evaluate, get_stats
 from arc_tigers.sample.acquisition import (
     AccSampler,
-    AcquisitionFunction,
     DistanceSampler,
     InformationGainSampler,
+    IsolationForestSampler,
+    MinorityClassSampler,
 )
-from arc_tigers.utils import create_dir
+from arc_tigers.utils import create_dirs
 
 
 def main(
-    output_dir,
+    output_dirs,
     n_repeats,
     data_dict,
     acq_strat,
@@ -34,6 +33,9 @@ def main(
     bias_correction = False
 
     rng = np.random.default_rng(init_seed)
+
+    sampler_args = {"data": data_dict, "eval_dirs": output_dirs}
+
     if acq_strat == "distance":
         sampler_class = DistanceSampler
     elif acq_strat == "random_forest_acc":
@@ -42,19 +44,19 @@ def main(
     elif acq_strat == "random_forest_ig":
         sampler_class = InformationGainSampler
         bias_correction = True
+    elif acq_strat == "iForest":
+        sampler_class = IsolationForestSampler
+        bias_correction = True
+    elif acq_strat == "minority_class":
+        sampler_class = MinorityClassSampler
+        bias_correction = True
+        sampler_args["minority_class"] = 1  # Assuming class 1 is the minority class
     else:
         # raise error if acq_strat is not one of the available strategies
         # uses the __str__ method of the sampler classes to get the available strategies
-        err_msg = f"Unknown acquisition strategy: {acq_strat}. Available strategies: "
-        # get the names of the available acquisition strategies and join them
-        err_msg += ", ".join(
-            [
-                strat.name
-                for strat in cast(
-                    Iterable[AcquisitionFunction],
-                    [DistanceSampler, AccSampler, InformationGainSampler],
-                )
-            ]
+        err_msg = (
+            f"Unknown acquisition strategy: {acq_strat}. Available strategies: "
+            "distance, random_forest_acc, random_forest_ig, iForest, minority_class"
         )
         raise ValueError(err_msg)
 
@@ -72,9 +74,8 @@ def main(
     max_labels = int(max_labels) if max_labels < len(predictions) else len(predictions)
     for _ in tqdm(range(n_repeats)):
         seed = rng.integers(1, 2**32 - 1)  # Generate a random seed
-        acq_func = sampler_class(
-            data=data_dict, sampling_seed=seed, eval_dir=output_dir
-        )
+        sampler_args["sampling_seed"] = seed
+        acq_func = sampler_class(**sampler_args)
         if hasattr(sampler_class, "set_model_preds"):
             acq_func.set_model_preds(predictions)
         if hasattr(sampler_class, "surrogate_pretrain"):
@@ -149,16 +150,16 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    output_dir = create_dir(
+    output_dir, predictions_dir, _ = create_dirs(
         save_dir=args.save_dir,
         data_config_path=args.data_config,
         acq_strat=args.acq_strat,
         class_balance=args.class_balance,
     )
 
-    if os.path.isfile(output_dir + "predictions.npy"):
+    if os.path.isfile(predictions_dir + "/predictions.npy"):
         print("loading saved predictions..")
-        preds = np.load(output_dir + "predictions.npy")
+        preds = np.load(predictions_dir + "/predictions.npy")
         _, eval_data = get_preds(
             data_config_path=args.data_config,
             model_config_path=args.model_config,
@@ -178,7 +179,7 @@ if __name__ == "__main__":
             synthetic_args=None,
         )
         print("saving predictions..")
-        np.save(output_dir + "predictions.npy", preds)
+        np.save(predictions_dir + "/predictions.npy", preds)
 
     data_dict = {
         "evaluation_dataset": eval_data,
@@ -186,7 +187,7 @@ if __name__ == "__main__":
     }
 
     main(
-        output_dir=output_dir,
+        output_dirs=(output_dir, predictions_dir),
         n_repeats=args.n_repeats,
         data_dict=data_dict,
         acq_strat=args.acq_strat,

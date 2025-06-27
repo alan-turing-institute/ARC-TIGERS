@@ -44,3 +44,7 @@ fi
 if [ $# -eq 2 ]; then
     python scripts/data_processing/dataset_generation.py "data/reddit_dataset_12/"$1"_rows" $2
 fi
+
+if [ $# -eq 3 ]; then
+    python scripts/data_processing/dataset_generation.py "data/reddit_dataset_12/"$1"_rows" $2 --mode $3
+fi

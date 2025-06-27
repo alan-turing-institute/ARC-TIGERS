@@ -13,9 +13,9 @@ def config_path_to_config_name(config_path: str) -> str:
     return config_path.split("/")[-1].rstrip(".yaml")
 
 
-def create_dir(
+def create_dirs(
     save_dir: str, data_config_path: str, class_balance: float, acq_strat: str
-) -> str:
+) -> tuple[str, str, str]:
     data_config = config_path_to_config_name(data_config_path)
     eval_dir = f"{save_dir}/eval_outputs/{data_config}/"
     if class_balance != 1.0:
@@ -23,10 +23,27 @@ def create_dir(
             f"{eval_dir}/imbalanced_{acq_strat}_sampling_outputs_"
             f"{str(class_balance).replace('.', '')}/"
         )
+        predictions_dir = (
+            f"{save_dir}/eval_outputs/data_cache/{data_config}/predictions/"
+            f"imbalanced_{str(class_balance).replace('.', '')}/"
+        )
+        embeddings_dir = (
+            f"{save_dir}/eval_outputs/data_cache/{data_config}/embeddings/"
+            f"imbalanced_{str(class_balance).replace('.', '')}/"
+        )
     else:
         output_dir = f"{eval_dir}/{acq_strat}_sampling_outputs/"
+        predictions_dir = (
+            f"{save_dir}/eval_outputs/data_cache/{data_config}/predictions/balanced/"
+        )
+        embeddings_dir = (
+            f"{save_dir}/eval_outputs/data_cache/{data_config}/embeddings/balanced/"
+        )
     os.makedirs(output_dir, exist_ok=True)
-    return output_dir
+    os.makedirs(predictions_dir, exist_ok=True)
+    os.makedirs(embeddings_dir, exist_ok=True)
+
+    return output_dir, predictions_dir, embeddings_dir
 
 
 def seed_everything(seed: int) -> None:
