@@ -15,6 +15,8 @@ python scripts/data_processing/dataset_download.py
 ```
 More information can be found in `scripts/data_processing/README.md`
 
+**At this stage, the raw data has been downloaded from the hugginface Datasets page, and we have filtered out the subreddits we don't want**
+
 ### `dataset_generation.py`
 
 This generates the actual dataset, csv files used in our experiments.
@@ -24,7 +26,9 @@ Eg. Generate one-vs-all splits for the "football" configuration, using the 10000
 python scripts/data_processing/dataset_generation.py data/reddit_dataset_12/10000000_rows/ football --mode one-vs-all
 ```
 
-You should now specify data configs which are defined like so:
+**At this stage, the data has from the previous stage been filtered to remove empty rows and '[removed]' or '[deleted]' posts. We then partition the dataset according to a specified split strategy defined in `arc_tigers/data/reddit_data.py`. These splits are then saved to `train.csv` and `test.csv`**
+
+To be used in the next step you should now specify data configs which are defined like so:
 
 ```yaml
 data_name: reddit_dataset_12
@@ -34,6 +38,10 @@ data_args:
   target_config: football
   balanced: True
 ```
+
+The `data_args` component of these configs are passed to [`get_reddit_data`](https://github.com/alan-turing-institute/ARC-TIGERS/blob/30-one-vs-all-classification/src/arc_tigers/data/reddit_data.py#L110) in `arc_tigers/data/reddit_data.py` to load the data. `data_name` is used for naming saved outputs.
+
+For more information on `get_reddit_data` see [`arc_tigers/data/README.md`](https://github.com/alan-turing-institute/ARC-TIGERS/blob/30-one-vs-all-classification/src/arc_tigers/data/README.md).
 
 ## 2. Training models
 
@@ -73,7 +81,7 @@ Where it is saved under the name of the data, the evaluation setting, the data c
   model_kwargs:
     num_labels: 2
   ```
-- In this script data is loaded using the [`get_reddit_data`](https://github.com/alan-turing-institute/ARC-TIGERS/blob/d40b20bc876e31ee58beadbef4f83b18d883366c/src/arc_tigers/data/reddit_data.py#L110) function.
+- In this script data is loaded using the [`get_reddit_data`](https://github.com/alan-turing-institute/ARC-TIGERS/blob/30-one-vs-all-classification/src/arc_tigers/data/reddit_data.py#L110) function.
 
 - Note: The experiment name can be overwritten when running  `train_classifier.py` using an optional argument: `--exp_name`.
 
