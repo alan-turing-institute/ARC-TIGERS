@@ -77,7 +77,7 @@ The `class_balance` parameter in get_reddit_data controls whether and how the da
 
 1. When `balanced=True`
    - The dataset is balanced using the `balance_dataset` function.
-   - This means the number of samples for each class is made equal by either downsampling the majority class or upsampling the minority class (depending on the implementation).
+   - This means the number of samples for each class is made equal by downsampling the majority class.
    - The `class_balance` parameter is ignored in this case.
 
 2. When `balanced=False` and `class_balance=None`
