@@ -30,7 +30,7 @@ def main(
     evaluate_steps,
 ):
     evaluation_dataset = data_dict["evaluation_dataset"]
-    bias_correction = False
+    bias_correction = True
 
     rng = np.random.default_rng(init_seed)
 
@@ -38,18 +38,15 @@ def main(
 
     if acq_strat == "distance":
         sampler_class = DistanceSampler
+        bias_correction = False
     elif acq_strat == "random_forest_acc":
         sampler_class = AccSampler
-        bias_correction = True
     elif acq_strat == "random_forest_ig":
         sampler_class = InformationGainSampler
-        bias_correction = True
     elif acq_strat == "iForest":
         sampler_class = IsolationForestSampler
-        bias_correction = True
     elif acq_strat == "minority_class":
         sampler_class = MinorityClassSampler
-        bias_correction = True
         sampler_args["minority_class"] = 1  # Assuming class 1 is the minority class
     else:
         # raise error if acq_strat is not one of the available strategies
@@ -87,12 +84,14 @@ def main(
             acq_func,
             max_labels=max_labels,
             evaluate_steps=evaluate_steps,
-            bias_corrector=BiasCorrector(
-                N=len(preds),
-                M=max_labels,
-            )
-            if bias_correction
-            else None,
+            bias_corrector=(
+                BiasCorrector(
+                    N=len(preds),
+                    M=max_labels,
+                )
+                if bias_correction
+                else None
+            ),
         )
         pd.DataFrame(metrics).to_csv(f"{output_dir}/metrics_{seed}.csv", index=False)
 
