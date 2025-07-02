@@ -8,7 +8,7 @@ from scipy.spatial.distance import cdist
 from sklearn.ensemble import IsolationForest, RandomForestClassifier
 
 from arc_tigers.eval.utils import softmax
-from arc_tigers.sample.utils import get_distilbert_embeddings
+from arc_tigers.sample.utils import get_mpnet_embeddings
 
 DummyAcqFunc = namedtuple("DummyAcqFunc", ["observed_idx", "remaining_idx", "rng"])
 
@@ -116,7 +116,7 @@ class DistanceSampler(AcquisitionFunction):
         self.rng = np.random.default_rng(seed=sampling_seed)
 
         # Get embeddings for whole dataset
-        self.embeddings = get_distilbert_embeddings(self.eval_data, eval_dirs[1])
+        self.embeddings = get_mpnet_embeddings(self.eval_data, eval_dirs[1])
         self.name = "distance"
 
     def sample(self) -> int:
@@ -208,7 +208,7 @@ class AccSampler(AcquisitionFunction):
         self.embedding_dir = eval_dirs[1]
 
         # Get embeddings for use with RF classifier
-        self.eval_embs = get_distilbert_embeddings(self.eval_data, self.embedding_dir)
+        self.eval_embs = get_mpnet_embeddings(self.eval_data, self.embedding_dir)
         self.rng = np.random.default_rng(seed=sampling_seed)
 
         # initialise surrogate predictions and model
@@ -229,7 +229,7 @@ class AccSampler(AcquisitionFunction):
         self.model_preds = softmax(preds)
 
     def surrogate_pretrain(self):
-        self.train_embs = get_distilbert_embeddings(
+        self.train_embs = get_mpnet_embeddings(
             self.surrogate_train_data,
             self.embedding_dir,
             embedding_savename="surrogate_embeddings",
@@ -349,7 +349,7 @@ class InformationGainSampler(AcquisitionFunction):
         self.embedding_dir = eval_dirs[1]
 
         # Get embeddings for use with surrogate classifier
-        self.eval_embs = get_distilbert_embeddings(self.eval_data, self.embedding_dir)
+        self.eval_embs = get_mpnet_embeddings(self.eval_data, self.embedding_dir)
 
         # initialise surrogate predictions and model
         self.num_classes = len(np.unique(self.eval_data["label"]))
@@ -369,7 +369,7 @@ class InformationGainSampler(AcquisitionFunction):
         self.model_preds = softmax(preds)
 
     def surrogate_pretrain(self):
-        self.train_embs = get_distilbert_embeddings(
+        self.train_embs = get_mpnet_embeddings(
             self.surrogate_train_data,
             self.embedding_dir,
             embedding_savename="surrogate_embeddings",
@@ -463,7 +463,7 @@ class IsolationForestSampler(AcquisitionFunction):
         self.rng = np.random.default_rng(seed=sampling_seed)
         self.eval_data = data["evaluation_dataset"]
         self.embedding_dir = eval_dirs[1]
-        self.embeddings = get_distilbert_embeddings(self.eval_data, self.embedding_dir)
+        self.embeddings = get_mpnet_embeddings(self.eval_data, self.embedding_dir)
         self.name = "isolation_forest_sampler"
 
     def sample(self):
