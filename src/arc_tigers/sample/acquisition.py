@@ -5,8 +5,7 @@ import joblib
 import numpy as np
 from datasets import Dataset
 from scipy.spatial.distance import cdist
-from sklearn.ensemble import IsolationForest
-from sklearn.linear_model import SGDClassifier
+from sklearn.ensemble import IsolationForest, RandomForestClassifier
 
 from arc_tigers.eval.utils import softmax
 from arc_tigers.sample.utils import get_distilbert_embeddings
@@ -209,7 +208,7 @@ class AccSampler(AcquisitionFunction):
         self.embedding_dir = eval_dirs[1]
 
         # Get embeddings for use with RF classifier
-        self.embeddings = get_distilbert_embeddings(self.eval_data, self.embedding_dir)
+        self.eval_embs = get_distilbert_embeddings(self.eval_data, self.embedding_dir)
         self.rng = np.random.default_rng(seed=sampling_seed)
 
         # initialise surrogate predictions and model
@@ -217,8 +216,8 @@ class AccSampler(AcquisitionFunction):
         self.surrogate_preds = np.full(
             (len(self.eval_data), self.num_classes), 1.0 / self.num_classes
         )
-        self.surrogate_model = SGDClassifier(
-            loss="log_loss", random_state=self.rng.integers(1e9)
+        self.surrogate_model = RandomForestClassifier(
+            random_state=self.rng.integers(1e9)
         )
 
         # Placeholder for model predictions (should be set externally)
@@ -230,12 +229,12 @@ class AccSampler(AcquisitionFunction):
         self.model_preds = softmax(preds)
 
     def surrogate_pretrain(self):
-        X_train = get_distilbert_embeddings(
+        self.train_embs = get_distilbert_embeddings(
             self.surrogate_train_data,
             self.embedding_dir,
             embedding_savename="surrogate_embeddings",
         )
-        y_train = np.array(self.surrogate_train_data["label"])
+        self.y_train = np.array(self.surrogate_train_data["label"])
         surrogate_path = os.path.join(
             self.embedding_dir,
             f"pretrained_surrogate_{self.surrogate_model.__class__.__name__}.joblib",
@@ -245,20 +244,26 @@ class AccSampler(AcquisitionFunction):
             self.surrogate_model = joblib.load(surrogate_path)
         else:
             print(f"Pre-training surrogate model and saving to {surrogate_path} ...")
-            self.surrogate_model = self.surrogate_model.fit(X_train, y_train)
+            self.surrogate_model = self.surrogate_model.fit(
+                self.train_embs, self.y_train
+            )
             joblib.dump(self.surrogate_model, surrogate_path)
 
     def update_surrogate(self):
         if len(self.observed_idx) == 0:
             self.surrogate_preds = np.zeros_like(self.surrogate_preds)
             return
-        X_acquired = self.embeddings[np.array(self.observed_idx)]
+        X_acquired = self.eval_embs[np.array(self.observed_idx)]
         y_acquired = np.array(self.eval_data["label"])[np.array(self.observed_idx)]
 
-        self.surrogate_model = self.surrogate_model.partial_fit(X_acquired, y_acquired)
+        self.surrogate_model = self.surrogate_model.fit(
+            np.concat((self.train_embs, X_acquired)),
+            np.concat((self.y_train, y_acquired)),
+        )
+
         # Get surrogate predictions for all samples
         intermediate_surrogate_preds = self.surrogate_model.predict_proba(
-            self.embeddings
+            self.eval_embs
         )
         classes_ = self.surrogate_model.classes_
         # Fill a full array with zeros for all classes
@@ -344,15 +349,15 @@ class InformationGainSampler(AcquisitionFunction):
         self.embedding_dir = eval_dirs[1]
 
         # Get embeddings for use with surrogate classifier
-        self.embeddings = get_distilbert_embeddings(self.eval_data, self.embedding_dir)
+        self.eval_embs = get_distilbert_embeddings(self.eval_data, self.embedding_dir)
 
         # initialise surrogate predictions and model
         self.num_classes = len(np.unique(self.eval_data["label"]))
         self.surrogate_preds = np.full(
             (len(self.eval_data), self.num_classes), 1.0 / self.num_classes
         )
-        self.surrogate_model = SGDClassifier(
-            loss="log_loss", random_state=self.rng.integers(1e9)
+        self.surrogate_model = RandomForestClassifier(
+            random_state=self.rng.integers(1e9)
         )
 
         # Placeholder for model predictions (should be set externally)
@@ -364,12 +369,12 @@ class InformationGainSampler(AcquisitionFunction):
         self.model_preds = softmax(preds)
 
     def surrogate_pretrain(self):
-        X_train = get_distilbert_embeddings(
+        self.train_embs = get_distilbert_embeddings(
             self.surrogate_train_data,
             self.embedding_dir,
             embedding_savename="surrogate_embeddings",
         )
-        y_train = np.array(self.surrogate_train_data["label"])
+        self.y_train = np.array(self.surrogate_train_data["label"])
         surrogate_path = os.path.join(
             self.embedding_dir,
             f"pretrained_surrogate_{self.surrogate_model.__class__.__name__}.joblib",
@@ -379,20 +384,26 @@ class InformationGainSampler(AcquisitionFunction):
             self.surrogate_model = joblib.load(surrogate_path)
         else:
             print(f"Pre-training surrogate model and saving to {surrogate_path} ...")
-            self.surrogate_model = self.surrogate_model.fit(X_train, y_train)
+            self.surrogate_model = self.surrogate_model.fit(
+                self.train_embs, self.y_train
+            )
             joblib.dump(self.surrogate_model, surrogate_path)
 
     def update_surrogate(self):
         if len(self.observed_idx) == 0:
             self.surrogate_preds = np.zeros_like(self.surrogate_preds)
             return
-        X_acquired = self.embeddings[np.array(self.observed_idx)]
+        X_acquired = self.eval_embs[np.array(self.observed_idx)]
         y_acquired = np.array(self.eval_data["label"])[np.array(self.observed_idx)]
 
-        self.surrogate_model = self.surrogate_model.partial_fit(X_acquired, y_acquired)
+        self.surrogate_model = self.surrogate_model.fit(
+            np.concat((self.train_embs, X_acquired)),
+            np.concat((self.y_train, y_acquired)),
+        )
+
         # Get surrogate predictions for all samples
         intermediate_surrogate_preds = self.surrogate_model.predict_proba(
-            self.embeddings
+            self.eval_embs
         )
         classes_ = self.surrogate_model.classes_
         # Fill a full array with zeros for all classes
