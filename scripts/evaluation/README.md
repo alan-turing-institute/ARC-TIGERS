@@ -1,6 +1,6 @@
 # `eval_sampling.py`
 
-This script analyzes and visualizes the results of active learning or random sampling experiments. It uses the `get_metric_stats` function from utils.py to compute statistics (mean, std, quantiles, etc.) for evaluation metrics (accuracy, loss, etc.) as a function of the number of labeled samples. It also generates plots comparing the performance of sampled subsets to the full dataset.
+This script analyzes and visualizes the results of Active Testing or random sampling experiments. It uses the `get_metric_stats` function from utils.py to compute statistics (mean, std, quantiles, etc.) for evaluation metrics (accuracy, loss, etc.) as a function of the number of labeled samples. It also generates plots comparing the performance of sampled subsets to the full dataset.
 
 
 ## Arguments:

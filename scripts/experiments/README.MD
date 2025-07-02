@@ -15,9 +15,9 @@ This script trains a text classifier on Reddit data using HuggingFace Transforme
 - Loads the experiment configuration from YAML.
 - Sets up output directories and logging.
 - Loads the tokenizer and model specified in the config.
-- Loads and preprocesses the Reddit dataset according to the config
+- Loads and preprocesses the Reddit dataset according to the config.
 - Sets up the HuggingFace Trainer with weighted loss (for class imbalance).
-- Trains the model and saves checkpoints, logs, and the final model
+- Trains the model and saves checkpoints, logs, and the final model.
 - Evaluates the model and saves evaluation metrics to a JSON file.
 
 ### Output:
@@ -39,7 +39,7 @@ python train_classifier.py football_one_vs_all_balanced.yaml
 
 # `active_testing.py`
 
-This script runs active testing experiments using various acquisition strategies to iteratively select and label samples from a dataset. It supports the following strategies distance-based, accuracy-based, cross entropy based, isolation forest, and minority class sampling. The script evaluates model performance as more samples are labeled, saving metrics and statistics at each step.
+This script runs active testing experiments using various acquisition strategies to iteratively select and label samples from a dataset. It supports the following strategies: distance-based, accuracy-based, cross entropy based, isolation forest, and minority class sampling. The script evaluates model performance as more samples are labeled, saving metrics and statistics at each step.
 
 ## Arguments:
 

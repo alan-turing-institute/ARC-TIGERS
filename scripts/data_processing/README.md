@@ -44,7 +44,7 @@ python scripts/data_processing/dataset_download.py
 
 ## Notes
 - The script uses streaming mode to avoid loading the entire dataset into memory.
-- Make sure your target_subreddits JSON file contains a list of subreddit names (case-insensitive).
+- Make sure your `target_subreddits` JSON file contains a list of subreddit names (case-insensitive).
 - Output directory is created automatically if it does not exist.
 
 
@@ -65,7 +65,7 @@ This script processes filtered Reddit data and generates train/test splits for d
   - Splitting mode. Options: one-vs-all, data-drift, multi-class.
 
 - `-r` (optional):
-  - Imbalance ratio for the dataset. For example, 0.01 means 1% of the dataset is target classes; 100 means 100 samples are target classes.
+  - Imbalance ratio for the dataset. For example, 0.01 means 1% of the dataset belongs to the target/positive class; 100 means 100 samples belong to the target/positive class.
 
 ### Output:
 
