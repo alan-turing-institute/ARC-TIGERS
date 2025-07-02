@@ -15,11 +15,11 @@ python scripts/data_processing/dataset_download.py
 ```
 More information can be found in `scripts/data_processing/README.md`
 
-**At this stage, the raw data has been downloaded from the hugginface Datasets page, and we have filtered out the subreddits we don't want**
+**At this stage, the raw data has been downloaded from the HuggingFace Datasets page, and we have filtered out the subreddits we don't want**
 
 ### `dataset_generation.py`
 
-This generates the actual dataset, csv files used in our experiments.
+This generates the actual dataset, i.e. the CSV files used in our experiments.
 
 Eg. Generate one-vs-all splits for the "football" configuration, using the 10000000 rows downloaded above:
 ```
@@ -45,7 +45,7 @@ For more information on `get_reddit_data` see [`arc_tigers/data/README.md`](http
 
 ## 2. Training models
 
-This is for training models on the generated datasets, for this you need to pass `train_classifier.py` an experiment config, which is composed of a `data_config` a `model_config` and training arguments:
+This is for training models on the generated datasets, for this you need to pass `train_classifier.py` an experiment config, which is composed of a `data_config`, a `model_config`, and training arguments:
 
 ```
 python scripts/experiments/train_classifier.py configs/experiment/football_one_vs_all_balanced.yaml
@@ -72,7 +72,7 @@ Once your model is trained it will be saved in an `outputs` directory, in an app
 - `outputs/reddit_dataset_12/one-vs-all/football/distilbert-base-uncased/football_distilbert_one_vs_all
 `
 
-Where it is saved under the name of the data, the evaluation setting, the data config,  then the model, and finally the experiment config.
+Where it is saved under the name of the data, the evaluation setting, the data config, then the model, and finally the experiment config.
 
 ### Notes
 - Model configs are defined as such (eg.`distilbert`):
@@ -107,7 +107,7 @@ The outputs are saved similarly to `active_testing.py`.
 
 ## 4. Analysing results
 
-You should now rapidly be approaching your path length limit for your chosen operating system. To make matter worse we will now generate some figures.. saved in another subdirectory.. `figures`.
+You should now rapidly be approaching your path length limit for your chosen operating system. To make matter worse we will now generate some figures... saved in another subdirectory... `figures`.
 
 To get plots/analysis for an individual model you can run `scripts/evaluation/eval_sampling.py`.
 
