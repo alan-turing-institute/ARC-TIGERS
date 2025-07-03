@@ -1,6 +1,6 @@
 import numpy as np
 from datasets import Dataset
-from transformers import PreTrainedTokenizer
+from transformers.tokenization_utils import PreTrainedTokenizer
 
 
 def get_synthetic_data(

@@ -232,10 +232,10 @@ def get_metric_stats(
 
 class BiasCorrector:
     """
-    Implements a bias correction weighting factor for active learning sampling.
+    Implements a bias correction weighting factor for active testing sampling.
 
     The BiasCorrector computes a weighting factor (v_m) for a selected sample
-    during active learning, as described in the formula:
+    during active testing, as described in the formula:
 
         v_m = 1 + (N - M) / (N - m) * (1 / ((N - m + 1) * q_im) - 1)
 

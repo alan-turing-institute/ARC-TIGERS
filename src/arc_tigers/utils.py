@@ -2,6 +2,7 @@ import json
 import os
 import random
 from copy import deepcopy
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -77,7 +78,7 @@ def get_device() -> torch.device:
     return torch.device("cpu")
 
 
-def load_yaml(yaml_file: str) -> dict:
+def load_yaml(yaml_file: str | Path) -> dict:
     """Reads a yaml file and returns a dictionary.
 
     Args:

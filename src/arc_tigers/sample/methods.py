@@ -10,8 +10,8 @@ from arc_tigers.sample.random import RandomSampler
 SAMPLING_STRATEGIES = {
     "random": RandomSampler,
     "distance": DistanceSampler,
-    "random_forest_acc": AccSampler,
-    "random_forest_ig": InformationGainSampler,
-    "iForest": IsolationForestSampler,
+    "acc_sampler": AccSampler,
+    "ig_sampler": InformationGainSampler,
+    "isolation_forest": IsolationForestSampler,
     "minority_class": MinorityClassSampler,
 }

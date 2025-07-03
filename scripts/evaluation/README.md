@@ -26,7 +26,7 @@ This script analyzes and visualizes the results of Active Testing or random samp
 
 ## Example:
 ```
-python eval_sampling.py outputs/reddit_dataset_12/one-vs-all/football/distilbert-base-uncased/football_distilbert_one_vs_all/eval_outputs/football_one_vs_all_balanced/random_forest_ig_sampling_outputs
+python eval_sampling.py outputs/reddit_dataset_12/one-vs-all/football/distilbert-base-uncased/football_distilbert_one_vs_all/eval_outputs/football_one_vs_all_balanced/ig_sampler_sampling_outputs
 ```
 
 ## Notes:

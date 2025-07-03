@@ -1,7 +1,6 @@
 import json
 import os
 from glob import glob
-from typing import Any
 
 import joblib
 import numpy as np
@@ -58,7 +57,7 @@ def get_transformers_preds(
     class_balance: float,
     seed: int,
     preds_exist: bool = False,
-) -> tuple[np.ndarray, Dataset]:
+) -> tuple[np.ndarray | None, Dataset]:
     """
     Get the predictions from a model using the transformers library. This function is
     also used when synthetic data is used. Model weights are loaded from the save_dir
@@ -91,6 +90,7 @@ def get_transformers_preds(
         use_cpu = False
 
     data_config = load_yaml(data_config_path)
+
     if data_config["data_name"] == "synthetic":
         n_samples = data_config["data_args"]["n_rows"]
         negative_samples = int(n_samples / (1 + class_balance))
@@ -106,7 +106,6 @@ def get_transformers_preds(
             }
         }
     else:
-        data_config: dict[str, dict[str, Any]] = load_yaml(data_config_path)
         if class_balance != 1.0:
             data_config["data_args"]["balanced"] = False
 
@@ -124,7 +123,7 @@ def get_transformers_preds(
         )
 
     if preds_exist:
-        return _, test_dataset
+        return None, test_dataset
 
     # Data collator
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)

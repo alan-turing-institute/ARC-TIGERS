@@ -8,7 +8,8 @@ import pyarrow.csv as pv
 from datasets import Dataset, concatenate_datasets
 from numpy.random import Generator
 from tqdm import tqdm
-from transformers import PreTrainedTokenizer
+from transformers.tokenization_utils import PreTrainedTokenizer
+from transformers.tokenization_utils_base import BatchEncoding
 
 from arc_tigers.eval.utils import BiasCorrector, evaluate
 from arc_tigers.sample.acquisition import AcquisitionFunction
@@ -184,7 +185,7 @@ def preprocess_function(
     examples: dict[str, Any],
     tokenizer: PreTrainedTokenizer | None,
     targets: dict[str, int],
-) -> dict[str, Any]:
+) -> dict[str, Any] | BatchEncoding:
     if tokenizer:
         tokenized = tokenizer(examples["text"], padding=True, truncation=True)
     else:

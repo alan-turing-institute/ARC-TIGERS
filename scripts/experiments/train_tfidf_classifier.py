@@ -56,8 +56,7 @@ def main(args):
 
     # load dataset
     train_dataset, eval_dataset, _, _ = get_reddit_data(
-        **data_config["data_args"],
-        tokenizer=None,
+        **data_config["data_args"], tokenizer=None
     )
 
     # Train the model

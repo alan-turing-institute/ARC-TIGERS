@@ -37,14 +37,17 @@ def main(
         "surrogate_data": surrogate_data,
         "eval_dirs": output_dirs,
         "minority_class": 1,  # Assuming class 1 is the minority class
+        "model_preds": predictions,
     }
 
     bias_corrector = (
-        BiasCorrector(N=len(preds), M=max_labels) if acq_strat != "random" else None
+        BiasCorrector(N=len(predictions), M=max_labels)
+        if acq_strat != "random"
+        else None
     )
 
     # full dataset stats
-    metrics = evaluate(eval_data, preds)
+    metrics = evaluate(eval_data, predictions)
     to_json(metrics, f"{output_dir}/metrics_full.json")
     stats = get_stats(preds, eval_data["label"])
     to_json(stats, f"{output_dir}/stats_full.json")
@@ -55,10 +58,6 @@ def main(
         seed = rng.integers(1, 2**32 - 1)  # Generate a random seed
         sampler_args["seed"] = seed
         acq_func = sampler_class(**sampler_args)
-        if hasattr(sampler_class, "set_model_preds"):
-            acq_func.set_model_preds(predictions)
-        if hasattr(sampler_class, "surrogate_pretrain"):
-            acq_func.surrogate_pretrain()
 
         metrics = sample_dataset_metrics(
             eval_data,
@@ -150,7 +149,6 @@ if __name__ == "__main__":
             save_dir=args.save_dir,
             class_balance=args.class_balance,
             seed=args.seed,
-            synthetic_args=None,
             preds_exist=True,
         )
     else:
@@ -160,7 +158,6 @@ if __name__ == "__main__":
             save_dir=args.save_dir,
             class_balance=args.class_balance,
             seed=args.seed,
-            synthetic_args=None,
         )
         print("saving predictions..")
         np.save(predictions_dir + "/predictions.npy", preds)
