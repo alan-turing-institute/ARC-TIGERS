@@ -22,4 +22,8 @@ source /bask/projects/v/vjgo8416-tigers/ARC-TIGERS/.venv/bin/activate
 # change huggingface cache to be in project dir rather than user home
 export HF_HOME="/bask/projects/v/vjgo8416-tigers/hf_cache"
 
-python scripts/experiments/active_testing.py $1 $2 $3 distance --n_repeats 10 --max_labels 500 --seed 321
+# $1 = Data config
+# $2 = Model config
+# $3 = Save dir
+# $4 = Acquisition strategy
+python scripts/experiments/active_testing.py $1 $2 $3 distance --n_repeats 10 --max_labels 500 --seed 321 --class_balance 0.0001

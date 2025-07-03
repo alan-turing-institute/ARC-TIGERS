@@ -38,7 +38,7 @@ def main(
 
     if acq_strat == "distance":
         sampler_class = DistanceSampler
-        bias_correction = False
+        # bias_correction = False
     elif acq_strat == "random_forest_acc":
         sampler_class = AccSampler
     elif acq_strat == "random_forest_ig":
