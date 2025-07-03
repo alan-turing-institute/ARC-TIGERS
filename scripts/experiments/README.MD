@@ -50,7 +50,7 @@ This script runs active testing experiments using various acquisition strategies
 - `<save_dir>`:
   - Directory to save results and outputs.
 - `<acq_strat>`:
-  - Acquisition strategy to use. Options: random, distance, acc_sampler, ig_sampler, isolation_forest, minority_class
+  - Acquisition strategy to use. Options: random, distance, accuracy, info_gain, isolation, minority
 - `--n_repeats`:
   - Number of experiment repetitions.
 - `--max_labels`:
@@ -88,4 +88,4 @@ python sample.py football_one_vs_all_balanced.yaml distilbert.yaml outputs/reddi
 
 ## Notes:
 
-- Acquisition strategies supported: random, distance, acc_sampler, ig_sampler, isolation_forest, minority_class. For reference see `arc_tigers/sample/acquisition.py` and `arc_tigers/sample/random.py`.
+- Acquisition strategies supported: random, distance, accuracy, info_gain, isolation, minority. For reference see `arc_tigers/sample/acquisition.py` and `arc_tigers/sample/random.py`.

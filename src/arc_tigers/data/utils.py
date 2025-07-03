@@ -225,7 +225,7 @@ def sample_dataset_metrics(
     metrics = []
     next_eval_step = evaluate_steps.pop(0)
     for n in tqdm(range(max_labels)):
-        q = sampler.sample()
+        _, q = sampler.sample()
         if bias_corrector is not None:
             bias_corrector.compute_weighting_factor(q_im=q, m=n + 1)
         if (n + 1) == next_eval_step:

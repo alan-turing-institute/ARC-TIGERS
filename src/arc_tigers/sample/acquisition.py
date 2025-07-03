@@ -303,7 +303,7 @@ class AccSampler(SurrogateSampler):
         **kwargs,
     ):
         super().__init__(
-            eval_data, seed, "acc_sampler", embed_dir, model_preds, surrogate_data
+            eval_data, seed, "accuracy", embed_dir, model_preds, surrogate_data
         )
 
     def acquisition_fn(
@@ -337,7 +337,7 @@ class InformationGainSampler(SurrogateSampler):
         **kwargs,
     ):
         super().__init__(
-            eval_data, seed, "ig_sampler", embed_dir, model_preds, surrogate_data
+            eval_data, seed, "info_gain", embed_dir, model_preds, surrogate_data
         )
 
     def acquisition_fn(
@@ -362,7 +362,7 @@ class IsolationForestSampler(AcquisitionFunctionWithEmbeds):
     """
 
     def __init__(self, eval_data: Dataset, seed: int, embed_dir: str, **kwargs):
-        super().__init__(eval_data, seed, "isolation_forest", embed_dir)
+        super().__init__(eval_data, seed, "isolation", embed_dir)
 
     def sample(self) -> tuple[int, float]:
         """
@@ -404,7 +404,7 @@ class MinorityClassSampler(AcquisitionFunction):
         model_preds: np.ndarray,
         **kwargs,
     ):
-        super().__init__(eval_data, seed, "minority_class")
+        super().__init__(eval_data, seed, "minority")
         self.minority_class = minority_class
         self.model_preds = softmax(model_preds)
 

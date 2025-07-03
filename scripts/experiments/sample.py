@@ -13,7 +13,6 @@ from arc_tigers.utils import create_dirs, to_json
 
 
 def main(
-    output_dirs,
     n_repeats,
     eval_data,
     surrogate_data,
@@ -22,6 +21,7 @@ def main(
     init_seed,
     max_labels,
     evaluate_steps,
+    embed_dir,
 ):
     rng = np.random.default_rng(init_seed)
 
@@ -35,16 +35,10 @@ def main(
     sampler_args = {
         "eval_data": eval_data,
         "surrogate_data": surrogate_data,
-        "eval_dirs": output_dirs,
+        "embed_dir": embed_dir,
         "minority_class": 1,  # Assuming class 1 is the minority class
         "model_preds": predictions,
     }
-
-    bias_corrector = (
-        BiasCorrector(N=len(predictions), M=max_labels)
-        if acq_strat != "random"
-        else None
-    )
 
     # full dataset stats
     metrics = evaluate(eval_data, predictions)
@@ -54,11 +48,16 @@ def main(
 
     # iteratively sample dataset and compute metrics, repeated n_repeats times
     max_labels = int(max_labels) if max_labels < len(predictions) else len(predictions)
+
     for _ in tqdm(range(n_repeats)):
         seed = rng.integers(1, 2**32 - 1)  # Generate a random seed
         sampler_args["seed"] = seed
         acq_func = sampler_class(**sampler_args)
-
+        bias_corrector = (
+            BiasCorrector(N=len(predictions), M=max_labels)
+            if acq_strat != "random"
+            else None
+        )
         metrics = sample_dataset_metrics(
             eval_data,
             predictions,
@@ -169,7 +168,6 @@ if __name__ == "__main__":
     )
 
     main(
-        output_dirs=(output_dir, predictions_dir),
         n_repeats=args.n_repeats,
         eval_data=eval_data,
         surrogate_data=surrogate_train_data,
@@ -180,4 +178,5 @@ if __name__ == "__main__":
         evaluate_steps=np.arange(
             args.min_labels, args.max_labels, args.eval_every
         ).tolist(),
+        embed_dir=predictions_dir,
     )

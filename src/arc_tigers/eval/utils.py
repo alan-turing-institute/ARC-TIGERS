@@ -251,30 +251,28 @@ class BiasCorrector:
     over the dataset.
 
     Args:
-        N (int): Total number of samples in the dataset.
-        M (int): Total number of samples to be labelled.
+        N: Total number of samples in the dataset.
+        M: Total number of samples to be labelled.
 
-    Methods:
-        call(q_im, m): Computes the weighting factor for the selected sample.
+    Attributes:
+        v_values: List to store the computed weighting factors for each sample.
     """
 
-    def __init__(self, N, M):
+    def __init__(self, N: int, M: int):
         self.N = N
         self.M = M
-        self.v_values = []
+        self.v_values: list[float] = []
 
-    def compute_weighting_factor(self, q_im, m):
+    def compute_weighting_factor(self, q_im: float, m: int) -> float:
         """
-        Compute the weighting factor v_m for the selected sample.
+        Compute the weighting factor v_m for the selected sample and update v_values.
 
         Args:
-            q_im: The pmf value for the selected sample (float)
-            N: Total number of samples (int)
-            M: Total number of samples to be labelled (int)
-            m: Number of samples labelled so far (int)
+            q_im: The pmf value for the selected sample
+            m: Number of samples labelled so far
 
         Returns:
-            v_m: Weighting factor (float)
+            v_m: Weighting factor
         """
         inner = (1 / ((self.N - m + 1) * q_im)) - 1
         v_m = 1 + ((self.N - self.M) / (self.N - m)) * inner
@@ -288,12 +286,12 @@ class BiasCorrector:
         Apply the weighting factor to all values in the metrics dictionary.
 
         Args:
-            q: The pmf value for the selected sample (float)
-            m: Number of samples labelled so far (int)
+            q: The pmf value for the selected sample
+            m: Number of samples labelled so far
             metrics: Dictionary of metric values to be weighted {metric_name: value}
 
         Returns:
-            dict: Dictionary with weighted metric values.
+            Dictionary with weighted metric values.
         """
 
         weighting = self.compute_weighting_factor(q, m)
