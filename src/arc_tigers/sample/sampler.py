@@ -19,7 +19,6 @@ class Sampler(ABC):
     """
 
     def __init__(self, eval_data: Dataset, seed: int, name: str):
-        """ """
         self.eval_data = eval_data
         self.rng = np.random.default_rng(seed)
         self.name = name
