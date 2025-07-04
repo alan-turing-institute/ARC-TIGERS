@@ -1,13 +1,10 @@
 import argparse
 import os
-from pathlib import Path
 
-from datasets import Dataset, DatasetDict, concatenate_datasets
+from datasets import DatasetDict, concatenate_datasets
 
-from arc_tigers.constants import DATA_DIR
-from arc_tigers.data.reddit_data import DATA_DRIFT_COMBINATIONS, ONE_VS_ALL_COMBINATIONS
+from arc_tigers.data.config import DataConfig
 from arc_tigers.data.utils import hf_train_test_split
-from arc_tigers.utils import load_yaml
 
 
 def n_non_targets_from_imbalance(
@@ -36,15 +33,7 @@ def n_non_targets_from_imbalance(
     return int(n_targets_split * (1 / imbalance_ratio - 1))
 
 
-def process_data(
-    data: Dataset,
-    target_categories: dict[str, list[str]],
-    mode: str,
-    train_imbalance: float | None,
-    test_imbalance: float | None,
-    save_path: str,
-    seed: int,
-):
+def main(config: DataConfig):
     """
     Processes the dataset to create train and test splits based on target categories
     (lists of subreddit names) and specified imbalance ratios, and saves the processed
@@ -62,9 +51,7 @@ def process_data(
         save_path: The path where the processed dataset will be saved.
         seed: Random seed for reproducibility.
     """
-    for split in ["train", "test"]:
-        target_categories[split] = [x.lower() for x in target_categories[split]]
-
+    data = config.get_full_data()
     data = data.select_columns(["text", "label"])
     data = data.rename_column("label", "subreddit")
 
@@ -74,28 +61,35 @@ def process_data(
         return row
 
     data = data.map(clean)
-    data = data.shuffle(seed=seed)
+    data = data.shuffle(seed=config.seed)
 
-    if mode == "one-vs-all":
+    for split in ["train", "test"]:
+        config.target_categories[split] = [
+            x.lower() for x in config.target_categories[split]
+        ]
+
+    if config.task == "one-vs-all":
         # target categories defines the positive class for both the train and test sets
-        targets = data.filter(lambda x: x["subreddit"] in target_categories["train"])
+        targets = data.filter(
+            lambda x: x["subreddit"] in config.target_categories["train"]
+        )
         train_targets, test_targets = hf_train_test_split(
-            targets, test_size=0.5, seed=seed
+            targets, test_size=0.5, seed=config.seed
         )
         non_targets = data.filter(
-            lambda x: x["subreddit"] not in target_categories["train"]
+            lambda x: x["subreddit"] not in config.target_categories["train"]
         )
     else:
         # target categories defines the positive class for train and test separately
         train_targets = data.filter(
-            lambda x: x["subreddit"] in target_categories["train"]
+            lambda x: x["subreddit"] in config.target_categories["train"]
         )
         test_targets = data.filter(
-            lambda x: x["subreddit"] in target_categories["test"]
+            lambda x: x["subreddit"] in config.target_categories["test"]
         )
         non_targets = data.filter(
-            lambda x: x["subreddit"] not in target_categories["train"]
-            and x["subreddit"] not in target_categories["test"]
+            lambda x: x["subreddit"] not in config.target_categories["train"]
+            and x["subreddit"] not in config.target_categories["test"]
         )
 
     # Compute the number of non-target samples for train and test sets, either using the
@@ -106,10 +100,10 @@ def process_data(
     n_total_non_targets = len(non_targets)
 
     n_train_non_targets = n_non_targets_from_imbalance(
-        n_train_targets, train_imbalance, n_total_non_targets, n_total_targets
+        n_train_targets, config.train_imbalance, n_total_non_targets, n_total_targets
     )
     n_test_non_targets = n_non_targets_from_imbalance(
-        n_test_targets, test_imbalance, n_total_non_targets, n_total_targets
+        n_test_targets, config.test_imbalance, n_total_non_targets, n_total_targets
     )
     print(
         f"Train targets: {n_train_targets} | "
@@ -127,10 +121,10 @@ def process_data(
 
     # Get required number of non-target samples for train and test sets
     non_targets, train_non_targets = hf_train_test_split(
-        non_targets, test_size=n_train_non_targets, seed=seed
+        non_targets, test_size=n_train_non_targets, seed=config.seed
     )
     non_targets, test_non_targets = hf_train_test_split(
-        non_targets, test_size=n_test_non_targets, seed=seed
+        non_targets, test_size=n_test_non_targets, seed=config.seed
     )
 
     # add class label
@@ -145,43 +139,22 @@ def process_data(
 
     # concatenate targets with non-targets
     train_data = concatenate_datasets([train_targets, train_non_targets]).shuffle(
-        seed=seed
+        seed=config.seed
     )
     test_data = concatenate_datasets([test_targets, test_non_targets]).shuffle(
-        seed=seed
+        seed=config.seed
     )
-    DatasetDict({"train": train_data, "test": test_data}).save_to_disk(save_path)
-    print(f"Saved: {save_path}")
 
-
-def main(config_path: str):
-    config = load_yaml(config_path)
-
-    data_dir = f"{DATA_DIR}/{config['data_name']}"
-    ds = Dataset.load_from_disk(data_dir)
-
-    if config["setting"] == "one-vs-all":
-        target_categories = ONE_VS_ALL_COMBINATIONS[config["target_config"]]
-    else:
-        target_categories = DATA_DRIFT_COMBINATIONS[config["target_config"]]
-
-    save_name = Path(config_path).name.rstrip(".yaml")
-    save_dir = f"{data_dir}/splits/{save_name}"
-    os.makedirs(save_dir, exist_ok=True)
-
-    process_data(
-        ds,
-        target_categories,
-        config["setting"],
-        config["train_imbalance"],
-        config["test_imbalance"],
-        save_dir,
-        config["seed"],
+    os.makedirs(config.splits_dir, exist_ok=True)
+    DatasetDict({"train": train_data, "test": test_data}).save_to_disk(
+        config.splits_dir
     )
+    print(f"Saved: {config.splits_dir}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate dataset")
     parser.add_argument("data_config", type=str, help="Path to the data config file")
     args = parser.parse_args()
-    main(args.data_config)
+    config = DataConfig.from_path(args.data_config)
+    main(config)
