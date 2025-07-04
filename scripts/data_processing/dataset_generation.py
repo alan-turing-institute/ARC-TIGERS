@@ -6,14 +6,8 @@ from datasets import Dataset, DatasetDict, concatenate_datasets
 
 from arc_tigers.constants import DATA_DIR
 from arc_tigers.data.reddit_data import DATA_DRIFT_COMBINATIONS, ONE_VS_ALL_COMBINATIONS
+from arc_tigers.data.utils import hf_train_test_split
 from arc_tigers.utils import load_yaml
-
-
-def train_test_split(dataset: Dataset, **split_kwargs) -> tuple[Dataset, Dataset]:
-    """Splits a dataset into train and test sets, returning them as a tuple rather than
-    a dict like the default HF datasets `train_test_split` method."""
-    split = dataset.train_test_split(**split_kwargs)
-    return split["train"], split["test"]
 
 
 def n_non_targets_from_imbalance(
@@ -72,6 +66,7 @@ def process_data(
         target_categories[split] = [x.lower() for x in target_categories[split]]
 
     data = data.select_columns(["text", "label"])
+    data = data.rename_column("label", "subreddit")
 
     def clean(row):
         row["text"] = row["text"].replace("\n", " ")
@@ -83,20 +78,24 @@ def process_data(
 
     if mode == "one-vs-all":
         # target categories defines the positive class for both the train and test sets
-        targets = data.filter(lambda x: x["label"] in target_categories["train"])
-        train_targets, test_targets = train_test_split(
+        targets = data.filter(lambda x: x["subreddit"] in target_categories["train"])
+        train_targets, test_targets = hf_train_test_split(
             targets, test_size=0.5, seed=seed
         )
         non_targets = data.filter(
-            lambda x: x["label"] not in target_categories["train"]
+            lambda x: x["subreddit"] not in target_categories["train"]
         )
     else:
         # target categories defines the positive class for train and test separately
-        train_targets = data.filter(lambda x: x["label"] in target_categories["train"])
-        test_targets = data.filter(lambda x: x["label"] in target_categories["test"])
+        train_targets = data.filter(
+            lambda x: x["subreddit"] in target_categories["train"]
+        )
+        test_targets = data.filter(
+            lambda x: x["subreddit"] in target_categories["test"]
+        )
         non_targets = data.filter(
-            lambda x: x["label"] not in target_categories["train"]
-            and x["label"] not in target_categories["test"]
+            lambda x: x["subreddit"] not in target_categories["train"]
+            and x["subreddit"] not in target_categories["test"]
         )
 
     # Compute the number of non-target samples for train and test sets, either using the
@@ -127,11 +126,21 @@ def process_data(
         raise ValueError(msg)
 
     # Get required number of non-target samples for train and test sets
-    non_targets, train_non_targets = train_test_split(
+    non_targets, train_non_targets = hf_train_test_split(
         non_targets, test_size=n_train_non_targets, seed=seed
     )
-    non_targets, test_non_targets = train_test_split(
+    non_targets, test_non_targets = hf_train_test_split(
         non_targets, test_size=n_test_non_targets, seed=seed
+    )
+
+    # add class label
+    train_targets = train_targets.add_column(name="label", column=[1] * n_train_targets)
+    train_non_targets = train_non_targets.add_column(
+        name="label", column=[0] * n_train_non_targets
+    )
+    test_targets = test_targets.add_column(name="label", column=[1] * n_test_targets)
+    test_non_targets = test_non_targets.add_column(
+        name="label", column=[0] * n_test_non_targets
     )
 
     # concatenate targets with non-targets
