@@ -1,15 +1,21 @@
-import glob
-import json
 import os
 
-import pandas as pd
-from tqdm import tqdm
+from datasets import Dataset, DatasetDict, concatenate_datasets
 
+from arc_tigers.constants import DATA_DIR
 from arc_tigers.data.reddit_data import DATA_DRIFT_COMBINATIONS, ONE_VS_ALL_COMBINATIONS
-from arc_tigers.data.utils import clean_row, flag_row, is_valid_row
 
 
-def process_data(data, target_categories, args, save_path, shard_id=None):
+def process_data(
+    data: Dataset,
+    target_categories,
+    mode,
+    train_imbalance,
+    test_imbalance,
+    save_path,
+    seed,
+    sort_by_length=True,
+):
     """
     Processes a list of reddit data rows and generates train and test splits
     based on the provided target categories.
@@ -27,91 +33,96 @@ def process_data(data, target_categories, args, save_path, shard_id=None):
           filenames). If None, outputs are named 'train.csv' and 'test.csv'.
     """
 
-    train_data_targets = []
-    test_data_targets = []
-    non_targets = [[], []]
+    for split in ["train", "test"]:
+        target_categories[split] = [x.lower() for x in target_categories[split]]
 
-    for row_index, row in enumerate(tqdm(data)):
-        if flag_row(row):
-            continue
-        if args.mode == "one-vs-all":
-            # Split target classes evenly between train and test
-            if row["communityName"] in target_categories["train"]:
-                # Alternate assignment for even split
-                if row_index % 2 == 0:
-                    train_data_targets.append(clean_row(row))
-                else:
-                    test_data_targets.append(clean_row(row))
-            else:
-                non_targets[row_index % 2].append(clean_row(row))
-        else:
-            if row["communityName"] in target_categories["train"]:
-                train_data_targets.append(clean_row(row))
-            elif row["communityName"] in target_categories["test"]:
-                test_data_targets.append(clean_row(row))
-            else:
-                non_targets[row_index % 2].append(clean_row(row))
+    data = data.select_columns(["text", "label"])
+
+    def clean(row):
+        row["text"] = row["text"].replace("\n", " ")
+        row["len"] = len(row["text"])
+        return row
+
+    data = data.map(clean)
+
+    # sort by length or shuffle
+    data = data.sort("len", reverse=True) if sort_by_length else data.shuffle(seed=seed)
+
+    if mode == "one-vs-all":
+        targets = data.filter(lambda x: x["label"] in target_categories["train"])
+        target_split = targets.train_test_split(test_size=0.5, seed=seed)
+        train_targets = target_split["train"]
+        test_targets = target_split["test"]
+        non_targets = data.filter(
+            lambda x: x["label"] not in target_categories["train"]
+        )
+    else:
+        train_targets = data.filter(lambda x: x["label"] in target_categories["train"])
+        test_targets = data.filter(lambda x: x["label"] in target_categories["test"])
+        non_targets = data.filter(
+            lambda x: x["label"] not in target_categories["train"]
+            and x["label"] not in target_categories["test"]
+        )
 
     # Imbalance the dataset
-    if args.r is not None:
-        imbalance_ratio = float(args.r)
-        if imbalance_ratio > 1:
-            n_targets = int(imbalance_ratio)
-        else:
-            n_targets = int(len(non_targets[0]) * imbalance_ratio)
-        n_train_targets = n_targets
-        n_test_targets = n_targets
+    if train_imbalance is not None:
+        n_train_non_targets = int(len(train_targets) * (1 / train_imbalance - 1))
     else:
-        n_train_targets = len(train_data_targets)
-        n_test_targets = len(test_data_targets)
+        n_train_non_targets = int(
+            len(non_targets)
+            * (len(train_targets) / (len(train_targets) + len(test_targets)))
+        )
+    if test_imbalance is not None:
+        n_test_non_targets = int(len(test_targets) * (1 / test_imbalance - 1))
+    else:
+        n_test_non_targets = int(
+            len(non_targets)
+            * (len(test_targets) / (len(train_targets) + len(test_targets)))
+        )
 
-    # Filter out invalid rows
-    train_targets_clean = [
-        r for r in train_data_targets[:n_train_targets] if is_valid_row(r)
-    ]
-    test_targets_clean = [
-        r for r in test_data_targets[:n_test_targets] if is_valid_row(r)
-    ]
-    train_non_targets_clean = [r for r in non_targets[0] if is_valid_row(r)]
-    test_non_targets_clean = [r for r in non_targets[1] if is_valid_row(r)]
+    print(
+        f"Train targets: {len(train_targets)} | "
+        f"Test targets: {len(test_targets)} | "
+        f"Train non-targets: {n_train_non_targets} | "
+        f"Test non-targets: {n_test_non_targets} |"
+        f"Total non-targets: {len(non_targets)}"
+    )
 
-    # sorr the data by length to get the most informative samples first
-    train_targets_df = pd.DataFrame.from_dict(train_targets_clean).sort_values(
-        "len", ascending=False, inplace=False
+    if n_train_non_targets + n_test_non_targets > len(non_targets):
+        msg = (
+            "The requested imbalance ratio is too high, not enough non-target samples "
+            "available."
+        )
+        raise ValueError(msg)
+
+    non_target_split = non_targets.train_test_split(
+        test_size=n_train_non_targets, seed=seed
     )
-    test_targets_df = pd.DataFrame.from_dict(test_targets_clean).sort_values(
-        "len", ascending=False, inplace=False
+    non_targets = non_target_split["train"]
+    train_non_targets = non_target_split["test"]
+    print(train_targets)
+    print(train_non_targets)
+
+    non_target_split = non_targets.train_test_split(
+        test_size=n_test_non_targets, seed=seed
     )
-    train_non_targets_df = pd.DataFrame.from_dict(train_non_targets_clean).sort_values(
-        "len", ascending=False, inplace=False
-    )
-    test_non_targets_df = pd.DataFrame.from_dict(test_non_targets_clean).sort_values(
-        "len", ascending=False, inplace=False
-    )
+    non_targets = non_target_split["train"]
+    test_non_targets = non_target_split["test"]
 
     # concatenate targets with non-targets
-    train_data = pd.concat([train_targets_df, train_non_targets_df])
-    test_data = pd.concat([test_targets_df, test_non_targets_df])
-
-    # if using sharding save data to corresponding shard id
-    if shard_id is not None:
-        train_csv = f"{save_path}/train_shard_{shard_id}.csv"
-        test_csv = f"{save_path}/test_shard_{shard_id}.csv"
-    # otherwise save to train.csv and test.csv
-    else:
-        train_csv = f"{save_path}/train.csv"
-        test_csv = f"{save_path}/test.csv"
-
-    train_data.to_csv(train_csv, index=False)
-    test_data.to_csv(test_csv, index=False)
-    print(
-        f"Shard {shard_id if shard_id is not None else ''}: "
-        f"Train data: {len(train_data)} | Test data: {len(test_data)}"
+    train_data = concatenate_datasets([train_targets, train_non_targets]).shuffle(
+        seed=seed
     )
-    print(f"Saved: {train_csv}, {test_csv}")
+    test_data = concatenate_datasets([test_targets, test_non_targets]).shuffle(
+        seed=seed
+    )
+    DatasetDict({"train": train_data, "test": test_data}).save_to_disk(save_path)
+    print(f"Saved: {save_path}")
 
 
 def main(args):
+    ds = Dataset.load_from_disk(args.data_dir)
+
     if args.mode == "one-vs-all":
         target_categories = ONE_VS_ALL_COMBINATIONS[args.target_config]
     else:
@@ -125,28 +136,15 @@ def main(args):
     save_path = f"{save_dir}/splits/{args.target_config}_{args.mode}/"
     os.makedirs(save_path, exist_ok=True)
 
-    # check for shards
-    if not os.path.isdir(args.data_dir):
-        err_msg = f"{args.data_dir} does not exist"
-        raise FileNotFoundError(err_msg)
-
-    shard_files = sorted(
-        glob.glob(os.path.join(args.data_dir, "filtered_rows_shard_*.json"))
+    process_data(
+        ds,
+        target_categories,
+        args.mode,
+        args.train_imbalance,
+        args.test_imbalance,
+        save_path,
+        args.seed,
     )
-    noshards_filename = f"{args.data_dir}/filtered_rows.json"
-    if len(shard_files) > 0:
-        for i, shard_file in enumerate(shard_files):
-            with open(shard_file) as f:
-                data = json.load(f)
-            process_data(data, target_categories, args, save_path, shard_id=i)
-
-    elif os.path.isfile(noshards_filename):
-        with open(noshards_filename) as f:
-            data = json.load(f)
-            process_data(data, target_categories, args, save_path)
-    else:
-        err_msg = f"Error: '{args.data_dir}' does not contain data files"
-        raise ValueError(err_msg)
 
 
 if __name__ == "__main__":
@@ -156,7 +154,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "data_dir",
         type=str,
-        default="data/reddit_dataset_12/10000000_rows/",
+        default=f"{DATA_DIR}/reddit_dataset_12",
         help="Path to the data file or directory containing shards",
     )
     parser.add_argument(
@@ -175,11 +173,23 @@ if __name__ == "__main__":
         help="Splitting mode: 'data-drift', 'one-vs-all, or 'multi-class''.",
     )
     parser.add_argument(
-        "-r",
-        default=None,
-        help="Imbalance ratio for the dataset. provide a float or int, "
-        "where 0.01 means 1% of the dataset is target classes. Int values are also "
-        "accepted, where 100 means 100 samples are the target classes.",
+        "--train_imbalance",
+        type=float,
+        help=(
+            "Imbalance ratio for the train dataset, 0.01 means 1% of the dataset is "
+            "target classes."
+        ),
+    )
+    parser.add_argument(
+        "--test_imbalance",
+        type=float,
+        help=(
+            "Imbalance ratio for the test dataset, 0.01 means 1% of the dataset is "
+            "target classes."
+        ),
+    )
+    parser.add_argument(
+        "--seed", default=42, help="Random seed for splitting and sampling."
     )
     args = parser.parse_args()
     main(args)

@@ -1,22 +1,16 @@
 import argparse
 import json
-import os
 
-from datasets import load_dataset
-from tqdm import tqdm
+from datasets import Dataset, IterableDataset, load_dataset
 
 from arc_tigers.constants import DATA_DIR
-from arc_tigers.utils import to_json
 
 
-def main(args):
-    dataset_name = args.dataset_name
-    max_rows = args.max_rows
-    target_subreddits = args.target_subreddits
-    sharding = args.sharding
-
+def main(
+    dataset_name: str, max_rows: int, target_subreddits: str, seed: int, min_length: int
+):
     # Load the dataset in streaming mode to avoid downloading the entire dataset
-    unfiltered = load_dataset(dataset_name, streaming=True)["train"]
+    iter_ds: IterableDataset = load_dataset(dataset_name, streaming=True)["train"]
 
     # Load the target subreddits
     with open(target_subreddits) as file:
@@ -26,51 +20,23 @@ def main(args):
             for placeholder_subreddit in placeholder_subreddits
         ]
 
-    # Filter the dataset
-    ds = unfiltered.filter(
-        lambda example: example["communityName"].lower() in selected_subreddits
+    # Only keep requested subreddits and filter by minimum length
+    iter_ds = iter_ds.filter(
+        lambda x: len(x["text"]) >= min_length and x["label"] in selected_subreddits
     )
-    # Process the dataset
-    if target_subreddits == "data/top_subreddits.json":
-        dataset_name_out = dataset_name.split("/")[-1]
+
+    # Get max_rows rows from the dataset, shuffling first
+    iter_ds = iter_ds.shuffle(seed=seed)
+    iter_ds = iter_ds.take(max_rows)
+    ds = Dataset.from_generator(lambda: (yield from iter_ds), features=iter_ds.features)
+
+    # Save the dataset
+    if target_subreddits.endswith("top_subreddits.json"):
+        save_path = f"{DATA_DIR}/{dataset_name.split('/')[-1]}"
     else:
-        dataset_name_out = target_subreddits.split("/")[-1].rstrip(".json")
+        save_path = f"{DATA_DIR}/{target_subreddits.split('/')[-1].rstrip('.json')}"
 
-    # Create output directory
-    output_dir = f"{DATA_DIR}/{dataset_name_out}/{max_rows}_rows/"
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Save the filtered data to JSON files
-
-    data = []
-    # If shard_size is None or 0, process without sharding
-    if not sharding:
-        for i, example in enumerate(tqdm(ds, desc="Loading dataset", total=max_rows)):
-            data.append(example)
-            if i + 1 >= max_rows:
-                break
-        save_pth = f"{output_dir}/filtered_rows.json"
-        to_json(data, save_pth)
-        print(f"All data saved to {save_pth}")
-        return
-
-    # orhterwise save the filtered data to individual JSON files
-    shard_size = int(min(5000000, max_rows // 10))
-    shard_idx = 0
-    for i, example in enumerate(tqdm(ds, desc="Loading dataset", total=max_rows)):
-        data.append(example)
-        # if the current shard is full or we have reached the max_rows, save the shard
-        if (i + 1) % shard_size == 0 or i + 1 == max_rows:
-            # Save the current shard to a JSON file
-            save_pth = f"{output_dir}/filtered_rows_shard_{shard_idx}.json"
-            to_json(data, save_pth)
-            print(f"Shard {shard_idx} saved to {save_pth}")
-            # Reset the data list for the next shard
-            data = []
-            shard_idx += 1
-        if i + 1 >= max_rows:
-            break
-    return
+    ds.save_to_disk(save_path)
 
 
 if __name__ == "__main__":
@@ -87,15 +53,27 @@ if __name__ == "__main__":
     parser.add_argument(
         "--target_subreddits",
         type=str,
-        default="data/top_subreddits.json",
+        default=f"{DATA_DIR}/top_subreddits.json",
         help="Optional: Path to a JSON file containing a list of target subreddits.",
     )
     parser.add_argument(
-        "--sharding",
+        "--min_length",
         type=int,
-        default=False,
-        help="Optional: Is data sharding going to be used.",
+        default=30,
+        help="Optional: Minimum length of posts/comments to keep, in characters.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Optional: Random seed for shuffling.",
     )
     args = parser.parse_args()
 
-    main(args)
+    main(
+        args.dataset_name,
+        args.max_rows,
+        args.target_subreddits,
+        args.seed,
+        args.min_length,
+    )

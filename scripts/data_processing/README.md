@@ -1,6 +1,6 @@
 # `dataset_download.py`
 
-This script downloads a Reddit dataset (via HuggingFace Datasets), filters it to include only specified subreddits, and saves the filtered data as JSON files. It supports optional sharding for large datasets.
+This script downloads a Reddit dataset (via HuggingFace Datasets), filters it to include only specified subreddits, and saves a subset of rows from specified sub-reddits.
 
 ## Usage
 ### Arguments
@@ -13,18 +13,11 @@ This script downloads a Reddit dataset (via HuggingFace Datasets), filters it to
 - `--target_subreddits (str, default: top_subreddits.json)`:
     - Path to a JSON file containing a list of target subreddits.
 
-- `--sharding (int, default: False)`:
-  - If set to a nonzero value, the filtered data will be split into shards (files of up to 5,000,000 rows or 1/10th of max_rows).
+- `--seed (int, default: 42)`:
+  - Random seed for data shuffling.
 
 ### Output
-The filtered data will be saved in:
-`DATA_DIR/<dataset_name_out>/<max_rows>_rows/`
-
-If sharding is off:
-All data is saved to `filtered_rows.json`
-
-If sharding is on:
-Data is split into multiple files: `filtered_rows_shard_0.json`, `filtered_rows_shard_1.json`, etc...
+The filtered data will be saved in: `DATA_DIR/<dataset_name_out>/<max_rows>_rows/`, where `<dataset_name_out>` is `reddit_dataset_12` by default.
 
 ### Example
 Download 1,000,000 rows from the default dataset, filtering for subreddits in top_subreddits.json, and save as a single file:
