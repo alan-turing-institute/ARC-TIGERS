@@ -11,6 +11,7 @@ class Sampler(ABC):
     Args:
         eval_data: The dataset to sample from.
         seed: The random seed for sampling. If None, a random seed will be used.
+        name: Name of the sampler
 
     Properties:
         labelled_idx: Indices of the samples that have been labelled.
