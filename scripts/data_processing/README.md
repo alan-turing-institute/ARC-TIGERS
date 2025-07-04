@@ -43,41 +43,21 @@ python scripts/data_processing/dataset_download.py
 
 # `dataset_generation.py`
 
-This script processes filtered Reddit data and generates train/test splits for different experimental settings (one-vs-all, data-drift, multi-class). It supports both single JSON files and sharded datasets.
+This script processes filtered Reddit data and generates train/test splits for different experimental settings (one-vs-all, data-drift, multi-class) and levels of imbalance.
 
 ## Usage
 
 ### Arguments:
 
-- `data_dir` (required):
-  - Path to the data directory or JSON file containing filtered Reddit data.
-  -
-- `target_config` (required): The target configuration to use for the split. Options include: sport, american_football, ami, news, advice.
-
-- `--mode` (default: `one-vs-all`):
-  - Splitting mode. Options: one-vs-all, data-drift, multi-class.
-
-- `-r` (optional):
-  - Imbalance ratio for the dataset. For example, 0.01 means 1% of the dataset belongs to the target/positive class; 100 means 100 samples belong to the target/positive class.
+- `data_config` (required):
+  - Path to the data config to use.
 
 ### Output:
 
-Train and test splits are saved in: splits/<target_config>_<mode>/train.csv and test.csv (or as sharded files if input is sharded).
+Train and test splits are saved in: <dataset_name>/splits/<data_config_name>.
 
 Example usage:
 
-Generate one-vs-all splits for the "football" configuration:
 ```
-python dataset_generation.py data/reddit_dataset_12/10000000_rows/ football --mode one-vs-all
+python dataset_generation.py configs/data/football_one_vs_all_1_in_10.yaml
 ```
-
-Generate data-drift splits for the "news" configuration:
-```
-python dataset_generation.py data/reddit_dataset_12/10000000_rows/ news --mode data-drift
-```
-
-## Notes:
-
-- The script automatically detects whether the input is a directory of shards or a single JSON file.
-- Output directories are created automatically.
-- For available target_config options and more details, see the code and comments in `src/arc_tigers/data/reddit_data.py`.

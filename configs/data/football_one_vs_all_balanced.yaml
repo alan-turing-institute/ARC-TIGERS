@@ -1,6 +1,6 @@
 data_name: reddit_dataset_12
-data_args:
-  n_rows: 15000000
-  setting: one-vs-all
-  target_config: football
-  balanced: True
+setting: one-vs-all
+target_config: football
+train_imbalance: 0.5
+test_imbalance: 0.5
+seed: 42
