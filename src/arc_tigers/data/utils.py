@@ -17,6 +17,13 @@ from arc_tigers.sample.acquisition import AcquisitionFunction
 EXPECTED_KEYS = {"text", "label", "len"}
 
 
+def hf_train_test_split(dataset: Dataset, **split_kwargs) -> tuple[Dataset, Dataset]:
+    """Splits a dataset into train and test sets, returning them as a tuple rather than
+    a dict like the default HF datasets `train_test_split` method."""
+    split = dataset.train_test_split(**split_kwargs)
+    return split["train"], split["test"]
+
+
 def is_valid_row(row):
     # Check the row is a dictionary and contains the expected keys
     return isinstance(row, dict) and EXPECTED_KEYS.issubset(row.keys())
@@ -184,13 +191,11 @@ def get_target_mapping(
 def preprocess_function(
     examples: dict[str, Any],
     tokenizer: PreTrainedTokenizer | None,
-    targets: dict[str, int],
 ) -> dict[str, Any] | BatchEncoding:
     if tokenizer:
         tokenized = tokenizer(examples["text"], padding=True, truncation=True)
     else:
         tokenized = examples
-    tokenized["label"] = [targets.get(label, 0) for label in examples["label"]]
     return tokenized
 
 

@@ -1,185 +1,187 @@
-import glob
-import json
+import argparse
 import os
+from pathlib import Path
 
-import pandas as pd
-from tqdm import tqdm
+from datasets import Dataset, DatasetDict, concatenate_datasets
 
+from arc_tigers.constants import DATA_DIR
 from arc_tigers.data.reddit_data import DATA_DRIFT_COMBINATIONS, ONE_VS_ALL_COMBINATIONS
-from arc_tigers.data.utils import clean_row, flag_row, is_valid_row
+from arc_tigers.data.utils import hf_train_test_split
+from arc_tigers.utils import load_yaml
 
 
-def process_data(data, target_categories, args, save_path, shard_id=None):
+def n_non_targets_from_imbalance(
+    n_targets_split: int,
+    imbalance_ratio: float | None,
+    total_non_targets: int,
+    total_targets: int,
+) -> int:
     """
-    Processes a list of reddit data rows and generates train and test splits
-    based on the provided target categories.
-
-    This function can be used for both single large JSON files and individual shards.
-    It separates rows into train and test sets according to the subreddit, applies
-    optional class imbalance, and saves the resulting splits as CSV files.
+    Computes the number of non-target samples needed to achieve the specified imbalance
+    ratio in a dataset with a given number of target samples and total non-target
+    samples.
 
     Args:
-        data (list): List of reddit data rows (dicts) to process.
-        target_categories (dict): Dictionary with 'train' and 'test' subreddit lists.
-        args (argparse.Namespace): Arguments including optional imbalance ratio.
-        save_path (str): Directory where output CSVs will be saved.
-        shard_id (int, optional): If processing a shard, the shard index (used in output
-          filenames). If None, outputs are named 'train.csv' and 'test.csv'.
+        n_targets (int): Number of target samples.
+        imbalance_ratio (float): Desired imbalance ratio (e.g., 0.01 for 1%).
+        total_non_targets (int): Total number of non-target samples available.
+
+    Returns:
+        int: Number of non-target samples needed.
     """
+    if imbalance_ratio is None:  # preserve natural imbalance
+        return int(total_non_targets * (n_targets_split / total_targets))
 
-    train_data_targets = []
-    test_data_targets = []
-    non_targets = [[], []]
+    # calculate the number of non-targets needed to achieve the imbalance ratio
+    return int(n_targets_split * (1 / imbalance_ratio - 1))
 
-    for row_index, row in enumerate(tqdm(data)):
-        if flag_row(row):
-            continue
-        if args.mode == "one-vs-all":
-            # Split target classes evenly between train and test
-            if row["communityName"] in target_categories["train"]:
-                # Alternate assignment for even split
-                if row_index % 2 == 0:
-                    train_data_targets.append(clean_row(row))
-                else:
-                    test_data_targets.append(clean_row(row))
-            else:
-                non_targets[row_index % 2].append(clean_row(row))
-        else:
-            if row["communityName"] in target_categories["train"]:
-                train_data_targets.append(clean_row(row))
-            elif row["communityName"] in target_categories["test"]:
-                test_data_targets.append(clean_row(row))
-            else:
-                non_targets[row_index % 2].append(clean_row(row))
 
-    # Imbalance the dataset
-    if args.r is not None:
-        imbalance_ratio = float(args.r)
-        if imbalance_ratio > 1:
-            n_targets = int(imbalance_ratio)
-        else:
-            n_targets = int(len(non_targets[0]) * imbalance_ratio)
-        n_train_targets = n_targets
-        n_test_targets = n_targets
+def process_data(
+    data: Dataset,
+    target_categories: dict[str, list[str]],
+    mode: str,
+    train_imbalance: float | None,
+    test_imbalance: float | None,
+    save_path: str,
+    seed: int,
+):
+    """
+    Processes the dataset to create train and test splits based on target categories
+    (lists of subreddit names) and specified imbalance ratios, and saves the processed
+    dataset to the specified path.
+
+    Args:
+        data: The dataset to process.
+        target_categories: Dictionary with keys "train" and "test" containing lists of
+            target categories (subreddit names) for each split.
+        mode: The evaluation setting, either "one-vs-all" or "data-drift", or "binary"
+        train_imbalance: The desired imbalance ratio for the training set, or None to
+            preserve the natural imbalance.
+        test_imbalance: The desired imbalance ratio for the test set, or None to
+            preserve the natural imbalance.
+        save_path: The path where the processed dataset will be saved.
+        seed: Random seed for reproducibility.
+    """
+    for split in ["train", "test"]:
+        target_categories[split] = [x.lower() for x in target_categories[split]]
+
+    data = data.select_columns(["text", "label"])
+    data = data.rename_column("label", "subreddit")
+
+    def clean(row):
+        row["text"] = row["text"].replace("\n", " ")
+        row["len"] = len(row["text"])
+        return row
+
+    data = data.map(clean)
+    data = data.shuffle(seed=seed)
+
+    if mode == "one-vs-all":
+        # target categories defines the positive class for both the train and test sets
+        targets = data.filter(lambda x: x["subreddit"] in target_categories["train"])
+        train_targets, test_targets = hf_train_test_split(
+            targets, test_size=0.5, seed=seed
+        )
+        non_targets = data.filter(
+            lambda x: x["subreddit"] not in target_categories["train"]
+        )
     else:
-        n_train_targets = len(train_data_targets)
-        n_test_targets = len(test_data_targets)
+        # target categories defines the positive class for train and test separately
+        train_targets = data.filter(
+            lambda x: x["subreddit"] in target_categories["train"]
+        )
+        test_targets = data.filter(
+            lambda x: x["subreddit"] in target_categories["test"]
+        )
+        non_targets = data.filter(
+            lambda x: x["subreddit"] not in target_categories["train"]
+            and x["subreddit"] not in target_categories["test"]
+        )
 
-    # Filter out invalid rows
-    train_targets_clean = [
-        r for r in train_data_targets[:n_train_targets] if is_valid_row(r)
-    ]
-    test_targets_clean = [
-        r for r in test_data_targets[:n_test_targets] if is_valid_row(r)
-    ]
-    train_non_targets_clean = [r for r in non_targets[0] if is_valid_row(r)]
-    test_non_targets_clean = [r for r in non_targets[1] if is_valid_row(r)]
+    # Compute the number of non-target samples for train and test sets, either using the
+    # requested imbalance ratio or preserving the natural imbalance in the dataset.
+    n_train_targets = len(train_targets)
+    n_test_targets = len(test_targets)
+    n_total_targets = n_train_targets + n_test_targets
+    n_total_non_targets = len(non_targets)
 
-    # sorr the data by length to get the most informative samples first
-    train_targets_df = pd.DataFrame.from_dict(train_targets_clean).sort_values(
-        "len", ascending=False, inplace=False
+    n_train_non_targets = n_non_targets_from_imbalance(
+        n_train_targets, train_imbalance, n_total_non_targets, n_total_targets
     )
-    test_targets_df = pd.DataFrame.from_dict(test_targets_clean).sort_values(
-        "len", ascending=False, inplace=False
+    n_test_non_targets = n_non_targets_from_imbalance(
+        n_test_targets, test_imbalance, n_total_non_targets, n_total_targets
     )
-    train_non_targets_df = pd.DataFrame.from_dict(train_non_targets_clean).sort_values(
-        "len", ascending=False, inplace=False
+    print(
+        f"Train targets: {n_train_targets} | "
+        f"Test targets: {n_test_targets} | "
+        f"Train non-targets: {n_train_non_targets} | "
+        f"Test non-targets: {n_test_non_targets} |"
+        f"Total non-targets: {n_test_non_targets}"
     )
-    test_non_targets_df = pd.DataFrame.from_dict(test_non_targets_clean).sort_values(
-        "len", ascending=False, inplace=False
+    if n_train_non_targets + n_test_non_targets > len(non_targets):
+        msg = (
+            "The requested imbalance ratio is too high, not enough non-target samples "
+            "available."
+        )
+        raise ValueError(msg)
+
+    # Get required number of non-target samples for train and test sets
+    non_targets, train_non_targets = hf_train_test_split(
+        non_targets, test_size=n_train_non_targets, seed=seed
+    )
+    non_targets, test_non_targets = hf_train_test_split(
+        non_targets, test_size=n_test_non_targets, seed=seed
+    )
+
+    # add class label
+    train_targets = train_targets.add_column(name="label", column=[1] * n_train_targets)
+    train_non_targets = train_non_targets.add_column(
+        name="label", column=[0] * n_train_non_targets
+    )
+    test_targets = test_targets.add_column(name="label", column=[1] * n_test_targets)
+    test_non_targets = test_non_targets.add_column(
+        name="label", column=[0] * n_test_non_targets
     )
 
     # concatenate targets with non-targets
-    train_data = pd.concat([train_targets_df, train_non_targets_df])
-    test_data = pd.concat([test_targets_df, test_non_targets_df])
-
-    # if using sharding save data to corresponding shard id
-    if shard_id is not None:
-        train_csv = f"{save_path}/train_shard_{shard_id}.csv"
-        test_csv = f"{save_path}/test_shard_{shard_id}.csv"
-    # otherwise save to train.csv and test.csv
-    else:
-        train_csv = f"{save_path}/train.csv"
-        test_csv = f"{save_path}/test.csv"
-
-    train_data.to_csv(train_csv, index=False)
-    test_data.to_csv(test_csv, index=False)
-    print(
-        f"Shard {shard_id if shard_id is not None else ''}: "
-        f"Train data: {len(train_data)} | Test data: {len(test_data)}"
+    train_data = concatenate_datasets([train_targets, train_non_targets]).shuffle(
+        seed=seed
     )
-    print(f"Saved: {train_csv}, {test_csv}")
-
-
-def main(args):
-    if args.mode == "one-vs-all":
-        target_categories = ONE_VS_ALL_COMBINATIONS[args.target_config]
-    else:
-        target_categories = DATA_DRIFT_COMBINATIONS[args.target_config]
-
-    save_dir = (
-        args.data_dir
-        if os.path.isdir(args.data_dir)
-        else os.path.dirname(args.data_dir)
+    test_data = concatenate_datasets([test_targets, test_non_targets]).shuffle(
+        seed=seed
     )
-    save_path = f"{save_dir}/splits/{args.target_config}_{args.mode}/"
-    os.makedirs(save_path, exist_ok=True)
+    DatasetDict({"train": train_data, "test": test_data}).save_to_disk(save_path)
+    print(f"Saved: {save_path}")
 
-    # check for shards
-    if not os.path.isdir(args.data_dir):
-        err_msg = f"{args.data_dir} does not exist"
-        raise FileNotFoundError(err_msg)
 
-    shard_files = sorted(
-        glob.glob(os.path.join(args.data_dir, "filtered_rows_shard_*.json"))
-    )
-    noshards_filename = f"{args.data_dir}/filtered_rows.json"
-    if len(shard_files) > 0:
-        for i, shard_file in enumerate(shard_files):
-            with open(shard_file) as f:
-                data = json.load(f)
-            process_data(data, target_categories, args, save_path, shard_id=i)
+def main(config_path: str):
+    config = load_yaml(config_path)
 
-    elif os.path.isfile(noshards_filename):
-        with open(noshards_filename) as f:
-            data = json.load(f)
-            process_data(data, target_categories, args, save_path)
+    data_dir = f"{DATA_DIR}/{config['data_name']}"
+    ds = Dataset.load_from_disk(data_dir)
+
+    if config["setting"] == "one-vs-all":
+        target_categories = ONE_VS_ALL_COMBINATIONS[config["target_config"]]
     else:
-        err_msg = f"Error: '{args.data_dir}' does not contain data files"
-        raise ValueError(err_msg)
+        target_categories = DATA_DRIFT_COMBINATIONS[config["target_config"]]
+
+    save_name = Path(config_path).name.rstrip(".yaml")
+    save_dir = f"{data_dir}/splits/{save_name}"
+    os.makedirs(save_dir, exist_ok=True)
+
+    process_data(
+        ds,
+        target_categories,
+        config["setting"],
+        config["train_imbalance"],
+        config["test_imbalance"],
+        save_dir,
+        config["seed"],
+    )
 
 
 if __name__ == "__main__":
-    import argparse
-
     parser = argparse.ArgumentParser(description="Generate dataset")
-    parser.add_argument(
-        "data_dir",
-        type=str,
-        default="data/reddit_dataset_12/10000000_rows/",
-        help="Path to the data file or directory containing shards",
-    )
-    parser.add_argument(
-        "target_config",
-        type=str,
-        help=(
-            "Split to generate, options are: sport, american_football, ami, news, "
-            "advice"
-        ),
-    )
-    parser.add_argument(
-        "--mode",
-        type=str,
-        default="one-vs-all",
-        choices=["data-drift", "one-vs-all", "multi-class"],
-        help="Splitting mode: 'data-drift', 'one-vs-all, or 'multi-class''.",
-    )
-    parser.add_argument(
-        "-r",
-        default=None,
-        help="Imbalance ratio for the dataset. provide a float or int, "
-        "where 0.01 means 1% of the dataset is target classes. Int values are also "
-        "accepted, where 100 means 100 samples are the target classes.",
-    )
+    parser.add_argument("data_config", type=str, help="Path to the data config file")
     args = parser.parse_args()
-    main(args)
+    main(args.data_config)

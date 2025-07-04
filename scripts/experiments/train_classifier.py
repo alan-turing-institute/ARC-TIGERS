@@ -1,5 +1,4 @@
 import argparse
-import copy
 import json
 import logging
 import os
@@ -16,41 +15,29 @@ from transformers import (
 from arc_tigers.data.reddit_data import get_reddit_data
 from arc_tigers.eval.utils import compute_metrics
 from arc_tigers.training.utils import WeightedLossTrainer, get_label_weights
-from arc_tigers.utils import get_configs, load_yaml, seed_everything
+from arc_tigers.utils import get_configs, load_yaml, seed_everything, to_json
 
 logger = logging.getLogger(__name__)
 
 
 def main(args):
-    exp_config = load_yaml(args.exp_config)
-    learning_rate = float(exp_config["train_kwargs"].get("learning_rate", 1e-5))
-    exp_config["train_kwargs"]["learning_rate"] = learning_rate
-    data_config, model_config = get_configs(exp_config)
-    exp_name = args.exp_name if args.exp_name else exp_config["exp_name"]
+    train_config = load_yaml(args.exp_config)
+    data_config, model_config = get_configs(train_config)
+
+    exp_name = args.exp_name if args.exp_name else train_config["exp_name"]
     save_dir = (
         f"outputs/{data_config['data_name']}"
-        f"/{data_config['data_args']['setting']}"
-        f"/{data_config['data_args']['target_config']}"
-        f"/{model_config['model_id']}/{exp_name}"
+        f"/{train_config['data_config']}"
+        f"/{train_config['model_config']}/{exp_name}"
     )
-
-    seed_everything(exp_config["random_seed"])
-
-    if os.path.exists(save_dir):
-        base_save_dir = save_dir
-        counter = 1
-        while os.path.exists(save_dir) and counter < 5:
-            save_dir = f"{base_save_dir}_{counter}"
-            counter += 1
-
+    train_config["save_dir"] = save_dir
     os.makedirs(save_dir, exist_ok=False)
-    exp_config["save_dir"] = save_dir
+
+    seed_everything(train_config["random_seed"])
 
     # Save a copy for logging
-    exp_config_copy = copy.deepcopy(exp_config)
-    exp_config_path = os.path.join(save_dir, "experiment_config.json")
-    with open(exp_config_path, "w") as f:
-        json.dump(exp_config_copy, f, indent=4)
+    exp_config_path = os.path.join(save_dir, "train_config.json")
+    to_json(train_config, exp_config_path)
     print(f"Experiment configuration saved to {exp_config_path}")
 
     # set up logging
@@ -66,13 +53,13 @@ def main(args):
     # Data collator
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
-    train_dataset, eval_dataset, _, _ = get_reddit_data(
+    train_dataset, eval_dataset, _ = get_reddit_data(
         **data_config["data_args"], tokenizer=tokenizer
     )
     training_args = TrainingArguments(
         output_dir=save_dir,
         logging_dir=f"{save_dir}/logs",
-        **exp_config["train_kwargs"],
+        **train_config["train_kwargs"],
     )
     # Trainer
     trainer = WeightedLossTrainer(
