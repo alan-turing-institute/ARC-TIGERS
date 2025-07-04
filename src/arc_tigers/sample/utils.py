@@ -2,12 +2,14 @@ import os
 
 import numpy as np
 import torch
+from datasets import Dataset as HFDataset
 from sentence_transformers import SentenceTransformer
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
+from torch.utils.data import Dataset as TorchDataset
 from tqdm import tqdm
 
 
-class RedditTextDataset(Dataset):
+class RedditTextDataset(TorchDataset):
     def __init__(self, texts, labels):
         self.texts = texts
         self.labels = labels
@@ -54,11 +56,11 @@ def non_linear_spacing(min_labels, max_labels, n_steps=None):
 
 
 def get_embeddings(
-    dataset: Dataset,
+    dataset: HFDataset,
     storage_dir: str,
     embedding_savename: str,
     model: SentenceTransformer,
-) -> torch.Tensor:
+) -> np.ndarray:
     if os.path.isfile(storage_dir + f"{embedding_savename}.npy"):
         print(f"{embedding_savename}.npy Found in {storage_dir}")
         return np.load(storage_dir + f"{embedding_savename}.npy")
@@ -88,18 +90,18 @@ def get_embeddings(
 
 
 def get_distilbert_embeddings(
-    dataset: Dataset,
+    dataset: HFDataset,
     storage_dir: str,
     embedding_savename: str = "distilbert_embeddings",
-) -> torch.Tensor:
+) -> np.ndarray:
     model = SentenceTransformer("sentence-transformers/distilbert-base-nli-mean-tokens")
 
     return get_embeddings(dataset, storage_dir, embedding_savename, model)
 
 
 def get_mpnet_embeddings(
-    dataset: Dataset, storage_dir: str, embedding_savename: str = "mpnet_embeddings"
-) -> torch.Tensor:
+    dataset: HFDataset, storage_dir: str, embedding_savename: str = "mpnet_embeddings"
+) -> np.ndarray:
     model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
 
     return get_embeddings(dataset, storage_dir, embedding_savename, model)

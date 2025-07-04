@@ -4,7 +4,7 @@ from typing import Any
 import numpy as np
 import pyarrow as pa
 from datasets import Dataset, DatasetDict, load_dataset
-from transformers import PreTrainedTokenizer
+from transformers.tokenization_utils import PreTrainedTokenizer
 
 from arc_tigers.constants import DATA_DIR
 from arc_tigers.data.utils import (

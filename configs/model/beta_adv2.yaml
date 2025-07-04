@@ -1,0 +1,5 @@
+model_id: "beta_model"
+model_kwargs:
+  model_adv: 2
+  positive_error_rate: null
+  negative_error_rate: null

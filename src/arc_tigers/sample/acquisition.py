@@ -1,58 +1,56 @@
 import os
-from collections import namedtuple
+import warnings
+from abc import abstractmethod
 
 import joblib
 import numpy as np
+import numpy.typing as npt
 from datasets import Dataset
 from scipy.spatial.distance import cdist
 from sklearn.ensemble import IsolationForest, RandomForestClassifier
 
 from arc_tigers.eval.utils import softmax
+from arc_tigers.sample.sampler import Sampler
 from arc_tigers.sample.utils import get_mpnet_embeddings
 
-DummyAcqFunc = namedtuple("DummyAcqFunc", ["observed_idx", "remaining_idx", "rng"])
 
-
-class AcquisitionFunction:
+class AcquisitionFunction(Sampler):
     """
-    Abstract base class for active learning acquisition functions.
+    Abstract base class for active testing-like strategies that sample from a pmf
+    created from an acquisition function.
 
-    Provides common properties and methods for managing labelled and unlabelled indices,
-    as well as sampling from a probability mass function (pmf) over the unlabelled pool.
-
-    Attributes:
-        remaining_idx (list[int]): Indices of unlabelled samples.
-        observed_idx (list[int]): Indices of labelled samples.
-        rng (np.random.BitGenerator): Random number generator for sampling.
-
-    Methods:
-        sample_pmf(pmf): Samples an index from the unlabelled pool according to the pmf.
-        sample(): Abstract method to select the next sample to label.
+    See Sampler class for documentation of common functionality.
     """
 
-    def __init__(self):
-        self.remaining_idx: list[int] = []
+    def __init__(self, eval_data: Dataset, seed: int, name: str):
+        super().__init__(eval_data, seed, name)
+        self.remaining_idx: list[int] = np.arange(len(self.eval_data)).tolist()
         self.observed_idx: list[int] = []
-        self.rng: np.random.BitGenerator = None
-        self.name: str = "AcquisitionFunction"
+        self._sample_prob: list[float] = []
+
+    @property
+    def sample_prob(self) -> list[float]:
+        return self._sample_prob
 
     @property
     def labelled_idx(self) -> list[int]:
-        """
-        Returns:
-            Indices of the samples that have been labelled.
-        """
         return self.observed_idx
 
     @property
     def unlabelled_idx(self) -> list[int]:
-        """
-        Returns:
-            Indices of the samples that haven't been labelled.
-        """
         return self.remaining_idx
 
-    def sample_pmf(self, pmf):
+    def sample_pmf(self, pmf: npt.NDArray[np.floating]) -> tuple[int, float]:
+        """
+        Samples an index from the unlabelled pool according to a pmf.
+
+        Args:
+            pmf: Probability mass function (pmf) to sample from.
+
+        Returns:
+            A tuple containing the index of the sampled item and the probability of that
+            item being selected.
+        """
         pmf = np.asarray(pmf, dtype=np.float64)  # Use higher precision
 
         pmf = np.clip(pmf, 0, 1)  # Ensure values are in [0, 1]
@@ -66,66 +64,52 @@ class AcquisitionFunction:
             raise ValueError(err_msg)
 
         prob = self.rng.multinomial(1, pmf)
-        idx = np.where(prob)[0][0]
+        idx: int = np.where(prob)[0][0]
         sample_prob = pmf[idx]
         test_idx = self.remaining_idx[idx]
         self.observed_idx.append(int(test_idx))
+        self._sample_prob.append(sample_prob)
         self.remaining_idx.remove(int(test_idx))
 
-        return sample_prob
-
-    def sample(self) -> int:
-        raise NotImplementedError
+        return test_idx, sample_prob
 
 
-class DistanceSampler(AcquisitionFunction):
+class AcquisitionFunctionWithEmbeds(AcquisitionFunction):
     """
-    Acquisition function that selects samples based on their average distance
-    (in embedding space) to the currently labelled set.
+    Abstract base class for acquisition strategies that use embeddings of the dataset
+    to compute acquisition functions.
 
-    At each step, computes the mean Euclidean distance from each unlabelled sample
-    to all labelled samples, and samples according to a softmax over these distances.
+    See AcquisitionFunction for documentation of common functionality.
 
     Args:
-        data (Dataset): The dataset to sample from.
-        sampling_seed (int): Random seed for reproducibility.
-        eval_dirs (tuple[str]): Directories for evaluation outputs, and embedding
-        outputs. (eval_outpur_dir,embedding_dir).
+        embed_dir: Directory where embeddings are stored or will be saved.
 
-    Methods:
-        sample(): Selects the next sample to label based on distance.
+    Attributes:
+        embed_dir: Directory where embeddings are stored or will be saved.
+        eval_embed: Embeddings of the evaluation dataset.
     """
 
-    def __init__(self, data: dict[str, Dataset], sampling_seed: int, eval_dirs: str):
-        """Samples a dataset based on distance between observed and unobserved
-        embeddings.
+    def __init__(self, eval_data: Dataset, seed: int, name: str, embed_dir: str):
+        super().__init__(eval_data, seed, name)
+        self.embed_dir = embed_dir
+        self.eval_embed = get_mpnet_embeddings(self.eval_data, self.embed_dir)
 
-        Args:
-            data: The dataset to sample from.
 
-        Properties:
-            n_sampled: Number of samples that have been labelled so far.
-            labelled_idx: Indices of the samples that have been labelled.
-            unlabelled_idx: Indices of the samples that haven't been labelled.
-        """
-        self.eval_data = data["evaluation_dataset"]
+class DistanceSampler(AcquisitionFunctionWithEmbeds):
+    """
+    Sampler that selects samples based on their average distance (in embedding space)
+    to the currently labelled set. At each step, computes the mean Euclidean distance
+    from each unlabelled sample to all labelled samples, and samples according to a
+    softmax over these distances.
 
-        self.observed_idx: list[int] = []
-        self.remaining_idx: list[int] = np.arange(len(self.eval_data)).tolist()
-        self.n_sampled = 0
-        self.rng = np.random.default_rng(seed=sampling_seed)
+    See AcquisitionFunctionWithEmbeds for documentation of common functionality.
+    """
 
-        # Get embeddings for whole dataset
-        self.embeddings = get_mpnet_embeddings(self.eval_data, eval_dirs[1])
-        self.name = "distance"
+    def __init__(self, eval_data: Dataset, seed: int, embed_dir, **kwargs):
+        super().__init__(eval_data, seed, "distance", embed_dir)
 
-    def sample(self) -> int:
-        """
-        Updates the n_sampled counter and gets the next sample to label.
-
-        Returns:
-            Index of the next sample to be labelled
-        """
+    def sample(self) -> tuple[int, float]:
+        """Sample based on embedding distance to previously labelled samples."""
 
         # If no samples have been selected yet, sample from a uniform distribution
         if len(self.observed_idx) == 0:
@@ -135,18 +119,8 @@ class DistanceSampler(AcquisitionFunction):
 
         else:
             # Subset embeddings
-            remaining = self.embeddings[np.array(self.remaining_idx)]
-            observed = self.embeddings[np.array(self.observed_idx)]
-
-            # # Broadcasting to get all paired differences
-            # d = remaining[:, np.newaxis, :] - observed
-            # d = d**2
-            # # Sum over feature dimension
-            # d = d.sum(-1)
-            # # sqrt to get distance
-            # d = np.sqrt(d)
-            # # Mean over other pairs
-            # distances = d.mean(1)
+            remaining = self.eval_embed[np.array(self.remaining_idx)]
+            observed = self.eval_embed[np.array(self.observed_idx)]
 
             # Compute all pairwise Euclidean distances
             dists = cdist(remaining, observed, metric="euclidean")
@@ -160,56 +134,44 @@ class DistanceSampler(AcquisitionFunction):
         return self.sample_pmf(pmf)
 
 
-class AccSampler(AcquisitionFunction):
+class SurrogateSampler(AcquisitionFunctionWithEmbeds):
     """
-    Acquisition function that selects samples based on disagreement between
-    a surrogate Random Forest classifier and the main model.
+    Abstract base class for acquisition strategies that select samples based on
+    disagreement between a surrogate classifier (random forest) and the main model.
 
-    At each step, computes the expected loss (1 - surrogate accuracy) for each
-    unlabelled sample, and samples according to a normalized probability over these
-    losses.
+    See AcquisitionFunctionWithEmbeds for documentation of common functionality.
 
     Args:
-        data (dict[str, Dataset]): Dictionary containing datasets.
-        eval_dirs (tuple[str]): Directories for evaluation outputs, and embedding
-        outputs. (eval_outpur_dir,embedding_dir).
-        sampling_seed (int): Random seed for reproducibility.
+        model_preds: Predicted scores from the main model.
+        surrogate_data: Dataset used to pre-train the surrogate model (or None).
 
-    Methods:
-        set_model_preds(preds): Sets the model's predicted probabilities.
-        surrogate_pretrain(): Pre-trains the surrogate model if not already trained.
-        update_surrogate(): Updates surrogate predictions based on labelled data.
-        accuracy_loss(): Computes expected loss for unlabelled samples.
-        sample(): Selects the next sample to label based on expected loss.
+    Attributes:
+        surrogate_model: Trained surrogate classifier (Random Forest).
+        surrogate_preds: Predicted probabilities from the surrogate model.
+        num_classes: Number of classes in the dataset.
+        surrogate_train_data: Dataset used to pre-train the surrogate (if provided).
+        train_embeds: Embeddings of the surrogate training data (if provided).
     """
 
     def __init__(
-        self, data: dict[str, Dataset], eval_dirs: tuple[str, str], sampling_seed: int
+        self,
+        eval_data: Dataset,
+        seed: int,
+        name: str,
+        embed_dir: str,
+        model_preds: np.ndarray,
+        surrogate_data: Dataset | None = None,
+        **kwargs,
     ):
-        """Samples a dataset based on distance between model loss and surrogate loss,
-        where the surrogate is a Random Forest classifier.
+        super().__init__(eval_data, seed, name, embed_dir)
 
-        Args:
-            data: The dataset to sample from.
-
-        Properties:
-            n_sampled: Number of samples that have been labelled so far.
-            labelled_idx: Indices of the samples that have been labelled.
-            unlabelled_idx: Indices of the samples that haven't been labelled.
-        """
-        self.n_sampled = 0
-        self.model_preds = np.array([])
-        self.surrogate_preds = np.array([])
-        self.eval_data = data["evaluation_dataset"]
-        self.surrogate_train_data = data["surrogate_train_dataset"]
-        self.observed_idx: list[int] = []
-        self.remaining_idx = np.arange(len(self.eval_data)).tolist()
-        self.eval_dir = eval_dirs[0]
-        self.embedding_dir = eval_dirs[1]
-
-        # Get embeddings for use with RF classifier
-        self.eval_embs = get_mpnet_embeddings(self.eval_data, self.embedding_dir)
-        self.rng = np.random.default_rng(seed=sampling_seed)
+        if len(model_preds) != len(eval_data):
+            err_msg = (
+                f"Model predictions length {len(model_preds)} does not match "
+                f"evaluation data length {len(eval_data)}."
+            )
+            raise ValueError(err_msg)
+        self.model_preds = softmax(model_preds)  # [n_samples, n_classes]
 
         # initialise surrogate predictions and model
         self.num_classes = len(np.unique(self.eval_data["label"]))
@@ -217,26 +179,30 @@ class AccSampler(AcquisitionFunction):
             (len(self.eval_data), self.num_classes), 1.0 / self.num_classes
         )
         self.surrogate_model = RandomForestClassifier(
-            random_state=self.rng.integers(1e9)
+            random_state=self.rng.integers(int(1e9))
         )
-
-        # Placeholder for model predictions (should be set externally)
-        self.model_preds = np.zeros_like(self.surrogate_preds)
-        self.name = "acc_sampler"
-
-    def set_model_preds(self, preds: np.ndarray):
-        """Set model predictions externally (shape: [n_samples, n_classes])."""
-        self.model_preds = softmax(preds)
+        self.surrogate_train_data = surrogate_data
+        self.surrogate_pretrain()
 
     def surrogate_pretrain(self):
-        self.train_embs = get_mpnet_embeddings(
+        """Pre-trains the surrogate model if training data has been provided."""
+        if self.surrogate_train_data is None:
+            warnings.warn(
+                "No surrogate training data provided. Surrogate model will not be "
+                "pre-trained, and no training data will be used for surrogate updates.",
+                stacklevel=2,
+            )
+            self.train_embeds = None
+            return
+
+        self.train_embeds = get_mpnet_embeddings(
             self.surrogate_train_data,
-            self.embedding_dir,
+            self.embed_dir,
             embedding_savename="surrogate_embeddings",
         )
         self.y_train = np.array(self.surrogate_train_data["label"])
         surrogate_path = os.path.join(
-            self.embedding_dir,
+            self.embed_dir,
             f"pretrained_surrogate_{self.surrogate_model.__class__.__name__}.joblib",
         )
         if os.path.exists(surrogate_path):
@@ -245,25 +211,31 @@ class AccSampler(AcquisitionFunction):
         else:
             print(f"Pre-training surrogate model and saving to {surrogate_path} ...")
             self.surrogate_model = self.surrogate_model.fit(
-                self.train_embs, self.y_train
+                self.train_embeds, self.y_train
             )
             joblib.dump(self.surrogate_model, surrogate_path)
 
     def update_surrogate(self):
+        """Updates the surrogate model with newly labelled data, and re-computes its
+        predictions on the unlabelled data."""
         if len(self.observed_idx) == 0:
             self.surrogate_preds = np.zeros_like(self.surrogate_preds)
             return
-        X_acquired = self.eval_embs[np.array(self.observed_idx)]
+        X_acquired = self.eval_embed[np.array(self.observed_idx)]
         y_acquired = np.array(self.eval_data["label"])[np.array(self.observed_idx)]
 
-        self.surrogate_model = self.surrogate_model.fit(
-            np.concat((self.train_embs, X_acquired)),
-            np.concat((self.y_train, y_acquired)),
-        )
+        if self.train_embeds is not None:
+            train_X = np.concat((self.train_embeds, X_acquired))
+            train_y = np.concat((self.y_train, y_acquired))
+        else:
+            train_X = X_acquired
+            train_y = y_acquired
+
+        self.surrogate_model = self.surrogate_model.fit(train_X, train_y)
 
         # Get surrogate predictions for all samples
         intermediate_surrogate_preds = self.surrogate_model.predict_proba(
-            self.eval_embs
+            self.eval_embed
         )
         classes_ = self.surrogate_model.classes_
         # Fill a full array with zeros for all classes
@@ -274,151 +246,104 @@ class AccSampler(AcquisitionFunction):
             full_proba[:, c] = intermediate_surrogate_preds[:, i]
         self.surrogate_preds = full_proba
 
-    def accuracy_loss(self):
-        # Use only remaining (unlabelled) samples
-        # we need higher values = higher loss
-        # so we will return 1 - accuracy
+    @abstractmethod
+    def acquisition_fn(
+        self, model_probs: np.ndarray, surrogate_probs: np.ndarray
+    ) -> np.ndarray:
+        """
+        Computes the acquisition function based on model and surrogate probabilities.
+        This method must be implemented by subclasses.
+
+        Args:
+            model_probs: Predicted probabilities from the main model.
+            surrogate_probs: Predicted probabilities from the surrogate model.
+
+        Returns:
+            Acquisition values for each sample.
+        """
+        raise NotImplementedError
+
+    def sample(self) -> tuple[int, float]:
+        """Sample according to the acquisition function values."""
+        # sample from remaining (unlabelled) samples
         rem_idx = np.array(self.remaining_idx)
-        if len(self.observed_idx) == 0:
-            # No surrogate, so return uniform loss
-            return np.ones(len(rem_idx), dtype=np.float64)
         model_probs = self.model_preds[rem_idx]
         surrogate_probs = self.surrogate_preds[rem_idx]
 
-        pred_classes = np.argmax(model_probs, axis=1)
+        q = self.acquisition_fn(model_probs, surrogate_probs)
 
-        res = 1 - surrogate_probs[np.arange(len(surrogate_probs)), pred_classes]
-
-        return np.maximum(res, np.max(res) * 0.05)
-
-    def sample(self):
-        expected_loss = self.accuracy_loss()
-
-        if (expected_loss < 0).sum() > 0:
-            # Log-lik can be negative.
+        if (q < 0).sum() > 0:
             # Make all values positive.
-            # Alternatively could set <0 values to 0.
-            expected_loss += np.abs(expected_loss.min())
+            q += np.abs(q.min())
 
-        if expected_loss.sum() != 0:
-            expected_loss /= expected_loss.sum()
+        if q.sum() != 0:
+            q /= q.sum()
 
-        # Sample according to the expected loss pmf
-        sample = self.sample_pmf(expected_loss)
+        # Sample according to the acquisition values
+        sample = self.sample_pmf(q)
         self.update_surrogate()
         return sample
 
 
-class InformationGainSampler(AcquisitionFunction):
+class AccSampler(SurrogateSampler):
+    """
+    Sampler that uses the acquisition function for accuracy from the active testing
+    paper (equation 14).
+
+    See SurrogateSampler for documentation of common functionality.
+    """
+
+    def __init__(
+        self,
+        eval_data: Dataset,
+        seed: int,
+        embed_dir: str,
+        model_preds: np.ndarray,
+        surrogate_data: Dataset,
+        **kwargs,
+    ):
+        super().__init__(
+            eval_data, seed, "accuracy", embed_dir, model_preds, surrogate_data
+        )
+
+    def acquisition_fn(
+        self, model_probs: np.ndarray, surrogate_probs: np.ndarray
+    ) -> np.ndarray:
+        """Accuracy acquisition function."""
+        pred_classes = np.argmax(model_probs, axis=1)
+
+        # we need higher values = higher loss so we will return 1 - accuracy
+        res = 1 - surrogate_probs[np.arange(len(surrogate_probs)), pred_classes]
+
+        return np.maximum(res, np.max(res) * 0.05)
+
+
+class InformationGainSampler(SurrogateSampler):
     """
     Acquisition function that selects samples based on information gain,
     defined as the cross-entropy between the surrogate model's and main model's
-    predicted class probabilities.
+    predicted class probabilities (equation 11 in the active testing paper).
 
-    At each step, computes the cross-entropy for each unlabelled sample and
-    samples according to a normalized probability over these values.
-
-    Args:
-        data (dict[str, Dataset]): Dictionary containing datasets.
-        eval_dirs (tuple[str]): Directories for evaluation outputs, and embedding
-        outputs. (eval_outpur_dir,embedding_dir).
-        sampling_seed (int): Random seed for reproducibility.
-
-    Methods:
-        set_model_preds(preds): Sets the model's predicted probabilities.
-        surrogate_pretrain(): Pre-trains the surrogate model if not already trained.
-        update_surrogate(): Updates surrogate predictions based on labelled data.
-        information_gain(): Computes information gain for unlabelled samples.
-        sample(): Selects the next sample to label based on information gain.
+    See SurrogateSampler for documentation of common functionality.
     """
 
-    def __init__(self, data: Dataset, eval_dirs: str, sampling_seed: int):
-        """
-        Samples based on information gain (cross-entropy between surrogate and model
-        predictions).
-
-        Args:
-            data: The dataset to sample from.
-        """
-        self.n_sampled = 0
-        self.rng = np.random.default_rng(seed=sampling_seed)
-        self.eval_data = data["evaluation_dataset"]
-        self.surrogate_train_data = data["surrogate_train_dataset"]
-        self.observed_idx: list[int] = []
-        self.remaining_idx: list[int] = np.arange(len(self.eval_data)).tolist()
-        self.embedding_dir = eval_dirs[1]
-
-        # Get embeddings for use with surrogate classifier
-        self.eval_embs = get_mpnet_embeddings(self.eval_data, self.embedding_dir)
-
-        # initialise surrogate predictions and model
-        self.num_classes = len(np.unique(self.eval_data["label"]))
-        self.surrogate_preds = np.full(
-            (len(self.eval_data), self.num_classes), 1.0 / self.num_classes
-        )
-        self.surrogate_model = RandomForestClassifier(
-            random_state=self.rng.integers(1e9)
+    def __init__(
+        self,
+        eval_data: Dataset,
+        seed: int,
+        embed_dir: str,
+        model_preds: np.ndarray,
+        surrogate_data: Dataset,
+        **kwargs,
+    ):
+        super().__init__(
+            eval_data, seed, "info_gain", embed_dir, model_preds, surrogate_data
         )
 
-        # Placeholder for model predictions (should be set externally)
-        self.model_preds = np.zeros_like(self.surrogate_preds)
-        self.name = "random_forest_ig"
-
-    def set_model_preds(self, preds: np.ndarray):
-        """Set model predictions externally (shape: [n_samples, n_classes])."""
-        self.model_preds = softmax(preds)
-
-    def surrogate_pretrain(self):
-        self.train_embs = get_mpnet_embeddings(
-            self.surrogate_train_data,
-            self.embedding_dir,
-            embedding_savename="surrogate_embeddings",
-        )
-        self.y_train = np.array(self.surrogate_train_data["label"])
-        surrogate_path = os.path.join(
-            self.embedding_dir,
-            f"pretrained_surrogate_{self.surrogate_model.__class__.__name__}.joblib",
-        )
-        if os.path.exists(surrogate_path):
-            print(f"Loading pre-trained surrogate model from {surrogate_path} ...")
-            self.surrogate_model = joblib.load(surrogate_path)
-        else:
-            print(f"Pre-training surrogate model and saving to {surrogate_path} ...")
-            self.surrogate_model = self.surrogate_model.fit(
-                self.train_embs, self.y_train
-            )
-            joblib.dump(self.surrogate_model, surrogate_path)
-
-    def update_surrogate(self):
-        if len(self.observed_idx) == 0:
-            self.surrogate_preds = np.zeros_like(self.surrogate_preds)
-            return
-        X_acquired = self.eval_embs[np.array(self.observed_idx)]
-        y_acquired = np.array(self.eval_data["label"])[np.array(self.observed_idx)]
-
-        self.surrogate_model = self.surrogate_model.fit(
-            np.concat((self.train_embs, X_acquired)),
-            np.concat((self.y_train, y_acquired)),
-        )
-
-        # Get surrogate predictions for all samples
-        intermediate_surrogate_preds = self.surrogate_model.predict_proba(
-            self.eval_embs
-        )
-        classes_ = self.surrogate_model.classes_
-        # Fill a full array with zeros for all classes
-        full_proba = np.zeros((len(self.eval_data), self.num_classes))
-        # fill the full array with surrogate predictions
-        # for each class in the surrogate predictions
-        for i, c in enumerate(classes_):
-            full_proba[:, c] = intermediate_surrogate_preds[:, i]
-        self.surrogate_preds = full_proba
-
-    def information_gain(self):
-        rem_idx = np.array(self.remaining_idx)
-        surrogate_probs = self.surrogate_preds[rem_idx]  # π(y | x)
-        model_probs = self.model_preds[rem_idx]  # f(x)_y
-
+    def acquisition_fn(
+        self, model_probs: np.ndarray, surrogate_probs: np.ndarray
+    ) -> np.ndarray:
+        """Information gain acquisition function."""
         # Add small epsilon for numerical stability in log
         eps = 1e-12
         log_model_probs = np.log(model_probs + eps)
@@ -427,53 +352,30 @@ class InformationGainSampler(AcquisitionFunction):
         # Make all values positive and nonzero for sampling
         return np.maximum(info_gain, np.max(info_gain) * 0.05)
 
-    def sample(self):
-        info_gain = self.information_gain()
-        if (info_gain < 0).sum() > 0:
-            info_gain += np.abs(info_gain.min())
-        if info_gain.sum() != 0:
-            info_gain /= info_gain.sum()
-        # Sample according to the expected loss pmf
-        sample = self.sample_pmf(info_gain)
-        self.update_surrogate()
-        return sample
 
-
-class IsolationForestSampler(AcquisitionFunction):
+class IsolationForestSampler(AcquisitionFunctionWithEmbeds):
     """
-    Acquisition function that selects samples based on anomaly scores using an isolation
-    forest in embedding space.
+    Sampler that selects samples based on anomaly scores using an isolation forest in
+    embedding space.
 
-    Args:
-        data (dict[str, Dataset]): Dictionary containing datasets.
-        eval_dirs (tuple[str]): Directories for evaluation outputs, and embedding
-        outputs. (eval_outpur_dir,embedding_dir).
-        sampling_seed (int): Random seed for reproducibility.
-
-    Methods:
-        sample(): Selects the next sample to label based on anomaly score.
+    See AcquisitionFunctionWithEmbeds for documentation of common functionality.
     """
 
-    def __init__(self, data: dict[str, Dataset], eval_dirs: str, sampling_seed: int):
-        self.observed_idx: list[int] = []
-        self.remaining_idx: list[int] = np.arange(
-            len(data["evaluation_dataset"])
-        ).tolist()
-        self.n_sampled = 0
-        self.rng = np.random.default_rng(seed=sampling_seed)
-        self.eval_data = data["evaluation_dataset"]
-        self.embedding_dir = eval_dirs[1]
-        self.embeddings = get_mpnet_embeddings(self.eval_data, self.embedding_dir)
-        self.name = "isolation_forest_sampler"
+    def __init__(self, eval_data: Dataset, seed: int, embed_dir: str, **kwargs):
+        super().__init__(eval_data, seed, "isolation", embed_dir)
 
-    def sample(self):
+    def sample(self) -> tuple[int, float]:
+        """
+        Samples the next item to label based on anomaly scores of the unlabelled data,
+        as computed by an isolation forest trained on the labelled data.
+        """
         if len(self.observed_idx) == 0:
             N = len(self.eval_data)
             pmf = np.ones(N, dtype=np.float64) / N
         else:
-            observed = self.embeddings[np.array(self.observed_idx)]
-            remaining = self.embeddings[np.array(self.remaining_idx)]
-            iso = IsolationForest(random_state=self.rng.integers(1e9))
+            observed = self.eval_embed[np.array(self.observed_idx)]
+            remaining = self.eval_embed[np.array(self.remaining_idx)]
+            iso = IsolationForest(random_state=self.rng.integers(int(1e9)))
             iso.fit(observed)
             # Higher score = more normal, so invert for anomaly
             anomaly_scores = -iso.score_samples(remaining)
@@ -483,44 +385,31 @@ class IsolationForestSampler(AcquisitionFunction):
 
 class MinorityClassSampler(AcquisitionFunction):
     """
-    Acquisition function that selects samples based on the predicted probability
-    of a specified minority class.
+    Sampler that selects samples based on the predicted probability of them belonging to
+    the minority class, aiming to capture as many minority samples as possible on
+    imbalanced datasets.
+
+    See AcquisitionFunction for documentation of common functionality.
 
     Args:
-        data (dict[str, Dataset]): Dictionary containing datasets.
-        minority_class (int): The class label considered as the minority class.
-        sampling_seed (int): Random seed for reproducibility.
-
-    Methods:
-        set_model_preds(preds): Sets the model's predicted probabilities.
-        sample(): Selects the next sample to label based on minority class probability.
+        minority_class: The class label considered as the minority class.
+        model_preds: Predicted class probabilities from the model being evaluated.
     """
 
     def __init__(
         self,
-        data: dict[str, Dataset],
+        eval_data: Dataset,
         minority_class: int,
-        sampling_seed: int,
+        seed: int,
+        model_preds: np.ndarray,
         **kwargs,
     ):
-        self.eval_data = data["evaluation_dataset"]
-        self.observed_idx: list[int] = []
-        self.remaining_idx: list[int] = np.arange(len(self.eval_data)).tolist()
-        self.n_sampled = 0
-        self.rng = np.random.default_rng(seed=sampling_seed)
+        super().__init__(eval_data, seed, "minority")
         self.minority_class = minority_class
-        self.name = "minority_class_sampler"
+        self.model_preds = softmax(model_preds)
 
-    def set_model_preds(self, preds: np.ndarray):
-        """
-        Set model predictions externally (shape: [n_samples, n_classes]).
-        """
-        self.model_preds = softmax(preds)
-
-    def sample(self):
-        if self.model_preds is None:
-            err_msg = "Model predictions must be set before sampling."
-            raise ValueError(err_msg)
+    def sample(self) -> tuple[int, float]:
+        """Sample based on the predicted probability of the minority class."""
         rem_idx = np.array(self.remaining_idx)
         # Use the probability of the minority class for each unlabelled sample
         minority_probs = self.model_preds[rem_idx, self.minority_class]

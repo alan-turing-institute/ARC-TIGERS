@@ -1,7 +1,6 @@
 import json
 import os
 from glob import glob
-from typing import Any
 
 import joblib
 import numpy as np
@@ -57,9 +56,8 @@ def get_transformers_preds(
     save_dir: str,
     class_balance: float,
     seed: int,
-    synthetic_args: dict,
     preds_exist: bool = False,
-) -> tuple[np.ndarray, Dataset]:
+) -> tuple[np.ndarray | None, Dataset]:
     """
     Get the predictions from a model using the transformers library. This function is
     also used when synthetic data is used. Model weights are loaded from the save_dir
@@ -73,14 +71,13 @@ def get_transformers_preds(
         class_balance: The class balance to use in evaluation.
         seed: The seed to use for the random number generator, this should be the same
             as the seed used in training.
-        synthetic_args: arguments to use for synthetic data generation if being used.
-            Defaults to None.
 
     Returns:
         tuple `preds` the predictions from the model on the test dataset. `test_dataset`
         the test dataset used for predictions.
     """
-    if model_config_path == "beta_model":
+    model_config = load_yaml(model_config_path)
+    if model_config["model_id"] == "beta_model":
         # Arbitrary tokenizer only loaded for compatibility with other functions, not
         # used by the synthetic Beta model.
         tokenizer = AutoTokenizer.from_pretrained("roberta-base")
@@ -88,22 +85,19 @@ def get_transformers_preds(
     else:
         # calculate predictions for whole dataset
         print(f"Loading model and tokenizer from {save_dir}...")
-        model_config = load_yaml(model_config_path)
         tokenizer = AutoTokenizer.from_pretrained(model_config["model_id"])
         model = AutoModelForSequenceClassification.from_pretrained(save_dir)
         use_cpu = False
 
-    if data_config_path == "synthetic":
-        negative_samples = int(
-            synthetic_args["synthetic_samples"] / (1 + class_balance)
-        )
-        positive_samples = synthetic_args["synthetic_samples"] - negative_samples
-        imbalance = positive_samples / synthetic_args["synthetic_samples"]
+    data_config = load_yaml(data_config_path)
+
+    if data_config["data_name"] == "synthetic":
+        n_samples = data_config["data_args"]["n_rows"]
+        negative_samples = int(n_samples / (1 + class_balance))
+        positive_samples = n_samples - negative_samples
+        imbalance = positive_samples / n_samples
         test_dataset = get_synthetic_data(
-            synthetic_args["synthetic_samples"],
-            imbalance,
-            seed=seed,
-            tokenizer=tokenizer,
+            n_samples, imbalance, seed=seed, tokenizer=tokenizer
         )
         meta_data = {
             "train_label_counts": {
@@ -112,7 +106,6 @@ def get_transformers_preds(
             }
         }
     else:
-        data_config: dict[str, dict[str, Any]] = load_yaml(data_config_path)
         if class_balance != 1.0:
             data_config["data_args"]["balanced"] = False
 
@@ -130,7 +123,7 @@ def get_transformers_preds(
         )
 
     if preds_exist:
-        return _, test_dataset
+        return None, test_dataset
 
     # Data collator
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
@@ -139,30 +132,24 @@ def get_transformers_preds(
     with open(meta_data_path, "w") as meta_file:
         json.dump(meta_data, meta_file, indent=2)
 
-    if model_config_path == "beta_model":
+    if model_config["model_id"] == "beta_model":
         n_class_0 = (np.array(test_dataset["label"]) == 0).sum()
         n_class_1 = (np.array(test_dataset["label"]) == 1).sum()
         # BetaModel uses a different definition of imbalance than the class_balance
         # used in the rest of this script - we should settle on one definition.
         # The BetaModel form is the proportion of data in the minority class
         imbalance = n_class_1 / (n_class_0 + n_class_1)
-        if (
-            synthetic_args["positive_error_rate"]
-            or synthetic_args["negative_error_rate"]
-        ):
-            if not (
-                synthetic_args["positive_error_rate"]
-                and synthetic_args["negative_error_rate"]
-            ):
+        model_kwargs = model_config["model_kwargs"]
+        pos_err_rate = model_kwargs["positive_error_rate"]
+        neg_err_rate = model_kwargs["negative_error_rate"]
+        if pos_err_rate or neg_err_rate:
+            if not (pos_err_rate and neg_err_rate):
                 msg = "Both positive and negative error rates must be set."
                 raise ValueError(msg)
-            model = BetaModel.from_error_rates(
-                synthetic_args["positive_error_rate"],
-                synthetic_args["negative_error_rate"],
-            )
+            model = BetaModel.from_error_rates(pos_err_rate, neg_err_rate)
         else:
             model = BetaModel.from_imbalance_and_advantage(
-                imbalance, synthetic_args["model_adv"]
+                imbalance, model_kwargs["model_adv"]
             )
 
     training_args = TrainingArguments(

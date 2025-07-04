@@ -1,5 +1,4 @@
 from collections import Counter
-from collections.abc import Generator
 from copy import deepcopy
 from typing import Any
 
@@ -7,9 +6,10 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.csv as pv
 from datasets import Dataset, concatenate_datasets
-from numpy.random import BitGenerator
+from numpy.random import Generator
 from tqdm import tqdm
-from transformers import PreTrainedTokenizer
+from transformers.tokenization_utils import PreTrainedTokenizer
+from transformers.tokenization_utils_base import BatchEncoding
 
 from arc_tigers.eval.utils import BiasCorrector, evaluate
 from arc_tigers.sample.acquisition import AcquisitionFunction
@@ -33,9 +33,7 @@ def load_arrow_table(shard_files):
 
 
 def imbalance_binary_dataset(
-    dataset: Dataset,
-    class_balance: float,
-    generator: BitGenerator,
+    dataset: Dataset, class_balance: float, generator: Generator
 ) -> Dataset:
     """
     Imbalance the dataset based on the class_balance variable.
@@ -187,7 +185,7 @@ def preprocess_function(
     examples: dict[str, Any],
     tokenizer: PreTrainedTokenizer | None,
     targets: dict[str, int],
-) -> dict[str, Any]:
+) -> dict[str, Any] | BatchEncoding:
     if tokenizer:
         tokenized = tokenizer(examples["text"], padding=True, truncation=True)
     else:
@@ -227,7 +225,7 @@ def sample_dataset_metrics(
     metrics = []
     next_eval_step = evaluate_steps.pop(0)
     for n in tqdm(range(max_labels)):
-        q = sampler.sample()
+        _, q = sampler.sample()
         if bias_corrector is not None:
             bias_corrector.compute_weighting_factor(q_im=q, m=n + 1)
         if (n + 1) == next_eval_step:
