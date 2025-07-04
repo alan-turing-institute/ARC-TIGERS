@@ -13,7 +13,6 @@ class Sampler(ABC):
         seed: The random seed for sampling. If None, a random seed will be used.
 
     Properties:
-        n_sampled: Number of samples that have been labelled so far.
         labelled_idx: Indices of the samples that have been labelled.
         unlabelled_idx: Indices of the samples that haven't been labelled.
     """
