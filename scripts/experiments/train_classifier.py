@@ -107,7 +107,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a classifier")
     parser.add_argument(
         "exp_config",
-        help="path to the data config yaml file",
+        help="path to the experiment config yaml file",
     )
     parser.add_argument(
         "--exp_name",

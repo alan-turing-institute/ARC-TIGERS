@@ -57,27 +57,51 @@ def imbalance_binary_dataset(
 
     # Calculate the number of samples for each class based on class_balance
     assert abs(class_balance) <= 1.0, "class balance must be between -1.0 and 1.0"
-    if class_balance < 0:
-        class_balance = -1.0 * class_balance
-        n_class_1 = len(class_1_indices)
-        n_class_0 = int(n_class_1 * class_balance)
-        if n_class_0 >= len(class_0_indices):
-            err_msg = "class balance is too large for class 0"
-            raise ValueError(err_msg)
-    else:
-        n_class_0 = len(class_0_indices)
-        n_class_1 = int(n_class_0 * class_balance)
-        if n_class_1 >= len(class_1_indices):
-            err_msg = "class balance is too large for class 0"
-            raise ValueError(err_msg)
+    # Determine which is minority/majority
+    n_class_0 = len(class_0_indices)
+    n_class_1 = len(class_1_indices)
 
-    # Randomly sample indices for each class
-    sampled_class_0_indices = generator.choice(
-        class_0_indices, n_class_0, replace=False
-    )
-    sampled_class_1_indices = generator.choice(
-        class_1_indices, n_class_1, replace=False
-    )
+    if class_balance < 0:
+        class_balance = -class_balance
+        # class 1 is majority, class 0 is minority
+        n_majority = n_class_1
+        n_minority = int(n_majority * class_balance)
+        # Cap to available samples
+        if n_minority > n_class_0:
+            print(
+                "Not enough minority class samples, downsampling majority"
+                " to match available minority samples."
+            )
+            n_minority = n_class_0
+            n_majority = int(n_minority / class_balance)
+            if n_majority > n_class_1:
+                n_majority = n_class_1  # Final cap
+        sampled_class_0_indices = generator.choice(
+            class_0_indices, n_minority, replace=False
+        )
+        sampled_class_1_indices = generator.choice(
+            class_1_indices, n_majority, replace=False
+        )
+    else:
+        # class 0 is majority, class 1 is minority
+        n_majority = n_class_0
+        n_minority = int(n_majority * class_balance)
+        # Cap to available samples
+        if n_minority > n_class_1:
+            print(
+                "Not enough minority class samples, downsampling majority"
+                " to match available minority samples."
+            )
+            n_minority = n_class_1
+            n_majority = int(n_minority / class_balance)
+            if n_majority > n_class_0:
+                n_majority = n_class_0  # Final cap
+        sampled_class_0_indices = generator.choice(
+            class_0_indices, n_majority, replace=False
+        )
+        sampled_class_1_indices = generator.choice(
+            class_1_indices, n_minority, replace=False
+        )
 
     # Combine the sampled indices and sort them
     sampled_indices = np.sort(
@@ -153,7 +177,7 @@ def get_target_mapping(
 ) -> dict[str, int]:
     if eval_setting == "multi-class":
         return {subreddit: index for index, subreddit in enumerate(target_subreddits)}
-    if eval_setting == "one-vs-all":
+    if eval_setting == "one-vs-all" or eval_setting == "data-drift":
         return dict.fromkeys(target_subreddits, 1)
     err_msg = f"Invalid evaluation setting: {eval_setting}"
     raise ValueError(err_msg)

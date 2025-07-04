@@ -5,11 +5,10 @@ import joblib
 import numpy as np
 from datasets import Dataset
 from scipy.spatial.distance import cdist
-from sklearn.ensemble import IsolationForest
-from sklearn.linear_model import SGDClassifier
+from sklearn.ensemble import IsolationForest, RandomForestClassifier
 
 from arc_tigers.eval.utils import softmax
-from arc_tigers.sample.utils import get_distilbert_embeddings
+from arc_tigers.sample.utils import get_mpnet_embeddings
 
 DummyAcqFunc = namedtuple("DummyAcqFunc", ["observed_idx", "remaining_idx", "rng"])
 
@@ -90,13 +89,14 @@ class DistanceSampler(AcquisitionFunction):
     Args:
         data (Dataset): The dataset to sample from.
         sampling_seed (int): Random seed for reproducibility.
-        eval_dir (str): Directory for evaluation outputs.
+        eval_dirs (tuple[str]): Directories for evaluation outputs, and embedding
+        outputs. (eval_outpur_dir,embedding_dir).
 
     Methods:
         sample(): Selects the next sample to label based on distance.
     """
 
-    def __init__(self, data: dict[str, Dataset], sampling_seed: int, eval_dir: str):
+    def __init__(self, data: dict[str, Dataset], sampling_seed: int, eval_dirs: str):
         """Samples a dataset based on distance between observed and unobserved
         embeddings.
 
@@ -116,7 +116,7 @@ class DistanceSampler(AcquisitionFunction):
         self.rng = np.random.default_rng(seed=sampling_seed)
 
         # Get embeddings for whole dataset
-        self.embeddings = get_distilbert_embeddings(self.eval_data, eval_dir)
+        self.embeddings = get_mpnet_embeddings(self.eval_data, eval_dirs[1])
         self.name = "distance"
 
     def sample(self) -> int:
@@ -171,7 +171,8 @@ class AccSampler(AcquisitionFunction):
 
     Args:
         data (dict[str, Dataset]): Dictionary containing datasets.
-        eval_dir (str): Directory for evaluation outputs.
+        eval_dirs (tuple[str]): Directories for evaluation outputs, and embedding
+        outputs. (eval_outpur_dir,embedding_dir).
         sampling_seed (int): Random seed for reproducibility.
 
     Methods:
@@ -182,7 +183,9 @@ class AccSampler(AcquisitionFunction):
         sample(): Selects the next sample to label based on expected loss.
     """
 
-    def __init__(self, data: dict[str, Dataset], eval_dir: str, sampling_seed: int):
+    def __init__(
+        self, data: dict[str, Dataset], eval_dirs: tuple[str, str], sampling_seed: int
+    ):
         """Samples a dataset based on distance between model loss and surrogate loss,
         where the surrogate is a Random Forest classifier.
 
@@ -201,10 +204,11 @@ class AccSampler(AcquisitionFunction):
         self.surrogate_train_data = data["surrogate_train_dataset"]
         self.observed_idx: list[int] = []
         self.remaining_idx = np.arange(len(self.eval_data)).tolist()
-        self.eval_dir = eval_dir
+        self.eval_dir = eval_dirs[0]
+        self.embedding_dir = eval_dirs[1]
 
         # Get embeddings for use with RF classifier
-        self.embeddings = get_distilbert_embeddings(self.eval_data, eval_dir)
+        self.eval_embs = get_mpnet_embeddings(self.eval_data, self.embedding_dir)
         self.rng = np.random.default_rng(seed=sampling_seed)
 
         # initialise surrogate predictions and model
@@ -212,8 +216,8 @@ class AccSampler(AcquisitionFunction):
         self.surrogate_preds = np.full(
             (len(self.eval_data), self.num_classes), 1.0 / self.num_classes
         )
-        self.surrogate_model = SGDClassifier(
-            loss="log_loss", random_state=self.rng.integers(1e9)
+        self.surrogate_model = RandomForestClassifier(
+            random_state=self.rng.integers(1e9)
         )
 
         # Placeholder for model predictions (should be set externally)
@@ -225,14 +229,14 @@ class AccSampler(AcquisitionFunction):
         self.model_preds = softmax(preds)
 
     def surrogate_pretrain(self):
-        X_train = get_distilbert_embeddings(
+        self.train_embs = get_mpnet_embeddings(
             self.surrogate_train_data,
-            self.eval_dir,
+            self.embedding_dir,
             embedding_savename="surrogate_embeddings",
         )
-        y_train = np.array(self.surrogate_train_data["label"])
+        self.y_train = np.array(self.surrogate_train_data["label"])
         surrogate_path = os.path.join(
-            self.eval_dir,
+            self.embedding_dir,
             f"pretrained_surrogate_{self.surrogate_model.__class__.__name__}.joblib",
         )
         if os.path.exists(surrogate_path):
@@ -240,20 +244,26 @@ class AccSampler(AcquisitionFunction):
             self.surrogate_model = joblib.load(surrogate_path)
         else:
             print(f"Pre-training surrogate model and saving to {surrogate_path} ...")
-            self.surrogate_model = self.surrogate_model.fit(X_train, y_train)
+            self.surrogate_model = self.surrogate_model.fit(
+                self.train_embs, self.y_train
+            )
             joblib.dump(self.surrogate_model, surrogate_path)
 
     def update_surrogate(self):
         if len(self.observed_idx) == 0:
             self.surrogate_preds = np.zeros_like(self.surrogate_preds)
             return
-        X_acquired = self.embeddings[np.array(self.observed_idx)]
+        X_acquired = self.eval_embs[np.array(self.observed_idx)]
         y_acquired = np.array(self.eval_data["label"])[np.array(self.observed_idx)]
 
-        self.surrogate_model = self.surrogate_model.partial_fit(X_acquired, y_acquired)
+        self.surrogate_model = self.surrogate_model.fit(
+            np.concat((self.train_embs, X_acquired)),
+            np.concat((self.y_train, y_acquired)),
+        )
+
         # Get surrogate predictions for all samples
         intermediate_surrogate_preds = self.surrogate_model.predict_proba(
-            self.embeddings
+            self.eval_embs
         )
         classes_ = self.surrogate_model.classes_
         # Fill a full array with zeros for all classes
@@ -310,7 +320,8 @@ class InformationGainSampler(AcquisitionFunction):
 
     Args:
         data (dict[str, Dataset]): Dictionary containing datasets.
-        eval_dir (str): Directory for evaluation outputs.
+        eval_dirs (tuple[str]): Directories for evaluation outputs, and embedding
+        outputs. (eval_outpur_dir,embedding_dir).
         sampling_seed (int): Random seed for reproducibility.
 
     Methods:
@@ -321,7 +332,7 @@ class InformationGainSampler(AcquisitionFunction):
         sample(): Selects the next sample to label based on information gain.
     """
 
-    def __init__(self, data: Dataset, eval_dir: str, sampling_seed: int):
+    def __init__(self, data: Dataset, eval_dirs: str, sampling_seed: int):
         """
         Samples based on information gain (cross-entropy between surrogate and model
         predictions).
@@ -335,18 +346,18 @@ class InformationGainSampler(AcquisitionFunction):
         self.surrogate_train_data = data["surrogate_train_dataset"]
         self.observed_idx: list[int] = []
         self.remaining_idx: list[int] = np.arange(len(self.eval_data)).tolist()
-        self.eval_dir = eval_dir
+        self.embedding_dir = eval_dirs[1]
 
         # Get embeddings for use with surrogate classifier
-        self.embeddings = get_distilbert_embeddings(self.eval_data, eval_dir)
+        self.eval_embs = get_mpnet_embeddings(self.eval_data, self.embedding_dir)
 
         # initialise surrogate predictions and model
         self.num_classes = len(np.unique(self.eval_data["label"]))
         self.surrogate_preds = np.full(
             (len(self.eval_data), self.num_classes), 1.0 / self.num_classes
         )
-        self.surrogate_model = SGDClassifier(
-            loss="log_loss", random_state=self.rng.integers(1e9)
+        self.surrogate_model = RandomForestClassifier(
+            random_state=self.rng.integers(1e9)
         )
 
         # Placeholder for model predictions (should be set externally)
@@ -358,14 +369,14 @@ class InformationGainSampler(AcquisitionFunction):
         self.model_preds = softmax(preds)
 
     def surrogate_pretrain(self):
-        X_train = get_distilbert_embeddings(
+        self.train_embs = get_mpnet_embeddings(
             self.surrogate_train_data,
-            self.eval_dir,
+            self.embedding_dir,
             embedding_savename="surrogate_embeddings",
         )
-        y_train = np.array(self.surrogate_train_data["label"])
+        self.y_train = np.array(self.surrogate_train_data["label"])
         surrogate_path = os.path.join(
-            self.eval_dir,
+            self.embedding_dir,
             f"pretrained_surrogate_{self.surrogate_model.__class__.__name__}.joblib",
         )
         if os.path.exists(surrogate_path):
@@ -373,30 +384,26 @@ class InformationGainSampler(AcquisitionFunction):
             self.surrogate_model = joblib.load(surrogate_path)
         else:
             print(f"Pre-training surrogate model and saving to {surrogate_path} ...")
-            self.surrogate_model = self.surrogate_model.fit(X_train, y_train)
+            self.surrogate_model = self.surrogate_model.fit(
+                self.train_embs, self.y_train
+            )
             joblib.dump(self.surrogate_model, surrogate_path)
 
     def update_surrogate(self):
         if len(self.observed_idx) == 0:
             self.surrogate_preds = np.zeros_like(self.surrogate_preds)
             return
-        X_acquired = self.embeddings[np.array(self.observed_idx)]
+        X_acquired = self.eval_embs[np.array(self.observed_idx)]
         y_acquired = np.array(self.eval_data["label"])[np.array(self.observed_idx)]
 
-        # # Concatenate surrogate_train_data points before model fitting
-        # X_training = get_distilbert_embeddings(
-        #     self.surrogate_train_data,
-        #     self.eval_dir,
-        #     embedding_savename="surrogate_embeddings",
-        # )
-        # y_training = np.array(self.surrogate_train_data["label"])
-        # X_data = np.concatenate([X_acquired, X_training], axis=0)
-        # y_data = np.concatenate([y_acquired, y_training], axis=0)
+        self.surrogate_model = self.surrogate_model.fit(
+            np.concat((self.train_embs, X_acquired)),
+            np.concat((self.y_train, y_acquired)),
+        )
 
-        self.surrogate_model = self.surrogate_model.partial_fit(X_acquired, y_acquired)
         # Get surrogate predictions for all samples
         intermediate_surrogate_preds = self.surrogate_model.predict_proba(
-            self.embeddings
+            self.eval_embs
         )
         classes_ = self.surrogate_model.classes_
         # Fill a full array with zeros for all classes
@@ -439,14 +446,15 @@ class IsolationForestSampler(AcquisitionFunction):
 
     Args:
         data (dict[str, Dataset]): Dictionary containing datasets.
-        eval_dir (str): Directory for evaluation outputs.
+        eval_dirs (tuple[str]): Directories for evaluation outputs, and embedding
+        outputs. (eval_outpur_dir,embedding_dir).
         sampling_seed (int): Random seed for reproducibility.
 
     Methods:
         sample(): Selects the next sample to label based on anomaly score.
     """
 
-    def __init__(self, data: dict[str, Dataset], eval_dir: str, sampling_seed: int):
+    def __init__(self, data: dict[str, Dataset], eval_dirs: str, sampling_seed: int):
         self.observed_idx: list[int] = []
         self.remaining_idx: list[int] = np.arange(
             len(data["evaluation_dataset"])
@@ -454,8 +462,8 @@ class IsolationForestSampler(AcquisitionFunction):
         self.n_sampled = 0
         self.rng = np.random.default_rng(seed=sampling_seed)
         self.eval_data = data["evaluation_dataset"]
-        self.embeddings = get_distilbert_embeddings(self.eval_data, eval_dir)
-        self.eval_dir = eval_dir
+        self.embedding_dir = eval_dirs[1]
+        self.embeddings = get_mpnet_embeddings(self.eval_data, self.embedding_dir)
         self.name = "isolation_forest_sampler"
 
     def sample(self):

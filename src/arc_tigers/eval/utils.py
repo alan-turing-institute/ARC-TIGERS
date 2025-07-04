@@ -10,6 +10,7 @@ import pandas as pd
 import torch
 from sklearn.metrics import (
     accuracy_score,
+    average_precision_score,
     classification_report,
     precision_recall_fscore_support,
 )
@@ -376,10 +377,12 @@ def compute_metrics(
         # Allow logits to be passed as the predictions
         if np.issubdtype(logits.dtype, np.integer):
             predictions = logits
-        # Allow binary predictions
+            probs = logits  # fallback, not ideal
         else:
             predictions = (logits > 0.5).astype(int)
+            probs = logits
     else:
+        probs = softmax(logits)[:, 1] if logits.shape[1] > 1 else softmax(logits)[:, 0]
         predictions = np.argmax(logits, axis=-1)
 
     sample_weight = bias_corrector.v_values if bias_corrector else None
@@ -397,6 +400,20 @@ def compute_metrics(
 
     loss = compute_loss(logits=logits, labels=labels, sample_weight=sample_weight)
 
+    # Improved Average Precision (AP) handling
+    unique_labels = np.unique(labels)
+    if len(unique_labels) < 2:
+        avg_precision = float("nan")
+        warning = (
+            "average_precision_score is undefined: only one class"
+            f" ({unique_labels[0]}) present in labels."
+        )
+        logger.warning(warning)
+    else:
+        avg_precision = average_precision_score(
+            labels, probs, sample_weight=sample_weight
+        )
+
     # no. of samples per class in the eval data (also assumed binary labels here,
     # minlength should be set to the number of classes to ensure
     # len(samples_per_class) == n_classes)
@@ -411,6 +428,7 @@ def compute_metrics(
         "precision": precision.tolist(),
         "recall": recall.tolist(),
         "loss": loss,
+        "average_precision": avg_precision,
         "n_class": n_class.tolist(),
     }
     logger.info("Eval metrics: %s", eval_scores)

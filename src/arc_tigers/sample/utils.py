@@ -53,20 +53,24 @@ def non_linear_spacing(min_labels, max_labels, n_steps=None):
     return steps
 
 
-def get_distilbert_embeddings(
-    dataset, eval_dir, embedding_savename="distilbert_embeddings"
-):
-    if os.path.isfile(eval_dir + f"{embedding_savename}.npy"):
-        print(f"{embedding_savename}.npy Found in {eval_dir}")
-        return np.load(eval_dir + f"{embedding_savename}.npy")
+def get_embeddings(
+    dataset: Dataset,
+    storage_dir: str,
+    embedding_savename: str,
+    model: SentenceTransformer,
+) -> torch.Tensor:
+    if os.path.isfile(storage_dir + f"{embedding_savename}.npy"):
+        print(f"{embedding_savename}.npy Found in {storage_dir}")
+        return np.load(storage_dir + f"{embedding_savename}.npy")
 
-    print(f"{embedding_savename}.npy not found in {eval_dir}. Generating embeddings...")
+    print(
+        f"{embedding_savename}.npy not found in {storage_dir}. Generating embeddings..."
+    )
     train_texts = dataset["text"]
     train_labels = dataset["label"]
 
     reddit_dataset = RedditTextDataset(train_texts, train_labels)
     dataloader = DataLoader(reddit_dataset, batch_size=32, shuffle=True)
-    model = SentenceTransformer("sentence-transformers/distilbert-base-nli-mean-tokens")
 
     all_embeddings = []
     all_labels = []
@@ -78,6 +82,24 @@ def get_distilbert_embeddings(
         all_labels.append(labels)
 
     embeddings = torch.vstack(all_embeddings).detach().cpu().numpy()
-    np.save(eval_dir + f"{embedding_savename}.npy", embeddings)
+    np.save(storage_dir + f"{embedding_savename}.npy", embeddings)
 
     return embeddings
+
+
+def get_distilbert_embeddings(
+    dataset: Dataset,
+    storage_dir: str,
+    embedding_savename: str = "distilbert_embeddings",
+) -> torch.Tensor:
+    model = SentenceTransformer("sentence-transformers/distilbert-base-nli-mean-tokens")
+
+    return get_embeddings(dataset, storage_dir, embedding_savename, model)
+
+
+def get_mpnet_embeddings(
+    dataset: Dataset, storage_dir: str, embedding_savename: str = "mpnet_embeddings"
+) -> torch.Tensor:
+    model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
+
+    return get_embeddings(dataset, storage_dir, embedding_savename, model)

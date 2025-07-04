@@ -58,7 +58,6 @@ def main(args):
     train_dataset, eval_dataset, _, _ = get_reddit_data(
         **data_config["data_args"],
         tokenizer=None,
-        random_seed=exp_config["random_seed"],
     )
 
     # Train the model

@@ -11,7 +11,7 @@ from arc_tigers.data.utils import sample_dataset_metrics
 from arc_tigers.eval.reddit_eval import get_preds, get_train_data_from_exp_dir
 from arc_tigers.eval.utils import evaluate, get_stats
 from arc_tigers.sample.random import RandomSampler
-from arc_tigers.utils import create_dir
+from arc_tigers.utils import create_dirs
 
 
 def main(
@@ -152,16 +152,16 @@ if __name__ == "__main__":
         "negative_error_rate": args.neg_error_rate,
     }
 
-    output_dir = create_dir(
+    output_dir, predictions_dir, _ = create_dirs(
         save_dir=args.save_dir,
         data_config_path=args.data_config,
         acq_strat="random",
         class_balance=args.class_balance,
     )
 
-    if os.path.isfile(output_dir + "predictions.npy"):
+    if os.path.isfile(predictions_dir + "/predictions.npy"):
         print("loading saved predictions..")
-        preds = np.load(output_dir + "predictions.npy")
+        preds = np.load(predictions_dir + "/predictions.npy")
         _, eval_data = get_preds(
             data_config_path=args.data_config,
             model_config_path=args.model_config,
@@ -181,7 +181,7 @@ if __name__ == "__main__":
             synthetic_args=synthetic_args,
         )
         print("saving predictions..")
-        np.save(output_dir + "predictions.npy", preds)
+        np.save(predictions_dir + "/predictions.npy", preds)
 
     data_dict = {
         "evaluation_dataset": eval_data,

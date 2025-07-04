@@ -22,4 +22,4 @@ source /bask/projects/v/vjgo8416-tigers/ARC-TIGERS/.venv/bin/activate
 # change huggingface cache to be in project dir rather than user home
 export HF_HOME="/bask/projects/v/vjgo8416-tigers/hf_cache"
 
-python scripts/experiments/train_classifier.py "configs/experiment/"$1".yaml"
+python scripts/experiments/train_classifier.py "configs/training/"$1".yaml"

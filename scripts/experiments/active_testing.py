@@ -16,11 +16,11 @@ from arc_tigers.sample.acquisition import (
     IsolationForestSampler,
     MinorityClassSampler,
 )
-from arc_tigers.utils import create_dir
+from arc_tigers.utils import create_dirs
 
 
 def main(
-    output_dir,
+    output_dirs,
     n_repeats,
     data_dict,
     acq_strat,
@@ -34,11 +34,11 @@ def main(
 
     rng = np.random.default_rng(init_seed)
 
-    sampler_args = {"data": data_dict, "eval_dir": output_dir}
+    sampler_args = {"data": data_dict, "eval_dirs": output_dirs}
 
     if acq_strat == "distance":
         sampler_class = DistanceSampler
-        bias_correction = False
+        # bias_correction = False
     elif acq_strat == "random_forest_acc":
         sampler_class = AccSampler
     elif acq_strat == "random_forest_ig":
@@ -149,16 +149,16 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    output_dir = create_dir(
+    output_dir, predictions_dir, _ = create_dirs(
         save_dir=args.save_dir,
         data_config_path=args.data_config,
         acq_strat=args.acq_strat,
         class_balance=args.class_balance,
     )
 
-    if os.path.isfile(output_dir + "predictions.npy"):
+    if os.path.isfile(predictions_dir + "/predictions.npy"):
         print("loading saved predictions..")
-        preds = np.load(output_dir + "predictions.npy")
+        preds = np.load(predictions_dir + "/predictions.npy")
         _, eval_data = get_preds(
             data_config_path=args.data_config,
             model_config_path=args.model_config,
@@ -178,7 +178,7 @@ if __name__ == "__main__":
             synthetic_args=None,
         )
         print("saving predictions..")
-        np.save(output_dir + "predictions.npy", preds)
+        np.save(predictions_dir + "/predictions.npy", preds)
 
     data_dict = {
         "evaluation_dataset": eval_data,
@@ -186,7 +186,7 @@ if __name__ == "__main__":
     }
 
     main(
-        output_dir=output_dir,
+        output_dirs=(output_dir, predictions_dir),
         n_repeats=args.n_repeats,
         data_dict=data_dict,
         acq_strat=args.acq_strat,

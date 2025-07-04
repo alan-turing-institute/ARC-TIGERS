@@ -16,7 +16,13 @@ from arc_tigers.data.utils import (
 )
 from arc_tigers.training.utils import get_label_weights
 
-ONE_VS_ALL_COMBINATIONS = {
+# DATA_DRIFT_COMBINATIONS specifies settings for "data-drift" experiments.
+# In this setting, we perform one-vs-all classification, but the set of target classes
+# changes between the train and test splits. Each split has its own exclusive set of
+# target subreddits (as defined in the dictionary), and there is no overlap between
+# the train and test target classes. This allows us to evaluate model generalization
+# to new, unseen target classes under distribution shift.
+DATA_DRIFT_COMBINATIONS = {
     "sport": {
         "train": ["r/soccer", "r/Cricket"],
         "test": ["r/nfl", "NFLv2", "r/NBATalk", "r/nba"],
@@ -34,6 +40,30 @@ ONE_VS_ALL_COMBINATIONS = {
     "advice": {"train": ["r/AskReddit"], "test": ["r/AskMenAdvice", "r/Advice"]},
 }
 
+# ONE_VS_ALL_COMBINATIONS specifies settings for "one-vs-all" experiments.
+# In this setting, we perform one-vs-all classification, where the same set of target
+# subreddits (as defined in the dictionary) are used for both the train and test splits.
+# All samples from these target subreddits are considered positive examples, and all
+# other subreddits are considered negative examples. This allows us to evaluate
+# performance when the model is trained and tested on the same set of target classes.
+ONE_VS_ALL_COMBINATIONS = {
+    "football": {
+        "train": ["r/soccer", "r/FantasyPL", "r/coys", "r/reddevils", "r/LiverpoolFC"],
+        "test": ["r/soccer", "r/FantasyPL", "r/coys", "r/reddevils", "r/LiverpoolFC"],
+    },
+    "news": {"train": ["r/news", "r/Worldnews"], "test": ["r/news", "r/Worldnews"]},
+    "advice": {
+        "train": ["r/AskReddit", "r/AskMenAdvice", "r/Advice"],
+        "test": ["r/AskReddit", "r/AskMenAdvice", "r/Advice"],
+    },
+}
+
+# BINARY_COMBINATIONS specifies settings for standard binary classification experiments.
+# In this setting, only the specified two target subreddits (or classes) are used for
+# both the train and test splits. All samples from these subreddits are included, and
+# the task is to distinguish between them (i.e., no "other" or negative class is
+# present). This allows for straightforward binary classification between two specific
+# classes.
 BINARY_COMBINATIONS = {
     "sport": {
         "train": ["r/soccer", "r/Cricket"],
@@ -90,8 +120,9 @@ def get_reddit_data(
     Loads and preprocesses the Reddit dataset based on the specified configuration.
 
     Args:
-        setting (str): The classification setting, either "multi-class" or "one-vs-all".
-        target_config (str): The target configuration to use for the dataset.
+        setting (str): The classification setting, either "multi-class" , "one-vs-all",
+        or "data-drift". target_config (str): The target configuration to use for the
+        dataset.
         balanced (bool): Whether to balance the dataset by resampling classes.
         n_rows (int): The number of rows to load from the dataset.
         tokenizer (transformers.PreTrainedTokenizer): The tokenizer to use for
@@ -115,7 +146,14 @@ def get_reddit_data(
     # so hardcode seed in this case
     split_generator = np.random.default_rng(seed=42)
 
-    data_dir = f"{DATA_DIR}/reddit_dataset_12/{n_rows}_rows/splits/{target_config}/"
+    data_dir_mode = "data-drift" if setting == "multi-class" else setting
+
+    data_dir = (
+        f"{DATA_DIR}/reddit_dataset_12/{n_rows}_rows/"
+        f"splits/{target_config}_{data_dir_mode}/"
+    )
+
+    print(f"Loading data from {data_dir}...")
 
     dataset = load_data(data_dir)
 
@@ -152,9 +190,25 @@ def get_reddit_data(
                 f"{list(ONE_VS_ALL_COMBINATIONS.keys())}."
             )
             raise ValueError(err_msg)
-        train_dataset = dataset["train"]
+
         train_targets = ONE_VS_ALL_COMBINATIONS[target_config]["train"]
         test_targets = ONE_VS_ALL_COMBINATIONS[target_config]["test"]
+        train_dataset = dataset["train"]
+        train_target_map = get_target_mapping(setting, train_targets)
+        test_target_map = get_target_mapping(setting, test_targets)
+        meta_data["train_target_map"] = train_target_map
+        meta_data["test_target_map"] = train_target_map
+
+    elif setting == "data-drift":
+        if target_config not in DATA_DRIFT_COMBINATIONS:
+            err_msg = (
+                f"Unknown target config: {target_config}. Please use one of "
+                f"{list(DATA_DRIFT_COMBINATIONS.keys())}."
+            )
+            raise ValueError(err_msg)
+        train_dataset = dataset["train"]
+        train_targets = DATA_DRIFT_COMBINATIONS[target_config]["train"]
+        test_targets = DATA_DRIFT_COMBINATIONS[target_config]["test"]
         train_target_map = get_target_mapping(setting, train_targets)
         test_target_map = get_target_mapping(setting, test_targets)
         meta_data["train_target_map"] = train_target_map
@@ -162,7 +216,8 @@ def get_reddit_data(
 
     else:
         err_msg = (
-            f"Unknown setting: {setting}. Please use 'multi-class' or 'one-vs-all'."
+            f"Unknown setting: {setting}. "
+            "Please use 'multi-class' 'one-vs-all', or 'data-drift'."
         )
         raise ValueError(err_msg)
 
@@ -174,21 +229,23 @@ def get_reddit_data(
             "targets": train_target_map,
         },
     )
-    if setting == "one-vs-all":
-        tokenized_test_dataset: Dataset = dataset["test"].map(
+    # If the dataset is multi-class, we split the train set into train and test sets
+    tokenized_test_dataset: Dataset
+    if setting == "multi-class":
+        # use the train set so hat the classes are consistent between train and test
+        tokenized_train_dataset, tokenized_test_dataset = (
+            tokenized_train_dataset.train_test_split(
+                test_size=0.5, generator=split_generator
+            ).values()
+        )
+    else:
+        tokenized_test_dataset = dataset["test"].map(
             preprocess_function,
             batched=True,
             fn_kwargs={
                 "tokenizer": tokenizer,
                 "targets": test_target_map,
             },
-        )
-    elif setting == "multi-class":
-        # use the train set so hat the classes are consistent
-        tokenized_train_dataset, tokenized_test_dataset = (
-            tokenized_train_dataset.train_test_split(
-                test_size=0.5, generator=split_generator
-            ).values()
         )
 
     # balance the dataset
