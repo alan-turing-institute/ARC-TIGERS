@@ -139,23 +139,17 @@ def get_transformers_preds(
         # used in the rest of this script - we should settle on one definition.
         # The BetaModel form is the proportion of data in the minority class
         imbalance = n_class_1 / (n_class_0 + n_class_1)
-        if (
-            model_config["model_kwargs"]["positive_error_rate"]
-            or model_config["model_kwargs"]["negative_error_rate"]
-        ):
-            if not (
-                model_config["model_kwargs"]["positive_error_rate"]
-                and model_config["model_kwargs"]["negative_error_rate"]
-            ):
+        model_kwargs = model_config["model_kwargs"]
+        pos_err_rate = model_kwargs["positive_error_rate"]
+        neg_err_rate = model_kwargs["negative_error_rate"]
+        if pos_err_rate or neg_err_rate:
+            if not (pos_err_rate and neg_err_rate):
                 msg = "Both positive and negative error rates must be set."
                 raise ValueError(msg)
-            model = BetaModel.from_error_rates(
-                model_config["model_kwargs"]["positive_error_rate"],
-                model_config["model_kwargs"]["negative_error_rate"],
-            )
+            model = BetaModel.from_error_rates(pos_err_rate, neg_err_rate)
         else:
             model = BetaModel.from_imbalance_and_advantage(
-                imbalance, model_config["model_kwargs"]["model_adv"]
+                imbalance, model_kwargs["model_adv"]
             )
 
     training_args = TrainingArguments(

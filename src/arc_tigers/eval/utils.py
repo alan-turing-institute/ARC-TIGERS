@@ -21,12 +21,12 @@ logger = logging.getLogger(__name__)
 
 def plot_difference(
     save_dir: str,
-    metric_stats: dict[
+    stats: dict[
         str, npt.NDArray[np.integer] | dict[str, npt.NDArray[np.integer | np.floating]]
     ],
     full_metrics: dict[str, int | float],
 ):
-    for metric in metric_stats:
+    for metric in stats:
         if metric == "n_labels":
             continue
 
@@ -34,23 +34,19 @@ def plot_difference(
             continue
 
         plt.axhline(y=0, color="k", linestyle="--", alpha=0.2)
-        diff = metric_stats[metric]["mean"] - full_metrics[metric]
-        diff_min = (
-            metric_stats[metric]["mean"] - metric_stats[metric]["std"]
-        ) - full_metrics[metric]
-        diff_max = (
-            metric_stats[metric]["mean"] + metric_stats[metric]["std"]
-        ) - full_metrics[metric]
+        diff = stats[metric]["mean"] - full_metrics[metric]
+        diff_min = (stats[metric]["mean"] - stats[metric]["std"]) - full_metrics[metric]
+        diff_max = (stats[metric]["mean"] + stats[metric]["std"]) - full_metrics[metric]
 
         plt.plot(
-            metric_stats["n_labels"],
+            stats["n_labels"],
             diff,
             label="Mean (labelled subset)",
             linestyle="-",
             linewidth=2,
         )
         plt.fill_between(
-            metric_stats["n_labels"],
+            stats["n_labels"],
             diff_min,
             diff_max,
             linestyle="-",
@@ -68,7 +64,7 @@ def plot_difference(
 
 def plot_metrics(
     save_dir: str,
-    metric_stats: dict[
+    stats: dict[
         str, npt.NDArray[np.integer] | dict[str, npt.NDArray[np.integer | np.floating]]
     ],
     full_metrics: dict[str, int | float],
@@ -79,7 +75,7 @@ def plot_metrics(
 
     Args:
         save_dir: Directory to save the plots.
-        metric_stats: Dictionary containing the metric stats.
+        stats: Dictionary containing the metric stats.
         full_metrics: Dictionary containing the metrics of the full dataset.
         quantiles: List of quantiles to plot. If None, defaults to [0.025, 0.25].
         quantile_colors: List of colors for the quantiles. If None, defaults to ["r",
@@ -93,11 +89,11 @@ def plot_metrics(
     limits_dict = {
         "accuracy": (0.5, 1.0),
         "loss": (0.0, 2.0),
-        "n_class_0": (0, np.max(metric_stats["n_labels"])),
-        "n_class_1": (0, np.max(metric_stats["n_labels"])),
+        "n_class_0": (0, np.max(stats["n_labels"])),
+        "n_class_1": (0, np.max(stats["n_labels"])),
     }
 
-    for metric in metric_stats:
+    for metric in stats:
         if metric == "n_labels":
             continue
         if "n_class" not in metric:
@@ -111,8 +107,8 @@ def plot_metrics(
             )
 
         plt.plot(
-            metric_stats["n_labels"],
-            metric_stats[metric]["mean"],
+            stats["n_labels"],
+            stats[metric]["mean"],
             label="Mean (labelled subset)",
             color="blue",
             linestyle="-",
@@ -120,9 +116,9 @@ def plot_metrics(
         )
         for quantile, color in zip(quantiles, quantile_colors, strict=True):
             plt.fill_between(
-                metric_stats["n_labels"],
-                metric_stats[metric][f"quantile_{quantile * 100}"],
-                metric_stats[metric][f"quantile_{(1 - quantile) * 100}"],
+                stats["n_labels"],
+                stats[metric][f"quantile_{quantile * 100}"],
+                stats[metric][f"quantile_{(1 - quantile) * 100}"],
                 color=color,
                 alpha=0.2,
                 label=f"Quantiles ({quantile * 100} - {(1 - quantile) * 100})",
@@ -177,10 +173,10 @@ def get_metric_stats(
         raise ValueError(msg)
 
     metrics = repeats[0].columns
-    metric_stats: dict[
+    stats: dict[
         str, npt.NDArray[np.integer] | dict[str, npt.NDArray[np.integer | np.floating]]
     ] = {}
-    metric_stats["n_labels"] = np.array(repeats[0].index)
+    stats["n_labels"] = np.array(repeats[0].index)
     n_repeats = len(repeats)
     n_samples = len(repeats[0])
     quantiles = [0.025, 0.25]  # will also compute 1 - quantiles
@@ -190,44 +186,43 @@ def get_metric_stats(
         for idx, r in enumerate(repeats):
             metric_repeats[idx, :] = r[metric]
 
-        metric_stats[metric] = {}
-        metric_stats[metric]["mean"] = np.mean(metric_repeats, axis=0)
-        metric_stats[metric]["median"] = np.median(metric_repeats, axis=0)
-        metric_stats[metric]["std"] = np.std(metric_repeats, axis=0)
-        metric_stats[metric]["mse"] = np.mean(
+        stats[metric] = {}
+        stats[metric]["mean"] = np.mean(metric_repeats, axis=0)
+        stats[metric]["median"] = np.median(metric_repeats, axis=0)
+        stats[metric]["std"] = np.std(metric_repeats, axis=0)
+        stats[metric]["mse"] = np.mean(
             (metric_repeats - full_metrics[metric]) ** 2, axis=0
         )
-        metric_stats[metric]["mse_std"] = np.std(
+        stats[metric]["mse_std"] = np.std(
             (metric_repeats - full_metrics[metric]) ** 2, axis=0
         )
 
         for quantile in quantiles:
-            metric_stats[metric][f"quantile_{quantile * 100}"] = np.quantile(
+            stats[metric][f"quantile_{quantile * 100}"] = np.quantile(
                 metric_repeats, quantile, axis=0
             )
-            metric_stats[metric][f"quantile_{(1 - quantile) * 100}"] = np.quantile(
+            stats[metric][f"quantile_{(1 - quantile) * 100}"] = np.quantile(
                 metric_repeats, 1 - quantile, axis=0
             )
-        metric_stats[metric]["IQR"] = (
-            metric_stats[metric]["quantile_75.0"]
-            - metric_stats[metric]["quantile_25.0"]
+        stats[metric]["IQR"] = (
+            stats[metric]["quantile_75.0"] - stats[metric]["quantile_25.0"]
         )
 
     if plot:
         plot_metrics(
             data_dir,
-            metric_stats,
+            stats,
             full_metrics,
             quantiles,
             quantile_colors,
         )
         plot_difference(
             data_dir,
-            metric_stats,
+            stats,
             full_metrics,
         )
 
-    return metric_stats, full_metrics
+    return stats, full_metrics
 
 
 class BiasCorrector:

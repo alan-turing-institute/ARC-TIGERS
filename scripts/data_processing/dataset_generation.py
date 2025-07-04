@@ -172,7 +172,7 @@ if __name__ == "__main__":
         type=str,
         default="one-vs-all",
         choices=["data-drift", "one-vs-all", "multi-class"],
-        help="Splitting mode: 'data-drift' or 'one-vs-all'.",
+        help="Splitting mode: 'data-drift', 'one-vs-all, or 'multi-class''.",
     )
     parser.add_argument(
         "-r",
