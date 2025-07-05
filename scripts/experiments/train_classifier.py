@@ -12,54 +12,48 @@ from transformers import (
     TrainingArguments,
 )
 
-from arc_tigers.data.reddit_data import get_reddit_data
+from arc_tigers.data.utils import hf_train_test_split, tokenize_data
 from arc_tigers.eval.utils import compute_metrics
+from arc_tigers.training.config import TrainConfig
 from arc_tigers.training.utils import WeightedLossTrainer, get_label_weights
-from arc_tigers.utils import get_configs, load_yaml, seed_everything, to_json
+from arc_tigers.utils import seed_everything
 
 logger = logging.getLogger(__name__)
 
 
 def main(args):
-    train_config = load_yaml(args.exp_config)
-    data_config, model_config = get_configs(train_config)
+    train_config = TrainConfig.from_path(args.train_config)
 
-    exp_name = args.exp_name if args.exp_name else train_config["exp_name"]
-    save_dir = (
-        f"outputs/{data_config['data_name']}"
-        f"/{train_config['data_config']}"
-        f"/{train_config['model_config']}/{exp_name}"
-    )
-    train_config["save_dir"] = save_dir
+    save_dir = train_config.save_dir
     os.makedirs(save_dir, exist_ok=False)
 
-    seed_everything(train_config["random_seed"])
-
-    # Save a copy for logging
-    exp_config_path = os.path.join(save_dir, "train_config.json")
-    to_json(train_config, exp_config_path)
-    print(f"Experiment configuration saved to {exp_config_path}")
-
-    # set up logging
     logging.basicConfig(filename=f"{save_dir}/logs.log", level=logging.INFO)
 
+    train_config.save(save_dir)
+    logger.info("Experiment configuration saved to %s", save_dir)
+    seed = train_config.hparams_config.train_kwargs["seed"]
+    seed_everything(seed)
+
     # Load tokenizer and model
-    model_name = model_config["model_id"]
+    model_name = train_config.model_config.model_id
     tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(model_name)
     model: PreTrainedModel = AutoModelForSequenceClassification.from_pretrained(
-        model_name, **model_config["model_kwargs"]
+        model_name, **train_config.model_config.model_kwargs
     )
 
     # Data collator
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
-    train_dataset, eval_dataset, _ = get_reddit_data(
-        **data_config["data_args"], tokenizer=tokenizer
+    train_dataset = train_config.data_config.get_train_split()
+    train_dataset = tokenize_data(train_dataset, tokenizer)
+    train_dataset, eval_dataset = hf_train_test_split(
+        train_dataset, seed=seed, test_size=0.1
     )
+
     training_args = TrainingArguments(
-        output_dir=save_dir,
+        output_dir=str(save_dir),
         logging_dir=f"{save_dir}/logs",
-        **train_config["train_kwargs"],
+        **train_config.hparams_config.train_kwargs,
     )
     # Trainer
     trainer = WeightedLossTrainer(
@@ -67,7 +61,7 @@ def main(args):
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
         loss_weights=get_label_weights(train_dataset)[0],
@@ -78,12 +72,12 @@ def main(args):
 
     # Evaluate the model
     results = trainer.evaluate()
-    print("Evaluation results:", results)
+    logger.info("Evaluation results: %s", results)
     # Save evaluation results to a JSON file
-    results_path = f"{save_dir}/evaluation_results.json"
+    results_path = save_dir / "evaluation_results.json"
     with open(results_path, "w") as f:
         json.dump(results, f, indent=4)
-    print(f"Evaluation results saved to {results_path}")
+    logger.info("Evaluation results saved to %s", results_path)
 
     # Save the model and tokenizer
     model.save_pretrained(save_dir)
@@ -92,14 +86,6 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a classifier")
-    parser.add_argument(
-        "exp_config",
-        help="path to the experiment config yaml file",
-    )
-    parser.add_argument(
-        "--exp_name",
-        help="override the experiment name in the config file",
-        default=None,
-    )
+    parser.add_argument("train_config", help="path to the train config yaml file")
     args = parser.parse_args()
     main(args)

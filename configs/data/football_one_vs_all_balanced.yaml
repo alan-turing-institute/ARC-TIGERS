@@ -1,5 +1,5 @@
 data_name: reddit_dataset_12
-setting: one-vs-all
+task: one-vs-all
 target_config: football
 train_imbalance: 0.5
 test_imbalance: 0.5

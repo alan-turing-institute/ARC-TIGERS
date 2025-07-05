@@ -32,9 +32,9 @@ def main(
 
     # Save the dataset
     if target_subreddits.endswith("top_subreddits.json"):
-        save_path = f"{DATA_DIR}/{dataset_name.split('/')[-1]}"
+        save_path = DATA_DIR / f"{dataset_name.split('/')[-1]}"
     else:
-        save_path = f"{DATA_DIR}/{target_subreddits.split('/')[-1].rstrip('.json')}"
+        save_path = DATA_DIR / f"{target_subreddits.split('/')[-1].rstrip('.json')}"
 
     ds.save_to_disk(save_path)
 

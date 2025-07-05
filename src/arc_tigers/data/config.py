@@ -30,14 +30,32 @@ class DataConfig:
         return cls.from_path(config_path)
 
     @property
-    def full_data_dir(self) -> Path:
+    def parent_data_dir(self) -> Path:
         """Path to the full parent dataset"""
         return DATA_DIR / self.data_name
 
     @property
+    def save_name(self) -> str:
+        tr_imb = str(self.train_imbalance).replace(".", "")
+        return f"{self.task}/{self.target_config}/{self.seed}_{tr_imb}"
+
+    @property
     def splits_dir(self) -> Path:
-        """Path to the data splits specific to this config"""
-        return self.full_data_dir / f"splits/{self.config_name}"
+        return self.parent_data_dir / f"splits/{self.save_name}/"
+
+    @property
+    def full_splits_dir(self) -> Path:
+        """Path to the full train and test splits for this config. This contains the
+        full training set for this config, and the full test set from which the actual
+        test split for this config is derived (by taking a subset to achieve the
+        required level of imbalance)."""
+        return self.splits_dir / "full"
+
+    @property
+    def test_dir(self) -> Path:
+        """Path to the test split for this config."""
+        te_imb = str(self.test_imbalance).replace(".", "")
+        return self.splits_dir / f"test/{te_imb}"
 
     @property
     def target_categories(self) -> dict[str, list[str]]:
@@ -52,14 +70,14 @@ class DataConfig:
         drift_config = load_yaml(TASKS_CONFIG_DIR / "drift.yaml")
         return drift_config[self.target_config]
 
-    def get_splits(self) -> DatasetDict:
-        return DatasetDict.load_from_disk(self.splits_dir)
+    def get_parent_data(self) -> Dataset:
+        return Dataset.load_from_disk(self.parent_data_dir)
+
+    def get_full_splits(self) -> DatasetDict:
+        return DatasetDict.load_from_disk(self.full_splits_dir)
 
     def get_train_split(self) -> Dataset:
-        return self.get_splits()["train"]
+        return self.get_full_splits()["train"]
 
     def get_test_split(self) -> Dataset:
-        return self.get_splits()["test"]
-
-    def get_full_data(self) -> Dataset:
-        return Dataset.load_from_disk(self.full_data_dir)
+        return Dataset.load_from_disk(self.test_dir)

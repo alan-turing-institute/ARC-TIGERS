@@ -22,6 +22,6 @@ source /bask/projects/v/vjgo8416-tigers/ARC-TIGERS/.venv/bin/activate
 # change huggingface cache to be in project dir rather than user home
 export HF_HOME="/bask/projects/v/vjgo8416-tigers/hf_cache"
 
-echo data config: $1
+echo number of rows: $1
 
-python scripts/data_processing/dataset_generation.py $1
+python scripts/data_processing/dataset_download.py --max_rows $1

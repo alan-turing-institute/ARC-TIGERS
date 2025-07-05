@@ -83,37 +83,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a classifier")
     parser.add_argument(
         "data_config",
-        help=(
-            "path to the data config yaml file, or 'synthetic' to generate a "
-            "synthetic dataset"
-        ),
+        help="path to the data config file specifying the test set to use",
     )
     parser.add_argument(
-        "model_config",
-        help=(
-            "path to the model config yaml file, or 'beta_model' to use a "
-            "synthetic model. model_adv must be set if using beta_model."
-        ),
+        "train_config",
+        help="path to the training config file specifying the trained model to use",
     )
-    parser.add_argument(
-        "save_dir",
-        type=str,
-        default=None,
-        help="Path to save the model and results",
-    )
-    parser.add_argument(
-        "acq_strat",
-        type=str,
-        default=None,
-        help="Acquisition function to use",
-    )
+    parser.add_argument("strategy", type=str, help="Sampling strategy")
 
-    parser.add_argument(
-        "--class_balance",
-        type=float,
-        default=1.0,
-        help="Balance between the classes",
-    )
     parser.add_argument("--n_repeats", type=int, required=True)
     parser.add_argument("--max_labels", type=int, required=True)
     parser.add_argument("--seed", type=int, required=True)

@@ -2,10 +2,25 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from arc_tigers.constants import TRAIN_CONFIG_DIR
+import yaml
+
+from arc_tigers.constants import HPARAMS_CONFIG_DIR, OUTPUTS_DIR, TRAIN_CONFIG_DIR
 from arc_tigers.data.config import DataConfig
 from arc_tigers.model.config import ModelConfig
 from arc_tigers.utils import load_yaml
+
+
+@dataclass
+class HParamsConfig:
+    config_name: str
+    train_kwargs: dict[str, Any]
+
+    @classmethod
+    def from_name(cls, config_name: str) -> "HParamsConfig":
+        """Load data config from a YAML file based on the config name."""
+        config_path = HPARAMS_CONFIG_DIR / f"{config_name}.yaml"
+        config = load_yaml(config_path)
+        return cls(config_name=config_name, train_kwargs=config)
 
 
 @dataclass
@@ -13,9 +28,7 @@ class TrainConfig:
     config_name: str
     model_config: ModelConfig
     data_config: DataConfig
-    exp_name: str
-    random_seed: int
-    train_kwargs: dict[str, Any]
+    hparams_config: HParamsConfig
 
     @classmethod
     def from_path(cls, config_path: str | Path) -> "TrainConfig":
@@ -23,10 +36,12 @@ class TrainConfig:
         config = load_yaml(config_path)
         data_config_name = config.pop("data_config")
         model_config_name = config.pop("model_config")
+        hparams_config_name = config.pop("hparams_config")
         return cls(
             config_name=Path(config_path).stem,
             data_config=DataConfig.from_name(data_config_name),
             model_config=ModelConfig.from_name(model_config_name),
+            hparams_config=HParamsConfig.from_name(hparams_config_name),
             **config,
         )
 
@@ -35,3 +50,30 @@ class TrainConfig:
         """Load data config from a YAML file based on the config name."""
         config_path = TRAIN_CONFIG_DIR / f"{config_name}.yaml"
         return cls.from_path(config_path)
+
+    @property
+    def save_dir(self) -> Path:
+        return (
+            OUTPUTS_DIR
+            / self.data_config.data_name
+            / self.data_config.save_name
+            / self.model_config.config_name
+            / self.hparams_config.config_name
+        )
+
+    def save(self, path: str | Path | None = None):
+        """Save the training configuration to a YAML file."""
+        if path is None:
+            path = self.save_dir
+        if Path(path).is_dir():
+            path = Path(path) / "train_config.yaml"
+
+        config_dict = {
+            "model_config": self.model_config.config_name,
+            "data_config": self.data_config.config_name,
+            "hparams_config": self.hparams_config.config_name,
+        }
+        with open(path, "w") as f:
+            yaml.safe_dump(config_dict, f)
+
+        return path

@@ -50,7 +50,7 @@ def main(args):
     pipeline = make_pipeline(
         TfidfVectorizer(),
         LogisticRegression(
-            **model_config["model_kwargs"], random_state=exp_config["random_seed"]
+            **model_config["model_kwargs"], random_state=exp_config["seed"]
         ),
     )
 

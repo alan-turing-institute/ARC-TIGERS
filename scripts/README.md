@@ -34,7 +34,7 @@ To be used in the next step you should now specify data configs which are define
 data_name: reddit_dataset_12
 data_args:
   n_rows: 10000000
-  setting: one-vs-all
+  task: one-vs-all
   target_config: football
   balanced: True
 ```
@@ -56,12 +56,12 @@ Where the yaml might be structured like so:
 model_config: distilbert
 data_config: football_one_vs_all_balanced
 exp_name: football_distilbert_one_vs_all
-random_seed: 42
+seed: 42
 train_kwargs:
   num_train_epochs: 3
   per_device_train_batch_size: 8
   per_device_eval_batch_size: 8
-  warmup_steps: 500
+  warmup_ratio: 500
   weight_decay: 0.01
   save_total_limit: 3
   eval_strategy: epoch
