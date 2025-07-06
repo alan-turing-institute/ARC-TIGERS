@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 
 import numpy as np
@@ -105,6 +106,7 @@ def main(
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser(description="Train a classifier")
     parser.add_argument(
         "data_config",
@@ -142,8 +144,6 @@ if __name__ == "__main__":
         default=None,
         help="Directory for evaluation outputs, populated with a default if not set",
     )
-    parser.add_argument()
-
     args = parser.parse_args()
 
     data_config = load_data_config(args.data_config)
@@ -154,7 +154,7 @@ if __name__ == "__main__":
     else:
         output_dir = args.output_dir
 
-    if os.path.exists(output_dir):
+    if os.path.exists(output_dir) and not args.force:
         msg = (
             f"Output directory {output_dir} already exists. Either remove it, set "
             "--force, or change the output directory."
