@@ -12,6 +12,7 @@ from transformers import (
     TrainingArguments,
 )
 
+from arc_tigers.data.config import HFDataConfig
 from arc_tigers.data.utils import hf_train_test_split, tokenize_data
 from arc_tigers.eval.utils import compute_metrics
 from arc_tigers.training.config import TrainConfig
@@ -23,6 +24,15 @@ logger = logging.getLogger(__name__)
 
 def main(args):
     train_config = TrainConfig.from_path(args.train_config)
+    if not isinstance(train_config.data_config, HFDataConfig):
+        msg = "Training a classifier on synthetic data is not supported."
+        raise ValueError(msg)
+    if train_config.model_config.is_synthetic:
+        msg = "Training a classifier with a synthetic model is not supported."
+        raise ValueError(msg)
+    if train_config.hparams_config is None:
+        msg = "Training configuration must include a hyperparameters configuration."
+        raise ValueError(msg)
 
     save_dir = train_config.save_dir
     os.makedirs(save_dir, exist_ok=False)

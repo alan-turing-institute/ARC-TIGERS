@@ -5,7 +5,7 @@ from multiprocessing import cpu_count
 
 from datasets import Dataset, DatasetDict, concatenate_datasets
 
-from arc_tigers.data.config import DataConfig
+from arc_tigers.data.config import HFDataConfig
 from arc_tigers.data.utils import hf_train_test_split
 
 logger = logging.getLogger(__name__)
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 num_proc = min(cpu_count(), 8)
 
 
-def get_full_splits(config: DataConfig, force_regen: bool = False) -> DatasetDict:
+def get_full_splits(config: HFDataConfig, force_regen: bool = False) -> DatasetDict:
     if os.path.exists(config.splits_dir) and not force_regen:
         logger.info(
             "Full splits already exist at %s, loading from disk.",
@@ -144,7 +144,7 @@ def req_non_targets_from_imbalance(
 
 
 def subset_test_split(
-    targets: Dataset, non_targets: Dataset, config: DataConfig
+    targets: Dataset, non_targets: Dataset, config: HFDataConfig
 ) -> Dataset:
     # Compute the number of non-target samples for the test sets, either using the
     # requested imbalance ratio or preserving the natural imbalance in the dataset.
@@ -212,7 +212,7 @@ def subset_test_split(
     return concatenate_datasets([targets, non_targets]).shuffle(seed=config.seed)
 
 
-def main(config: DataConfig, force_regen: bool):
+def main(config: HFDataConfig, force_regen: bool):
     """
     Processes the dataset to create train and test splits based on target categories
     (lists of subreddit names) and specified imbalance ratios, and saves the processed
@@ -255,5 +255,5 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
-    config = DataConfig.from_path(args.data_config)
+    config = HFDataConfig.from_path(args.data_config)
     main(config, args.force_regen)

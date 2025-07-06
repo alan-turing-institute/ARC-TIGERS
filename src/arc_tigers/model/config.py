@@ -23,3 +23,7 @@ class ModelConfig:
         """Load data config from a YAML file based on the config name."""
         config_path = MODEL_CONFIG_DIR / f"{config_name}.yaml"
         return cls.from_path(config_path)
+
+    @property
+    def is_synthetic(self) -> bool:
+        return self.model_id == "beta_model"

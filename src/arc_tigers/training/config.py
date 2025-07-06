@@ -5,7 +5,7 @@ from typing import Any
 import yaml
 
 from arc_tigers.constants import HPARAMS_CONFIG_DIR, OUTPUTS_DIR, TRAIN_CONFIG_DIR
-from arc_tigers.data.config import DataConfig
+from arc_tigers.data.config import HFDataConfig, SyntheticDataConfig, load_data_config
 from arc_tigers.model.config import ModelConfig
 from arc_tigers.utils import load_yaml
 
@@ -27,21 +27,36 @@ class HParamsConfig:
 class TrainConfig:
     config_name: str
     model_config: ModelConfig
-    data_config: DataConfig
-    hparams_config: HParamsConfig
+    data_config: HFDataConfig | SyntheticDataConfig
+    hparams_config: HParamsConfig | None = None
 
     @classmethod
     def from_path(cls, config_path: str | Path) -> "TrainConfig":
         """Load data config from a YAML file."""
         config = load_yaml(config_path)
         data_config_name = config.pop("data_config")
+        data_config = load_data_config(data_config_name)
         model_config_name = config.pop("model_config")
-        hparams_config_name = config.pop("hparams_config")
+        model_config = ModelConfig.from_name(model_config_name)
+
+        if (model_config.is_synthetic and isinstance(data_config, HFDataConfig)) or (
+            not model_config.is_synthetic
+            and isinstance(data_config, SyntheticDataConfig)
+        ):
+            msg = "Synthetic models and data can only be used together. "
+            raise ValueError(msg)
+
+        if not model_config.is_synthetic:
+            hparams_config_name = config.pop("hparams_config")
+            hparams_config = HParamsConfig.from_name(hparams_config_name)
+        else:
+            hparams_config = None
+
         return cls(
             config_name=Path(config_path).stem,
-            data_config=DataConfig.from_name(data_config_name),
-            model_config=ModelConfig.from_name(model_config_name),
-            hparams_config=HParamsConfig.from_name(hparams_config_name),
+            data_config=data_config,
+            model_config=model_config,
+            hparams_config=hparams_config,
             **config,
         )
 
@@ -53,13 +68,16 @@ class TrainConfig:
 
     @property
     def save_dir(self) -> Path:
-        return (
+        path = (
             OUTPUTS_DIR
             / self.data_config.data_name
             / self.data_config.save_name
             / self.model_config.config_name
-            / self.hparams_config.config_name
         )
+        if self.hparams_config:
+            path = path / self.hparams_config.config_name
+
+        return path
 
     def save(self, path: str | Path | None = None):
         """Save the training configuration to a YAML file."""
@@ -71,8 +89,10 @@ class TrainConfig:
         config_dict = {
             "model_config": self.model_config.config_name,
             "data_config": self.data_config.config_name,
-            "hparams_config": self.hparams_config.config_name,
         }
+        if self.hparams_config:
+            config_dict["hparams_config"] = self.hparams_config.config_name
+
         with open(path, "w") as f:
             yaml.safe_dump(config_dict, f)
 

@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -7,6 +8,9 @@ from sentence_transformers import SentenceTransformer
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset as TorchDataset
 from tqdm import tqdm
+
+from arc_tigers.data.config import HFDataConfig, SyntheticDataConfig
+from arc_tigers.training.config import TrainConfig
 
 
 class RedditTextDataset(TorchDataset):
@@ -105,3 +109,33 @@ def get_mpnet_embeddings(
     model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
 
     return get_embeddings(dataset, storage_dir, embedding_savename, model)
+
+
+def get_preds_cache_path(
+    train_config: TrainConfig,
+    split: str,
+    data_config: HFDataConfig | SyntheticDataConfig | None = None,
+) -> Path:
+    """Directory for saving cached predictions or other data.
+
+    Args:
+        train_config: Configuration for the training run which specifies where the model
+            is saved.
+        split: Data split for which the cache is created, either "train" or "test"
+        data_config: Configuration for the test dataset, required if split is "test".
+
+    Returns:
+        Path to the cache directory, a sub-directory of 'cache' in train_config.save_dir
+    """
+    path = train_config.save_dir / f"cache/{split}"
+    if split == "test":
+        if data_config is None:
+            msg = "data_config must be provided for test split."
+            raise ValueError(msg)
+        te_imb = str(data_config.test_imbalance).replace(".", "")
+        path = path / te_imb
+    elif split != "train":
+        msg = f"Invalid split: {split}. Expected 'train' or 'test'."
+        raise ValueError(msg)
+
+    return path / "predictions/predictions.npy"

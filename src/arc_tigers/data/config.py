@@ -1,14 +1,51 @@
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from datasets import Dataset, DatasetDict
 
 from arc_tigers.constants import DATA_CONFIG_DIR, DATA_DIR, TASKS_CONFIG_DIR
+from arc_tigers.data.synthetic import get_synthetic_data
 from arc_tigers.utils import load_yaml
 
 
 @dataclass
-class DataConfig:
+class SyntheticDataConfig:
+    config_name: str
+    data_name: str
+    n_rows: int
+    test_imbalance: float
+    seed: int
+
+    @classmethod
+    def from_path(cls, config_path: str | Path) -> "SyntheticDataConfig":
+        """Load data config from a YAML file."""
+        config = load_yaml(config_path)
+        return cls(config_name=Path(config_path).stem, **config)
+
+    @classmethod
+    def from_name(cls, config_name: str) -> "SyntheticDataConfig":
+        """Load data config from a YAML file based on the config name."""
+        config_path = DATA_CONFIG_DIR / f"{config_name}.yaml"
+        return cls.from_path(config_path)
+
+    def get_test_split(self) -> Dataset:
+        return get_synthetic_data(
+            self.n_rows, imbalance=self.test_imbalance, seed=self.seed
+        )
+
+    @property
+    def save_name(self) -> str:
+        imb = str(self.test_imbalance).replace(".", "")
+        return f"{imb}/{self.seed}_{self.n_rows}"
+
+    @property
+    def test_dir(self) -> Path:
+        return DATA_DIR / self.data_name / self.save_name
+
+
+@dataclass
+class HFDataConfig:
     config_name: str
     data_name: str
     task: str
@@ -18,13 +55,13 @@ class DataConfig:
     seed: int
 
     @classmethod
-    def from_path(cls, config_path: str | Path) -> "DataConfig":
+    def from_path(cls, config_path: str | Path) -> "HFDataConfig":
         """Load data config from a YAML file."""
         config = load_yaml(config_path)
         return cls(config_name=Path(config_path).stem, **config)
 
     @classmethod
-    def from_name(cls, config_name: str) -> "DataConfig":
+    def from_name(cls, config_name: str) -> "HFDataConfig":
         """Load data config from a YAML file based on the config name."""
         config_path = DATA_CONFIG_DIR / f"{config_name}.yaml"
         return cls.from_path(config_path)
@@ -81,3 +118,16 @@ class DataConfig:
 
     def get_test_split(self) -> Dataset:
         return Dataset.load_from_disk(self.test_dir)
+
+
+def load_data_config(config_name_or_path: str) -> HFDataConfig | SyntheticDataConfig:
+    if not os.path.exists(config_name_or_path):
+        config_path = DATA_CONFIG_DIR / f"{config_name_or_path}.yaml"
+    else:
+        config_path = config_name_or_path
+
+    config_type = load_yaml(config_path)["data_name"]
+    if config_type == "synthetic":
+        return SyntheticDataConfig.from_path(config_path)
+
+    return HFDataConfig.from_path(config_path)

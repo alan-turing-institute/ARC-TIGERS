@@ -1,14 +1,15 @@
 import argparse
-import os
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+from arc_tigers.data.config import HFDataConfig, load_data_config
 from arc_tigers.data.utils import sample_dataset_metrics
-from arc_tigers.eval.reddit_eval import get_preds, get_train_data_from_exp_dir
+from arc_tigers.eval.reddit_eval import get_preds
 from arc_tigers.eval.utils import BiasCorrector, evaluate, get_stats
 from arc_tigers.sample.methods import SAMPLING_STRATEGIES
+from arc_tigers.training.config import TrainConfig
 from arc_tigers.utils import create_dirs, to_json
 
 
@@ -116,31 +117,15 @@ if __name__ == "__main__":
         class_balance=args.class_balance,
     )
 
-    if os.path.isfile(predictions_dir + "/predictions.npy"):
-        print("loading saved predictions..")
-        preds = np.load(predictions_dir + "/predictions.npy")
-        _, eval_data = get_preds(
-            data_config_path=args.data_config,
-            model_config_path=args.model_config,
-            save_dir=args.save_dir,
-            class_balance=args.class_balance,
-            seed=args.seed,
-            preds_exist=True,
-        )
-    else:
-        preds, eval_data = get_preds(
-            data_config_path=args.data_config,
-            model_config_path=args.model_config,
-            save_dir=args.save_dir,
-            class_balance=args.class_balance,
-            seed=args.seed,
-        )
-        print("saving predictions..")
-        np.save(predictions_dir + "/predictions.npy", preds)
+    data_config = load_data_config(args.data_config)
+    train_config = TrainConfig.from_path(args.train_config)
+
+    eval_data = data_config.get_test_split()
+    preds = get_preds(train_config, data_config, eval_data)
 
     surrogate_train_data = (
-        get_train_data_from_exp_dir(exp_dir=args.save_dir)
-        if args.acq_strat != "random"
+        data_config.get_train_split()
+        if isinstance(data_config, HFDataConfig) and args.acq_strat != "random"
         else None
     )
 
