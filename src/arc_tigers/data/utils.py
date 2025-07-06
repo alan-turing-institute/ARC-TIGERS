@@ -45,8 +45,7 @@ def sample_dataset_metrics(
     dataset: Dataset,
     preds: np.ndarray,
     sampler: AcquisitionFunction,
-    max_labels: int | None = None,
-    evaluate_steps: list[int] | None = None,
+    evaluate_steps: list[int],
     bias_corrector: BiasCorrector | None = None,
 ) -> list[dict[str, float]]:
     """
@@ -64,10 +63,7 @@ def sample_dataset_metrics(
     Returns:
         A list of dictionaries containing the computed metrics after each sample.
     """
-    if max_labels is None:
-        max_labels = len(dataset)
-    if evaluate_steps is None:
-        evaluate_steps = list(range(1, max_labels + 1))
+    max_labels = evaluate_steps[-1]
     evaluate_steps = deepcopy(evaluate_steps)
     metrics = []
     next_eval_step = evaluate_steps.pop(0)

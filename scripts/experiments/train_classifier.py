@@ -34,7 +34,7 @@ def main(args):
         msg = "Training configuration must include a hyperparameters configuration."
         raise ValueError(msg)
 
-    save_dir = train_config.save_dir
+    save_dir = train_config.model_dir
     os.makedirs(save_dir, exist_ok=False)
 
     logging.basicConfig(filename=f"{save_dir}/logs.log", level=logging.INFO)

@@ -63,7 +63,7 @@ def get_preds(
     if test_dataset is None:
         test_dataset = data_config.get_test_split()
 
-    if len(glob(f"{train_config.save_dir}/*.joblib")) > 0:
+    if len(glob(f"{train_config.model_dir}/*.joblib")) > 0:
         preds = get_tfidf_preds(train_config, test_dataset)
     preds = get_transformers_preds(
         train_config, test_dataset, data_config.test_imbalance
@@ -93,7 +93,7 @@ def get_transformers_preds(
     Returns:
         predictions from the model on the test dataset
     """
-    model_path = train_config.save_dir
+    model_path = train_config.model_dir
     if train_config.model_config.is_synthetic:
         # Arbitrary tokenizer only loaded for compatibility with other functions, not
         # used by the synthetic Beta model.
@@ -147,24 +147,8 @@ def get_transformers_preds(
 
 
 def get_tfidf_preds(train_config: TrainConfig, test_dataset: Dataset) -> np.ndarray:
-    """
-    Function to get the predictions from a tfidf model. The model is loaded from the
-    save_dir and the data is loaded from the data_config_path. The seed should be set
-    to the same value as used in the training.
-
-    Args:
-        data_config_path: data config path
-        save_dir: directory where the model is saved
-        class_balance: The class balance to use in evaluation.
-        seed: The seed to use for the random number generator, this should be the same
-            as the seed used in training.
-
-    Returns:
-        tuple `preds` the predictions from the model on the test dataset. `test_dataset`
-        the test dataset used for predictions.
-    """
-    logger.info("Loading model from %s...", train_config.save_dir)
-    model_path = glob(f"{train_config.save_dir}/*.joblib")[0]
+    logger.info("Loading model from %s...", train_config.model_dir)
+    model_path = glob(f"{train_config.model_dir}/*.joblib")[0]
     model: Pipeline = joblib.load(model_path)
 
     return model.predict(test_dataset["text"])

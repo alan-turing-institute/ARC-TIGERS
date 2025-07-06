@@ -1,4 +1,6 @@
+import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -11,6 +13,8 @@ from tqdm import tqdm
 
 from arc_tigers.data.config import HFDataConfig, SyntheticDataConfig
 from arc_tigers.training.config import TrainConfig
+
+logger = logging.getLogger(__name__)
 
 
 class RedditTextDataset(TorchDataset):
@@ -61,54 +65,44 @@ def non_linear_spacing(min_labels, max_labels, n_steps=None):
 
 def get_embeddings(
     dataset: HFDataset,
-    storage_dir: str,
-    embedding_savename: str,
-    model: SentenceTransformer,
+    cache_path: Path,
+    model_id: str = "sentence-transformers/all-mpnet-base-v2",
 ) -> np.ndarray:
-    if os.path.isfile(storage_dir + f"{embedding_savename}.npy"):
-        print(f"{embedding_savename}.npy Found in {storage_dir}")
-        return np.load(storage_dir + f"{embedding_savename}.npy")
+    """Get embeddings for a dataset using a pre-trained SentenceTransformer model. If
+    embeddings are already cached, load them from the cache. Otherwise, generate and
+    cache the embeddings.
 
-    print(
-        f"{embedding_savename}.npy not found in {storage_dir}. Generating embeddings..."
-    )
+    Args:
+        dataset: The dataset containing text and labels.
+        cache_path: Path to save/load the embeddings.
+        model_id: Identifier for the SentenceTransformer model to use.
+
+    Returns:
+        Numpy array of embeddings.
+    """
+    if os.path.isfile(cache_path):
+        logger.info("Found embeddings in %s", cache_path)
+        return np.load(cache_path)
+
+    logger.info("Generating embeddings with %s...", model_id)
+    model = SentenceTransformer(model_id)
+
     train_texts = dataset["text"]
     train_labels = dataset["label"]
-
     reddit_dataset = RedditTextDataset(train_texts, train_labels)
     dataloader = DataLoader(reddit_dataset, batch_size=32, shuffle=True)
 
     all_embeddings = []
-    all_labels = []
-
-    for text, labels in tqdm(dataloader):
+    for text, _ in tqdm(dataloader):
         embeddings_batch = model.encode(text, convert_to_tensor=True)
-
         all_embeddings.append(embeddings_batch)
-        all_labels.append(labels)
 
     embeddings = torch.vstack(all_embeddings).detach().cpu().numpy()
-    np.save(storage_dir + f"{embedding_savename}.npy", embeddings)
+    os.makedirs(cache_path.parent, exist_ok=True)
+    np.save(cache_path, embeddings)
+    logger.info("Embeddings saved to %s", cache_path)
 
     return embeddings
-
-
-def get_distilbert_embeddings(
-    dataset: HFDataset,
-    storage_dir: str,
-    embedding_savename: str = "distilbert_embeddings",
-) -> np.ndarray:
-    model = SentenceTransformer("sentence-transformers/distilbert-base-nli-mean-tokens")
-
-    return get_embeddings(dataset, storage_dir, embedding_savename, model)
-
-
-def get_mpnet_embeddings(
-    dataset: HFDataset, storage_dir: str, embedding_savename: str = "mpnet_embeddings"
-) -> np.ndarray:
-    model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
-
-    return get_embeddings(dataset, storage_dir, embedding_savename, model)
 
 
 def get_preds_cache_path(
@@ -116,7 +110,7 @@ def get_preds_cache_path(
     split: str,
     data_config: HFDataConfig | SyntheticDataConfig | None = None,
 ) -> Path:
-    """Directory for saving cached predictions or other data.
+    """Directory for saving cached predictions.
 
     Args:
         train_config: Configuration for the training run which specifies where the model
@@ -127,7 +121,7 @@ def get_preds_cache_path(
     Returns:
         Path to the cache directory, a sub-directory of 'cache' in train_config.save_dir
     """
-    path = train_config.save_dir / f"cache/{split}"
+    path = train_config.model_dir / f"cache/{split}"
     if split == "test":
         if data_config is None:
             msg = "data_config must be provided for test split."
@@ -138,4 +132,82 @@ def get_preds_cache_path(
         msg = f"Invalid split: {split}. Expected 'train' or 'test'."
         raise ValueError(msg)
 
-    return path / "predictions/predictions.npy"
+    return path / "predictions" / "predictions.npy"
+
+
+def get_embeds_cache_path(
+    data_config: HFDataConfig, split: str, embed_name: str
+) -> Path:
+    """Directory for saving cached embeddings.
+
+    Args:
+        train_config: Configuration for the training run which specifies where the model
+            is saved.
+        split: Data split for which the cache is created, either "train" or "test"
+        data_config: Configuration for the test dataset, required if split is "test".
+
+    Returns:
+        Path to the cache directory, a sub-directory of 'cache' in train_config.save_dir
+    """
+    if split == "test":
+        path = data_config.test_dir
+    elif split == "train":
+        path = data_config.full_splits_dir
+    else:
+        msg = f"Invalid split: {split}. Expected 'train' or 'test'."
+        raise ValueError(msg)
+
+    return path / "cache" / "embed" / embed_name / "embeds.npy"
+
+
+@dataclass
+class SurrogateData:
+    embed: np.ndarray
+    label: np.ndarray
+    cache_dir: Path
+
+
+def get_surrogate_data(
+    data_config: HFDataConfig, split: str, dataset: HFDataset | None = None
+) -> SurrogateData:
+    """Get surrogate data (embeddings and labels) for train or test splits, usually
+    for the purposes of a surrogate model or other proxy using embeddings.
+
+    Args:
+        data_config: Configuration for the dataset.
+        split: Either "train" or "test".
+        dataset: Optional pre-loaded dataset to use instead of loading from config.
+
+    Returns:
+        Dictionary with keys "embeds" and "labels".
+    """
+    if split not in ["train", "test"]:
+        msg = f"Invalid split: {split}. Expected 'train' or 'test'."
+        raise ValueError(msg)
+    if dataset is None:
+        if split == "train":
+            dataset = data_config.get_train_split()
+        else:
+            dataset = data_config.get_test_split()
+
+    cache_dir = data_config.test_dir if split == "test" else data_config.full_splits_dir
+    cache_dir = cache_dir / "cache"
+    embeds_cache_path = cache_dir / "embed" / "mpnet" / "embeds.npy"
+
+    embeds = get_embeddings(dataset, embeds_cache_path)
+    labels = np.array(dataset["label"])
+
+    return SurrogateData(embeds, labels, cache_dir)
+
+
+def get_eval_outputs_dir(
+    train_config: TrainConfig,
+    data_config: HFDataConfig | SyntheticDataConfig,
+    acq_strat: str,
+) -> Path:
+    return (
+        train_config.model_dir
+        / "eval_outputs"
+        / str(data_config.test_imbalance).replace(".", "")
+        / acq_strat
+    )

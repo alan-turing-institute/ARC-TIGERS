@@ -67,7 +67,7 @@ class TrainConfig:
         return cls.from_path(config_path)
 
     @property
-    def save_dir(self) -> Path:
+    def model_dir(self) -> Path:
         path = (
             OUTPUTS_DIR
             / self.data_config.data_name
@@ -82,7 +82,7 @@ class TrainConfig:
     def save(self, path: str | Path | None = None):
         """Save the training configuration to a YAML file."""
         if path is None:
-            path = self.save_dir
+            path = self.model_dir
         if Path(path).is_dir():
             path = Path(path) / "train_config.yaml"
 
