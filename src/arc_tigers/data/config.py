@@ -53,6 +53,8 @@ class HFDataConfig:
     train_imbalance: float | None
     test_imbalance: float | None
     seed: int
+    max_train_targets: int | None
+    max_test_targets: int | None
 
     @classmethod
     def from_path(cls, config_path: str | Path) -> "HFDataConfig":

@@ -40,8 +40,14 @@ def get_full_splits(config: HFDataConfig, force_regen: bool = False) -> DatasetD
             lambda x: x["subreddit"] in config.target_categories["train"],
             num_proc=num_proc,
         )
+
+        if config.max_train_targets is not None:
+            train_size = min(config.max_train_targets, int(len(targets) / 2))
+        else:
+            train_size = 0.5  # use 50% of the target data for training
+
         train_targets, test_targets = hf_train_test_split(
-            targets, test_size=0.5, seed=config.seed
+            targets, train_size=train_size, seed=config.seed
         )
         non_targets = data.filter(
             lambda x: x["subreddit"] not in config.target_categories["train"],
@@ -53,6 +59,12 @@ def get_full_splits(config: HFDataConfig, force_regen: bool = False) -> DatasetD
             lambda x: x["subreddit"] in config.target_categories["train"],
             num_proc=num_proc,
         )
+        if (
+            config.max_train_targets is not None
+            and len(train_targets) > config.max_train_targets
+        ):
+            train_targets = train_targets.take(config.max_train_targets)
+
         test_targets = data.filter(
             lambda x: x["subreddit"] in config.target_categories["test"],
             num_proc=num_proc,
@@ -148,6 +160,9 @@ def subset_test_split(
 ) -> Dataset:
     # Compute the number of non-target samples for the test sets, either using the
     # requested imbalance ratio or preserving the natural imbalance in the dataset.
+    if config.max_test_targets is not None and len(targets) > config.max_test_targets:
+        targets = targets.take(config.max_test_targets)
+
     n_targets = len(targets)
     n_total_non_targets = len(non_targets)
 
@@ -249,11 +264,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate dataset")
     parser.add_argument("data_config", type=str, help="Path to the data config file")
     parser.add_argument(
-        "--force_regen",
+        "--force",
         action="store_true",
         help="Force regeneration of the full splits even if they already exist.",
     )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
     config = HFDataConfig.from_path(args.data_config)
-    main(config, args.force_regen)
+    main(config, args.force)
