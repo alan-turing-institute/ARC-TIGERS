@@ -1,6 +1,6 @@
 from pathlib import Path
 
-PROJECT_DIR = Path(__file__, "..", "..", "..").resolve()
+PROJECT_DIR = Path.cwd()
 CONFIG_DIR = Path(PROJECT_DIR, "configs")
 DATA_DIR = Path(PROJECT_DIR, "data")
 OUTPUTS_DIR = Path(PROJECT_DIR, "outputs")
