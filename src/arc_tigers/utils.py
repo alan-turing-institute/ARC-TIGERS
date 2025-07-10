@@ -9,45 +9,6 @@ import numpy as np
 import torch
 import yaml
 
-from arc_tigers.constants import DATA_CONFIG_DIR, MODEL_CONFIG_DIR
-
-
-def config_path_to_config_name(config_path: str) -> str:
-    return config_path.split("/")[-1].rstrip(".yaml")
-
-
-def create_dirs(
-    save_dir: str, data_config_path: str, class_balance: float, acq_strat: str
-) -> tuple[str, str, str]:
-    data_config = config_path_to_config_name(data_config_path)
-    eval_dir = f"{save_dir}/eval_outputs/{data_config}/"
-    if class_balance != 1.0:
-        output_dir = (
-            f"{eval_dir}/imbalanced_{acq_strat}_sampling_outputs_"
-            f"{str(class_balance).replace('.', '')}/"
-        )
-        predictions_dir = (
-            f"{save_dir}/eval_outputs/data_cache/{data_config}/predictions/"
-            f"imbalanced_{str(class_balance).replace('.', '')}/"
-        )
-        embeddings_dir = (
-            f"{save_dir}/eval_outputs/data_cache/{data_config}/embeddings/"
-            f"imbalanced_{str(class_balance).replace('.', '')}/"
-        )
-    else:
-        output_dir = f"{eval_dir}/{acq_strat}_sampling_outputs/"
-        predictions_dir = (
-            f"{save_dir}/eval_outputs/data_cache/{data_config}/predictions/balanced/"
-        )
-        embeddings_dir = (
-            f"{save_dir}/eval_outputs/data_cache/{data_config}/embeddings/balanced/"
-        )
-    os.makedirs(output_dir, exist_ok=True)
-    os.makedirs(predictions_dir, exist_ok=True)
-    os.makedirs(embeddings_dir, exist_ok=True)
-
-    return output_dir, predictions_dir, embeddings_dir
-
 
 def seed_everything(seed: int) -> None:
     """Set random seeds for torch, numpy, random, and python.
@@ -92,22 +53,6 @@ def load_yaml(yaml_file: str | Path) -> dict:
         return yaml.safe_load(f)
 
 
-def get_configs(train_config: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Get the experiment, data and model configs from the train config file.
-
-    Args:
-        train_config: path to the experiment config file
-
-    Returns:
-        data config, model config
-    """
-    data_config_file_name = f"{train_config['data_config']}.yaml"
-    model_config_file_name = f"{train_config['model_config']}.yaml"
-    data_config = load_yaml(DATA_CONFIG_DIR / data_config_file_name)
-    model_config = load_yaml(MODEL_CONFIG_DIR / model_config_file_name)
-    return data_config, model_config
-
-
 def array_to_list(obj: Any) -> Any:
     """Converts numpy arrays and torch tensors to lists, leaving other objects
     unchanged.
@@ -125,7 +70,7 @@ def array_to_list(obj: Any) -> Any:
     return obj
 
 
-def to_json(obj: dict[str, Any] | list, file_path: str) -> None:
+def to_json(obj: dict[str, Any] | list, file_path: str | Path) -> None:
     """Writes a python object to a json file, converting any numpy arrays or torch
     tensors to lists first.
 

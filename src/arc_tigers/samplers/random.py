@@ -1,7 +1,7 @@
 import numpy as np
 from datasets import Dataset
 
-from arc_tigers.sample.sampler import Sampler
+from arc_tigers.samplers.sampler import Sampler
 
 
 class RandomSampler(Sampler):

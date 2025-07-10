@@ -1,6 +1,8 @@
 import logging
 import os
 from abc import abstractmethod
+from dataclasses import dataclass
+from pathlib import Path
 
 import joblib
 import numpy as np
@@ -9,9 +11,8 @@ from datasets import Dataset
 from scipy.spatial.distance import cdist
 from sklearn.ensemble import IsolationForest, RandomForestClassifier
 
-from arc_tigers.eval.utils import softmax
-from arc_tigers.sample.sampler import Sampler
-from arc_tigers.sample.utils import SurrogateData
+from arc_tigers.samplers.sampler import Sampler
+from arc_tigers.sampling.metrics import softmax
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,13 @@ class DistanceSampler(AcquisitionFunctionWithEmbeds):
             pmf /= pmf.sum()
 
         return self.sample_pmf(pmf)
+
+
+@dataclass
+class SurrogateData:
+    embed: np.ndarray
+    label: np.ndarray
+    cache_dir: Path
 
 
 class SurrogateSampler(AcquisitionFunctionWithEmbeds):

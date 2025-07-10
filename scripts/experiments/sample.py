@@ -7,15 +7,19 @@ import pandas as pd
 from tqdm import tqdm
 
 from arc_tigers.data.config import HFDataConfig, load_data_config
-from arc_tigers.data.utils import sample_dataset_metrics
-from arc_tigers.eval.reddit_eval import get_preds
-from arc_tigers.eval.utils import BiasCorrector, evaluate, get_stats
-from arc_tigers.sample.acquisition import (
+from arc_tigers.samplers.acquisition import (
     AcquisitionFunctionWithEmbeds,
     SurrogateSampler,
 )
-from arc_tigers.sample.methods import SAMPLING_STRATEGIES
-from arc_tigers.sample.utils import get_eval_outputs_dir, get_surrogate_data
+from arc_tigers.samplers.methods import SAMPLING_STRATEGIES
+from arc_tigers.sampling.bias import BiasCorrector
+from arc_tigers.sampling.metrics import evaluate, per_sample_stats
+from arc_tigers.sampling.utils import (
+    get_eval_outputs_dir,
+    get_preds,
+    get_surrogate_data,
+    sample_dataset_metrics,
+)
 from arc_tigers.training.config import TrainConfig
 from arc_tigers.utils import to_json
 
@@ -45,7 +49,7 @@ def main(
     os.makedirs(output_dir, exist_ok=True)
     metrics = evaluate(eval_data, predictions)
     to_json(metrics, f"{output_dir}/metrics_full.json")
-    stats = get_stats(predictions, eval_data["label"])
+    stats = per_sample_stats(predictions, eval_data["label"])
     to_json(stats, f"{output_dir}/stats_full.json")
 
     # Get sampler parameters

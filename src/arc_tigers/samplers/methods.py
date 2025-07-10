@@ -1,11 +1,11 @@
-from arc_tigers.sample.acquisition import (
+from arc_tigers.samplers.acquisition import (
     AccSampler,
     DistanceSampler,
     InformationGainSampler,
     IsolationForestSampler,
     MinorityClassSampler,
 )
-from arc_tigers.sample.random import RandomSampler
+from arc_tigers.samplers.random import RandomSampler
 
 SAMPLING_STRATEGIES = {
     "random": RandomSampler,

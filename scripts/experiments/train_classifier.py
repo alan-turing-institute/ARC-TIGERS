@@ -1,5 +1,4 @@
 import argparse
-import json
 import logging
 import os
 
@@ -9,15 +8,15 @@ from transformers import (
     DataCollatorWithPadding,
     PreTrainedModel,
     PreTrainedTokenizer,
+    Trainer,
     TrainingArguments,
 )
 
 from arc_tigers.data.config import HFDataConfig
 from arc_tigers.data.utils import hf_train_test_split, tokenize_data
-from arc_tigers.eval.utils import compute_metrics
+from arc_tigers.sampling.metrics import compute_metrics
 from arc_tigers.training.config import TrainConfig
-from arc_tigers.training.utils import WeightedLossTrainer, get_label_weights
-from arc_tigers.utils import seed_everything
+from arc_tigers.utils import seed_everything, to_json
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +65,7 @@ def main(args):
         **train_config.hparams_config.train_kwargs,
     )
     # Trainer
-    trainer = WeightedLossTrainer(
+    trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
@@ -74,7 +73,6 @@ def main(args):
         processing_class=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
-        loss_weights=get_label_weights(train_dataset)[0],
     )
 
     # Train the model
@@ -85,8 +83,7 @@ def main(args):
     logger.info("Evaluation results: %s", results)
     # Save evaluation results to a JSON file
     results_path = save_dir / "evaluation_results.json"
-    with open(results_path, "w") as f:
-        json.dump(results, f, indent=4)
+    to_json(results, results_path)
     logger.info("Evaluation results saved to %s", results_path)
 
     # Save the model and tokenizer
@@ -95,7 +92,7 @@ def main(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train a classifier")
+    parser = argparse.ArgumentParser(description="Train a transformers classifier")
     parser.add_argument("train_config", help="path to the train config yaml file")
     args = parser.parse_args()
     main(args)
