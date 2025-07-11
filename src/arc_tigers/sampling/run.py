@@ -1,34 +1,94 @@
 import os
+from copy import deepcopy
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from datasets import Dataset
 from tqdm import tqdm
 
-from arc_tigers.data.config import HFDataConfig
+from arc_tigers.data.config import HFDataConfig, SyntheticDataConfig
 from arc_tigers.samplers.acquisition import (
     AcquisitionFunctionWithEmbeds,
     SurrogateSampler,
 )
 from arc_tigers.samplers.methods import SAMPLING_STRATEGIES
+from arc_tigers.samplers.sampler import Sampler
 from arc_tigers.sampling.bias import BiasCorrector
 from arc_tigers.sampling.metrics import evaluate, per_sample_stats
-from arc_tigers.sampling.utils import (
-    get_preds,
-    get_surrogate_data,
-    sample_dataset_metrics,
-)
+from arc_tigers.sampling.utils import get_preds, get_surrogate_data
+from arc_tigers.training.config import TrainConfig
 from arc_tigers.utils import to_json
 
 
-def run_sampling(
-    data_config,
-    train_config,
-    n_repeats,
-    acq_strat,
-    init_seed,
-    evaluate_steps,
-    output_dir,
+def sample_dataset_metrics(
+    dataset: Dataset,
+    preds: np.ndarray,
+    sampler: Sampler,
+    evaluate_steps: list[int],
+    bias_corrector: BiasCorrector | None = None,
+) -> list[dict[str, float]]:
+    """
+    Simulate iteratively random sampling the whole dataset, re-computing metrics
+    after each sample.
+
+    Args:
+        dataset: The dataset to sample from.
+        preds: The predictions for the dataset.
+        sampler: The sampler to use for sampling.
+        evaluate_steps: Steps at which to compute metrics.
+        bias_corrector: Optional bias corrector to adjust metrics based on sampling
+            probabilities.
+
+    Returns:
+        A list of dictionaries containing the computed metrics after each step in
+        evaluate_steps.
+    """
+    max_labels = evaluate_steps[-1]
+    evaluate_steps = deepcopy(evaluate_steps)
+    metrics = []
+    next_eval_step = evaluate_steps.pop(0)
+    for n in tqdm(range(max_labels)):
+        _, q = sampler.sample()
+        if bias_corrector is not None:
+            bias_corrector.compute_weighting_factor(q_im=q, m=n + 1)
+        if (n + 1) == next_eval_step:
+            metric = evaluate(
+                dataset[sampler.labelled_idx],
+                preds[sampler.labelled_idx],
+                bias_corrector=bias_corrector,
+            )
+            metric["n"] = n + 1
+            metrics.append(metric)
+            if evaluate_steps:
+                next_eval_step = evaluate_steps.pop(0)
+            else:
+                break
+
+    return metrics
+
+
+def sampling_loop(
+    data_config: HFDataConfig | SyntheticDataConfig,
+    train_config: TrainConfig,
+    n_repeats: int,
+    sampling_strategy: str,
+    init_seed: int,
+    evaluate_steps: list[int],
+    output_dir: str | Path,
 ):
+    """
+    Repeat sampling and evaluation on a dataset a specified number of times.
+
+    Args:
+        data_config: Specifies test dataset to use.
+        train_config: Specifies trained model to use.
+        n_repeats: Number of times to repeat the sampling and evaluation.
+        sampling_strategy: The sampling strategy to use.
+        init_seed: Initial seed for random number generation.
+        evaluate_steps: Steps at which to compute metrics.
+        output_dir: Directory to save evaluation outputs.
+    """
     eval_data = data_config.get_test_split()
 
     max_labels = evaluate_steps[-1]
@@ -49,13 +109,13 @@ def run_sampling(
     to_json(stats, f"{output_dir}/stats_full.json")
 
     # Get sampler parameters
-    if acq_strat not in SAMPLING_STRATEGIES:
+    if sampling_strategy not in SAMPLING_STRATEGIES:
         err_msg = (
-            f"Acquisition strategy {acq_strat} not found. "
+            f"Acquisition strategy {sampling_strategy} not found. "
             "Available strategies: " + ", ".join(SAMPLING_STRATEGIES.keys())
         )
         raise KeyError(err_msg)
-    sampler_class = SAMPLING_STRATEGIES[acq_strat]
+    sampler_class = SAMPLING_STRATEGIES[sampling_strategy]
 
     sampler_args = {
         "eval_data": eval_data,
@@ -79,16 +139,16 @@ def run_sampling(
     for _ in tqdm(range(n_repeats)):
         seed = rng.integers(1, 2**32 - 1)  # Generate a random seed
         sampler_args["seed"] = seed
-        acq_func = sampler_class(**sampler_args)
+        sampler = sampler_class(**sampler_args)
         bias_corrector = (
             BiasCorrector(N=len(predictions), M=max_labels)
-            if acq_strat != "random"
+            if sampling_strategy != "random"
             else None
         )
         metrics = sample_dataset_metrics(
             eval_data,
             predictions,
-            acq_func,
+            sampler,
             evaluate_steps=evaluate_steps,
             bias_corrector=bias_corrector,
         )
@@ -96,8 +156,8 @@ def run_sampling(
         pd.DataFrame(metrics).to_csv(f"{output_dir}/metrics_{seed}.csv", index=False)
         to_json(
             {
-                "sample_idx": acq_func.labelled_idx,
-                "sample_prob": acq_func.sample_prob,
+                "sample_idx": sampler.labelled_idx,
+                "sample_prob": sampler.sample_prob,
                 "dataset_size": len(predictions),
                 "n_labels": max_labels,
             },

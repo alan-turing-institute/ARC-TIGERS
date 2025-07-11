@@ -1,6 +1,5 @@
 import logging
 import os
-from copy import deepcopy
 from glob import glob
 from pathlib import Path
 
@@ -26,58 +25,10 @@ from arc_tigers.data.config import HFDataConfig, SyntheticDataConfig
 from arc_tigers.data.utils import tokenize_data
 from arc_tigers.model.beta_model import BetaModel
 from arc_tigers.samplers.acquisition import SurrogateData
-from arc_tigers.samplers.sampler import Sampler
-from arc_tigers.sampling.bias import BiasCorrector
-from arc_tigers.sampling.metrics import compute_metrics, evaluate
+from arc_tigers.sampling.metrics import compute_metrics
 from arc_tigers.training.config import TrainConfig
 
 logger = logging.getLogger(__name__)
-
-
-def sample_dataset_metrics(
-    dataset: Dataset,
-    preds: np.ndarray,
-    sampler: Sampler,
-    evaluate_steps: list[int],
-    bias_corrector: BiasCorrector | None = None,
-) -> list[dict[str, float]]:
-    """
-    Simulate iteratively random sampling the whole dataset, re-computing metrics
-    after each sample.
-
-    Args:
-        dataset: The dataset to sample from.
-        preds: The predictions for the dataset.
-        model: The model to compute metrics with.
-        seed: The random seed for sampling.
-        max_labels: The maximum number of labels to sample. If None, the whole dataset
-            will be sampled.
-
-    Returns:
-        A list of dictionaries containing the computed metrics after each sample.
-    """
-    max_labels = evaluate_steps[-1]
-    evaluate_steps = deepcopy(evaluate_steps)
-    metrics = []
-    next_eval_step = evaluate_steps.pop(0)
-    for n in tqdm(range(max_labels)):
-        _, q = sampler.sample()
-        if bias_corrector is not None:
-            bias_corrector.compute_weighting_factor(q_im=q, m=n + 1)
-        if (n + 1) == next_eval_step:
-            metric = evaluate(
-                dataset[sampler.labelled_idx],
-                preds[sampler.labelled_idx],
-                bias_corrector=bias_corrector,
-            )
-            metric["n"] = n + 1
-            metrics.append(metric)
-            if evaluate_steps:
-                next_eval_step = evaluate_steps.pop(0)
-            else:
-                break
-
-    return metrics
 
 
 class RedditTextDataset(TorchDataset):

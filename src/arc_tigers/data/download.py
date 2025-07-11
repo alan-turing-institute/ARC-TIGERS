@@ -1,13 +1,27 @@
 import json
+import logging
 
 from datasets import Dataset, IterableDataset, load_dataset
 
 from arc_tigers.constants import DATA_DIR
 
+logger = logging.getLogger(__name__)
+
 
 def download_reddit(
     dataset_name: str, max_rows: int, target_subreddits: str, seed: int, min_length: int
 ):
+    """
+    Downloads a Reddit dataset, filters it by specified subreddits and minimum length,
+    and saves it to disk.
+
+    Args:
+        dataset_name: HuggingFace name of reddit dataset download.
+        max_rows: The maximum number of rows to keep in the dataset.
+        target_subreddits: Path to a JSON file containing the subreddits to keep.
+        seed: Random seed for shuffling the dataset.
+        min_length: Minimum number of characters of text entries to keep in the dataset.
+    """
     # Load the dataset in streaming mode to avoid downloading the entire dataset
     iter_ds: IterableDataset = load_dataset(dataset_name, streaming=True)["train"]
 
@@ -36,3 +50,4 @@ def download_reddit(
         save_path = DATA_DIR / f"{target_subreddits.split('/')[-1].rstrip('.json')}"
 
     ds.save_to_disk(save_path)
+    logger.info("Saved dataset to %s", save_path)

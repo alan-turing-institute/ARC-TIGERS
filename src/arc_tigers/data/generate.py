@@ -13,6 +13,18 @@ num_proc = min(cpu_count(), 8)
 
 
 def get_full_splits(config: HFDataConfig, force_regen: bool = False) -> DatasetDict:
+    """
+    Generates the full training split, and saves the remainder of the data split into
+    target and non-target datasets to use to create the test sets later.
+
+    Args:
+        config: HFDataConfig object containing the configuration for the data splits.
+        force_regen: If True, regenerate the splits even if they already exist.
+
+    Returns:
+        DatasetDict: A dictionary containing the keys "train", "test_targets", and
+        "test_non_targets", each containing the corresponding datasets.
+    """
     if os.path.exists(config.splits_dir) and not force_regen:
         logger.info(
             "Full splits already exist at %s, loading from disk.",
@@ -159,6 +171,18 @@ def req_non_targets_from_imbalance(
 def subset_test_split(
     targets: Dataset, non_targets: Dataset, config: HFDataConfig
 ) -> Dataset:
+    """
+    Creates a final test split from the previously saved full target and non-target
+    samples.
+
+    Args:
+        targets: Dataset containing target samples.
+        non_targets: Dataset containing non-target samples.
+        config: HFDataConfig object containing the configuration for the test split.
+
+    Returns:
+        A dataset containing the final test split with the specified imbalance and size
+    """
     # Compute the number of non-target samples for the test sets, either using the
     # requested imbalance ratio or preserving the natural imbalance in the dataset.
     if config.max_test_targets is not None and len(targets) > config.max_test_targets:
@@ -258,4 +282,4 @@ def generate_splits(config: HFDataConfig, force_regen: bool):
 
     os.makedirs(config.test_dir, exist_ok=True)
     test_data.save_to_disk(config.test_dir)
-    print(f"Saved: {config.test_dir}")
+    logger.info("Saved: %s", config.test_dir)

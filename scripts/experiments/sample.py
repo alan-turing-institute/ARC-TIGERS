@@ -5,7 +5,7 @@ import os
 import numpy as np
 
 from arc_tigers.data.config import load_data_config
-from arc_tigers.sampling.run import run_sampling
+from arc_tigers.sampling.run import sampling_loop
 from arc_tigers.sampling.utils import get_eval_outputs_dir
 from arc_tigers.training.config import TrainConfig
 
@@ -71,11 +71,11 @@ if __name__ == "__main__":
     if evaluate_steps[-1] > args.max_labels:
         evaluate_steps[-1] = args.max_labels
 
-    run_sampling(
+    sampling_loop(
         data_config,
         train_config,
         n_repeats=args.n_repeats,
-        acq_strat=args.strategy,
+        sampling_strategy=args.strategy,
         init_seed=args.seed,
         evaluate_steps=evaluate_steps,
         output_dir=output_dir,
