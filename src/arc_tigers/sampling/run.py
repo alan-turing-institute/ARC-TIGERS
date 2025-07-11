@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import yaml
 from datasets import Dataset
 from tqdm import tqdm
 
@@ -101,8 +102,11 @@ def sampling_loop(
 
     predictions = get_preds(train_config, data_config, eval_data)
 
-    # full dataset stats
     os.makedirs(output_dir, exist_ok=True)
+    with open(f"{output_dir}/data_config.yaml", "w") as f:
+        yaml.safe_dump({"config_name": data_config.config_name}, f)
+
+    # full dataset stats
     full_metrics = evaluate(eval_data, predictions)
     to_json(full_metrics, f"{output_dir}/metrics_full.json")
     stats = per_sample_stats(predictions, eval_data["label"])

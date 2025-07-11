@@ -12,6 +12,7 @@ from arc_tigers.utils import load_yaml
 @dataclass
 class SyntheticDataConfig:
     config_name: str
+    config_path: Path
     data_name: str
     n_rows: int
     test_imbalance: float
@@ -21,7 +22,9 @@ class SyntheticDataConfig:
     def from_path(cls, config_path: str | Path) -> "SyntheticDataConfig":
         """Load data config from a YAML file."""
         config = load_yaml(config_path)
-        return cls(config_name=Path(config_path).stem, **config)
+        return cls(
+            config_name=Path(config_path).stem, config_path=Path(config_path), **config
+        )
 
     @classmethod
     def from_name(cls, config_name: str) -> "SyntheticDataConfig":
@@ -47,6 +50,7 @@ class SyntheticDataConfig:
 @dataclass
 class HFDataConfig:
     config_name: str
+    config_path: Path
     data_name: str
     task: str
     target_config: str
@@ -60,7 +64,9 @@ class HFDataConfig:
     def from_path(cls, config_path: str | Path) -> "HFDataConfig":
         """Load data config from a YAML file."""
         config = load_yaml(config_path)
-        return cls(config_name=Path(config_path).stem, **config)
+        return cls(
+            config_name=Path(config_path).stem, config_path=Path(config_path), **config
+        )
 
     @classmethod
     def from_name(cls, config_name: str) -> "HFDataConfig":

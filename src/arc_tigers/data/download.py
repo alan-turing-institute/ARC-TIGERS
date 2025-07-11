@@ -33,9 +33,12 @@ def download_reddit(
             for placeholder_subreddit in placeholder_subreddits
         ]
 
-    # Only keep requested subreddits and filter by minimum length
+    # Only keep requested subreddits, filter by minimum length, and remove posts with
+    # "/r/" in the text which may reveal the subreddit label and make the task too easy
     iter_ds = iter_ds.filter(
-        lambda x: len(x["text"]) >= min_length and x["label"] in selected_subreddits
+        lambda x: len(x["text"]) >= min_length
+        and x["label"] in selected_subreddits
+        and "/r/" not in x["text"]
     )
 
     # Get max_rows rows from the dataset, shuffling first
