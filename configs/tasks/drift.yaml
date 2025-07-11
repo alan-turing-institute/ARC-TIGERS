@@ -1,0 +1,50 @@
+# DATA_DRIFT_COMBINATIONS specifies settings for data-drift experiments.
+# In this setting we perform one-vs-all classification but the set of target classes
+# changes between the train and test splits. Each split has its own exclusive set of
+# target subreddits (as defined in the dictionary) and there is no overlap between
+# the train and test target classes. This allows us to evaluate model generalization
+# to new unseen target classes under distribution shift.
+sport:
+  train:
+    - r/soccer
+    - r/Cricket
+  test:
+    - r/nfl
+    - NFLv2
+    - r/NBATalk
+    - r/nba
+
+football:
+  train:
+    - r/soccer
+    - r/FantasyPL
+  test:
+    - r/coys
+    - r/reddevils
+    - r/LiverpoolFC
+
+american_football:
+  train:
+    - r/nfl
+    - r/NFLv2
+  test:
+    - r/fantasyfootball
+
+ami:
+  train:
+    - r/AmItheAsshole
+  test:
+    - r/AmIOverreacting
+
+news:
+  train:
+    - r/news
+  test:
+    - r/Worldnews
+
+advice:
+  train:
+    - r/AskReddit
+  test:
+    - r/AskMenAdvice
+    - r/Advice

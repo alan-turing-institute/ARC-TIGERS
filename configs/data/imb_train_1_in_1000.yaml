@@ -1,8 +1,8 @@
 data_name: reddit_dataset_12
 task: one-vs-all
 target_config: football
-train_imbalance: 0.5
-test_imbalance: 0.0001
+train_imbalance: 0.001
+test_imbalance: 0.001
 seed: 42
-max_train_targets: 2000
+max_train_targets: 200
 max_test_targets: 200

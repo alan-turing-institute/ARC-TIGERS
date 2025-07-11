@@ -1,3 +1,4 @@
+# model_id must contain "tfidf" for training script to accept the config
 model_id: "tfidf_logreg_pipeline"
+# model kwargs are currently unused for tf-idf (use hparams instead)
 model_kwargs:
-  max_iter: 1000
