@@ -321,10 +321,17 @@ class AccSampler(SurrogateSampler):
         eval_embeds: np.ndarray,
         model_preds: np.ndarray,
         surrogate_train_data: SurrogateData | None = None,
+        retrain_every: int = 1,
         **kwargs,
     ):
         super().__init__(
-            eval_data, seed, "accuracy", eval_embeds, model_preds, surrogate_train_data
+            eval_data,
+            seed,
+            "accuracy",
+            eval_embeds,
+            model_preds,
+            surrogate_train_data,
+            retrain_every,
         )
 
     def acquisition_fn(
@@ -355,10 +362,17 @@ class InformationGainSampler(SurrogateSampler):
         eval_embeds: np.ndarray,
         model_preds: np.ndarray,
         surrogate_train_data: SurrogateData | None = None,
+        retrain_every: int = 1,
         **kwargs,
     ):
         super().__init__(
-            eval_data, seed, "info_gain", eval_embeds, model_preds, surrogate_train_data
+            eval_data,
+            seed,
+            "info_gain",
+            eval_embeds,
+            model_preds,
+            surrogate_train_data,
+            retrain_every,
         )
 
     def acquisition_fn(
