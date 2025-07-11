@@ -174,6 +174,7 @@ class SurrogateSampler(AcquisitionFunctionWithEmbeds):
         eval_embeds: np.ndarray,
         model_preds: np.ndarray,
         surrogate_train_data: SurrogateData | None = None,
+        retrain_every: int = 1,
         **kwargs,
     ):
         super().__init__(eval_data, seed, name, eval_embeds)
@@ -196,6 +197,7 @@ class SurrogateSampler(AcquisitionFunctionWithEmbeds):
         )
         self.surrogate_train_data = surrogate_train_data
         self.surrogate_pretrain()
+        self.retrain_every = retrain_every
 
     def surrogate_pretrain(self):
         """Pre-trains the surrogate model if training data has been provided."""
@@ -232,6 +234,16 @@ class SurrogateSampler(AcquisitionFunctionWithEmbeds):
                 "No samples have been labelled. Surrogate model will not be updated."
             )
             return
+        if len(self.observed_idx) % self.retrain_every != 0:
+            logger.debug(
+                "Not retraining surrogate model yet. Number of labelled samples: %d",
+                len(self.observed_idx),
+            )
+            return
+
+        logger.debug(
+            "Updating surrogate model after %d labelled samples", len(self.observed_idx)
+        )
 
         train_X = self.eval_embeds[np.array(self.observed_idx)]
         train_y = np.array(self.eval_data["label"])[np.array(self.observed_idx)]
