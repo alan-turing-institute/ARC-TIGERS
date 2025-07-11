@@ -67,9 +67,9 @@ def get_embeddings(
     logger.info("Generating embeddings with %s...", model_id)
     model = SentenceTransformer(model_id)
 
-    train_texts = dataset["text"]
-    train_labels = dataset["label"]
-    reddit_dataset = RedditTextDataset(train_texts, train_labels)
+    texts = dataset["text"]
+    labels = dataset["label"]
+    reddit_dataset = RedditTextDataset(texts, labels)
     dataloader = DataLoader(reddit_dataset, batch_size=32, shuffle=True)
 
     all_embeddings = []
