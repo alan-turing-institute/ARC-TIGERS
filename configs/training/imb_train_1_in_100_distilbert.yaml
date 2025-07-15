@@ -3,4 +3,4 @@ hparams_config: default
 
 # Only one model needs to be trained per unique train set, which is specified
 # by all the parameters in the data config excluding test_imbalance.
-data_config: imb_train_1_in_1000
+data_config: imb_train_1_in_100
