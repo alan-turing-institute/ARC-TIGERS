@@ -11,7 +11,10 @@ from arc_tigers.training.config import TrainConfig
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    parser = argparse.ArgumentParser(description="Train a classifier")
+    parser = argparse.ArgumentParser(
+        description="Perform test set sampling using one \
+        of the implemented acquisition strategies."
+    )
     parser.add_argument(
         "data_config",
         help="path to the data config file specifying the test set to use",
