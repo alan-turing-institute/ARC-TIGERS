@@ -46,6 +46,12 @@ if __name__ == "__main__":
         help="Continue even if the output directory already exists",
     )
     parser.add_argument(
+        "--retrain_every",
+        type=int,
+        required=False,
+        help="Optional: Number of samples to pick before retraining the surrogate",
+    )
+    parser.add_argument(
         "--output_dir",
         type=str,
         default=None,
@@ -82,4 +88,5 @@ if __name__ == "__main__":
         init_seed=args.seed,
         evaluate_steps=evaluate_steps,
         output_dir=output_dir,
+        retrain_every=args.retrain_every,
     )

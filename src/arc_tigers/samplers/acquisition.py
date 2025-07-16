@@ -198,6 +198,7 @@ class SurrogateSampler(AcquisitionFunctionWithEmbeds):
         self.surrogate_train_data = surrogate_train_data
         self.surrogate_pretrain()
         self.retrain_every = retrain_every
+        self.sample_count = 0
 
     def surrogate_pretrain(self):
         """Pre-trains the surrogate model if training data has been provided."""
@@ -302,7 +303,10 @@ class SurrogateSampler(AcquisitionFunctionWithEmbeds):
 
         # Sample according to the acquisition values
         sample = self.sample_pmf(q)
-        self.update_surrogate()
+        self.sample_count += 1
+        if self.sample_count == self.retrain_every:
+            self.update_surrogate()
+            self.sample_count = 0
         return sample
 
 

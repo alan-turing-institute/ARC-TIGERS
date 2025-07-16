@@ -77,6 +77,7 @@ def sampling_loop(
     init_seed: int,
     evaluate_steps: list[int],
     output_dir: str | Path,
+    retrain_every: int,
 ):
     """
     Repeat sampling and evaluation on a dataset a specified number of times.
@@ -89,6 +90,7 @@ def sampling_loop(
         init_seed: Initial seed for random number generation.
         evaluate_steps: Steps at which to compute metrics.
         output_dir: Directory to save evaluation outputs.
+        retrain_every: Surrogate update frequency, if used.
     """
     eval_data = data_config.get_test_split()
 
@@ -132,6 +134,7 @@ def sampling_loop(
             sampler_args["surrogate_train_data"] = get_surrogate_data(
                 data_config, "train"
             )
+            sampler_args["retrain_every"] = retrain_every
         if issubclass(sampler_class, AcquisitionFunctionWithEmbeds):
             sampler_args["eval_embeds"] = get_surrogate_data(
                 data_config, "test", dataset=eval_data
