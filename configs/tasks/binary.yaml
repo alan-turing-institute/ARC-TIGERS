@@ -1,0 +1,21 @@
+# BINARY_COMBINATIONS specifies settings for standard binary classification experiments.
+# In this setting, only the specified two target subreddits (or classes) are used for
+# both the train and test splits. All samples from these subreddits are included, and
+# the task is to distinguish between them (i.e., no "other" or negative class is
+# present). This allows for straightforward binary classification between two specific
+# classes.
+sport:
+  train:
+    - r/soccer
+    - r/Cricket
+  test:
+    - r/soccer
+    - r/Cricket
+
+football:
+  train:
+    - r/soccer
+    - r/FantasyPL
+  test:
+    - r/soccer
+    - r/FantasyPL

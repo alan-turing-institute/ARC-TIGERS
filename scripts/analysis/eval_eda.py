@@ -8,8 +8,7 @@ import numpy as np
 from nltk.corpus import stopwords
 from tqdm import tqdm
 
-from arc_tigers.constants import DATA_CONFIG_DIR
-from arc_tigers.data.reddit_data import get_reddit_data
+from arc_tigers.data.config import HFDataConfig
 from arc_tigers.utils import load_yaml
 
 
@@ -49,7 +48,7 @@ def main(args):
     plt.xlabel("Predicted Softmax")
     plt.ylabel("Counts")
     plt.legend(title="Prediction type")
-    plt.savefig(experiment_dir + "/softmax_histogram.pdf")
+    plt.savefig(os.path.join(experiment_dir, "softmax_histogram.pdf"))
     plt.clf()
 
     plt.hist(correct_entropy, bins=100, alpha=0.5, label="correct")
@@ -58,20 +57,12 @@ def main(args):
     plt.xlabel("Normalised Predicted Entropy")
     plt.ylabel("Counts")
     plt.legend(title="Prediction type")
-    plt.savefig(experiment_dir + "/entropy_histogram.pdf")
+    plt.savefig(os.path.join(experiment_dir, "entropy_histogram.pdf"))
     plt.clf()
 
-    exp_config = os.path.join(experiment_dir, "../../../experiment_config.json")
-    with open(exp_config) as f:
-        exp_config = json.load(f)
-    data_config = load_yaml(f"{DATA_CONFIG_DIR}/{exp_config['data_config']}.yaml")
-    _, _, test_data, meta_data = get_reddit_data(
-        **data_config["data_args"],
-        tokenizer=None,
-    )
-    print(json.dumps(meta_data, indent=2))
-    subreddit_label_map: dict[str, int] = meta_data["test_target_map"]
-    label_subreddit_map: dict[int, str] = {v: k for k, v in subreddit_label_map.items()}
+    data_config_spec = load_yaml(os.path.join(experiment_dir, "data_config.yaml"))
+    data_config = HFDataConfig.from_name(data_config_spec["config_name"])
+    test_data = data_config.get_test_split()
 
     for input in test_data["text"]:
         words = [w for w in input.split() if w.lower() not in stop_words]
@@ -102,7 +93,7 @@ def main(args):
                 counter.pop(word)
 
     for class_label in range(n_classes):
-        fig, axes = plt.subplots(2, 1, figsize=(15, 5))
+        fig, axes = plt.subplots(2, 1, figsize=(15, 10))
         for ax_idx, acc in enumerate(["incorrect", "correct"]):
             top_50 = counter_dict[acc][class_label].most_common(50)
             words, counts = zip(*top_50, strict=True)
@@ -113,11 +104,8 @@ def main(args):
             axes[ax_idx].set_ylabel("Counts")
             axes[ax_idx].set_xlabel("Words")
         fig.tight_layout()
-        print(label_subreddit_map.get(class_label))
         fig.savefig(
-            experiment_dir
-            + f"/{label_subreddit_map.get(class_label, 'non_target').lstrip('r/')}"
-            "_word_counts.pdf"
+            os.path.join(experiment_dir, f"class_{class_label}_word_counts.pdf")
         )
         fig.clear()
 

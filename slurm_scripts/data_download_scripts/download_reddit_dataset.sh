@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --qos turing
-#SBATCH --job-name train_hf_classifier
-#SBATCH --time 1-00:00:0
+#SBATCH --job-name generate_reddit_dataset
+#SBATCH --time 0-10:00:0
 #SBATCH --nodes 1
 #SBATCH --gpus 1
-#SBATCH --output /bask/projects/v/vjgo8416-tigers/ARC-TIGERS/slurm_logs/train_hf_classifier-%j.out
+#SBATCH --output /bask/projects/v/vjgo8416-tigers/ARC-TIGERS/slurm_logs/generate_reddit_dataset-%j.out
 #SBATCH --cpus-per-gpu 18
 
 # Load required modules here
@@ -23,4 +23,6 @@ cd $PROJECT_ROOT
 # change huggingface cache to be in project dir rather than user home
 export HF_HOME="/bask/projects/v/vjgo8416-tigers/hf_cache"
 
-python scripts/experiments/train_classifier.py "configs/training/"$1".yaml"
+echo number of rows: $1
+
+python scripts/data_processing/dataset_download.py --max_rows $1
