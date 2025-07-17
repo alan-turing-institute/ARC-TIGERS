@@ -53,6 +53,11 @@ if __name__ == "__main__":
         help="Optional: Number of samples to pick before retraining the surrogate",
     )
     parser.add_argument(
+        "--no-pretrain",
+        action="store_true",
+        help="if True, do not pre-train surrogate models on the training set",
+    )
+    parser.add_argument(
         "--output_dir",
         type=str,
         default=None,
@@ -90,4 +95,5 @@ if __name__ == "__main__":
         evaluate_steps=evaluate_steps,
         output_dir=output_dir,
         retrain_every=args.retrain_every,
+        surrogate_pretrain=not args.no_pretrain,
     )

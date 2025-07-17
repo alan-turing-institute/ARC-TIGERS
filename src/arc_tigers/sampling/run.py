@@ -78,6 +78,7 @@ def sampling_loop(
     evaluate_steps: list[int],
     output_dir: str | Path,
     retrain_every: int,
+    surrogate_pretrain: bool,
 ):
     """
     Repeat sampling and evaluation on a dataset a specified number of times.
@@ -91,6 +92,7 @@ def sampling_loop(
         evaluate_steps: Steps at which to compute metrics.
         output_dir: Directory to save evaluation outputs.
         retrain_every: Surrogate update frequency, if used.
+        surrogate_pretrain: If True, pre-train surrogate model on the training set.
     """
     eval_data = data_config.get_test_split()
 
@@ -137,14 +139,14 @@ def sampling_loop(
         "eval_data": eval_data,
         "minority_class": 1,  # Assuming class 1 is the minority class
         "model_preds": predictions,
+        "retrain_every": retrain_every,
     }
 
     if isinstance(data_config, HFDataConfig):
-        if issubclass(sampler_class, SurrogateSampler):
+        if issubclass(sampler_class, SurrogateSampler) and surrogate_pretrain:
             sampler_args["surrogate_train_data"] = get_surrogate_data(
                 data_config, "train"
             )
-            sampler_args["retrain_every"] = retrain_every
         if issubclass(sampler_class, AcquisitionFunctionWithEmbeds):
             sampler_args["eval_embeds"] = get_surrogate_data(
                 data_config, "test", dataset=eval_data
