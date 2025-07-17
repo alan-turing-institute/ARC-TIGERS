@@ -1,5 +1,5 @@
 model_config: distilbert
-hparams_config: default
+hparams_config: batch128
 
 # Only one model needs to be trained per unique train set, which is specified
 # by all the parameters in the data config excluding test_imbalance.

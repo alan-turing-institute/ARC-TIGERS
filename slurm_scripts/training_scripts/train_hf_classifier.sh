@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --qos turing
 #SBATCH --job-name train_hf_classifier
-#SBATCH --time 0-12:00:0
+#SBATCH --time 1-00:00:0
 #SBATCH --nodes 1
 #SBATCH --gpus 1
 #SBATCH --output /bask/projects/v/vjgo8416-tigers/ARC-TIGERS/slurm_logs/train_hf_classifier-%j.out

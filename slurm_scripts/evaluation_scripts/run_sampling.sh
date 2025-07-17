@@ -26,4 +26,5 @@ export HF_HOME="/bask/projects/v/vjgo8416-tigers/hf_cache"
 # $1 = Data config
 # $2 = Training config
 # $3 = Acquisition strategy
-python scripts/experiments/sample.py $1 $2 $3 --n_repeats 10 --max_labels 1000 --seed 321
+# $4 = Retrain frequency
+python scripts/experiments/sample.py $1 $2 $3 --retrain_every $4 --n_repeats 10 --max_labels 1000 --seed 321
