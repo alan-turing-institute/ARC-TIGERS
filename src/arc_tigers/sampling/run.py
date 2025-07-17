@@ -105,8 +105,18 @@ def sampling_loop(
     predictions = get_preds(train_config, data_config, eval_data)
 
     os.makedirs(output_dir, exist_ok=True)
-    with open(f"{output_dir}/data_config.yaml", "w") as f:
-        yaml.safe_dump({"config_name": data_config.config_name}, f)
+    config = {
+        "data_config": data_config.config_name,
+        "train_config": train_config.config_name,
+        "sampling_strategy": sampling_strategy,
+        "n_repeats": n_repeats,
+        "max_labels": max_labels,
+        "init_seed": init_seed,
+        "evaluate_steps": evaluate_steps,
+        "retrain_every": retrain_every,
+    }
+    with open(f"{output_dir}/config.yaml", "w") as f:
+        yaml.safe_dump(config, f)
 
     # full dataset stats
     full_metrics = evaluate(eval_data, predictions)

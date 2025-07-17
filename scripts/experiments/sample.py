@@ -49,6 +49,7 @@ if __name__ == "__main__":
         "--retrain_every",
         type=int,
         required=False,
+        default=1,
         help="Optional: Number of samples to pick before retraining the surrogate",
     )
     parser.add_argument(
