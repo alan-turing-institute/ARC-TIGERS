@@ -5,6 +5,7 @@ from arc_tigers.samplers.acquisition import (
     IsolationForestSampler,
     MinorityClassSampler,
 )
+from arc_tigers.samplers.fixed import FixedSampler
 from arc_tigers.samplers.random import RandomSampler
 
 SAMPLING_STRATEGIES = {
@@ -14,4 +15,5 @@ SAMPLING_STRATEGIES = {
     "info_gain": InformationGainSampler,
     "isolation": IsolationForestSampler,
     "minority": MinorityClassSampler,
+    "fixed": FixedSampler,
 }

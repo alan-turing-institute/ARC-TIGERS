@@ -4,13 +4,13 @@ from arc_tigers.samplers.sampler import Sampler
 
 
 class FixedSampler(Sampler):
-    """Sampler that uses predefined sample indices and their corresponding
-    probabilities.
+    """Sampler that uses a predefined sequence of sample indices and their
+    corresponding probabilities.
 
-    This sampler allows you to specify exactly which samples to select and in
-    what order, along with their associated probabilities. This is useful for
-    replicating specific sampling strategies or for testing with predetermined
-    sampling sequences.
+    This sampler follows a fixed, predetermined sampling order. It allows you to
+    specify exactly which samples to select and in what order, along with their
+    associated probabilities. This is useful for replicating specific sampling
+    strategies or for testing with predetermined sampling sequences.
 
     Args:
         eval_data: The dataset to sample from.
