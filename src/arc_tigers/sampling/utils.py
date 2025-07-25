@@ -152,12 +152,18 @@ def get_eval_outputs_dir(
     train_config: TrainConfig,
     data_config: HFDataConfig | SyntheticDataConfig,
     acq_strat: str,
+    surrogate_pretrain: bool = True,
 ) -> Path:
+    strat_name = (
+        acq_strat
+        if surrogate_pretrain or acq_strat not in ["info_gain", "accuracy"]
+        else f"{acq_strat}_no_pretrain"
+    )
     return (
         train_config.model_dir
         / "eval_outputs"
         / str(data_config.test_imbalance).replace(".", "")
-        / acq_strat
+        / strat_name
     )
 
 

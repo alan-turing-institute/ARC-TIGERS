@@ -179,6 +179,12 @@ class SurrogateSampler(AcquisitionFunctionWithEmbeds):
     ):
         super().__init__(eval_data, seed, name, eval_embeds)
 
+        msg = (
+            f"SurrogateSample({name}, init_seed={seed}, retrain_every={retrain_every}, "
+            f"pretrain={surrogate_train_data is not None})"
+        )
+        logger.info(msg)
+
         if len(model_preds) != len(eval_data):
             err_msg = (
                 f"Model predictions length {len(model_preds)} does not match "
@@ -193,7 +199,7 @@ class SurrogateSampler(AcquisitionFunctionWithEmbeds):
             (len(self.eval_data), self.num_classes), 1.0 / self.num_classes
         )
         self.surrogate_model = RandomForestClassifier(
-            random_state=self.rng.integers(int(1e9))
+            random_state=self.rng.integers(int(1e9)), n_jobs=16, verbose=1
         )
         self.surrogate_train_data = surrogate_train_data
         self.surrogate_pretrain()
@@ -242,7 +248,7 @@ class SurrogateSampler(AcquisitionFunctionWithEmbeds):
             )
             return
 
-        logger.debug(
+        logger.info(
             "Updating surrogate model after %d labelled samples", len(self.observed_idx)
         )
 

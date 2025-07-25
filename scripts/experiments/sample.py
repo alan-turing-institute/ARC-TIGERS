@@ -68,8 +68,12 @@ if __name__ == "__main__":
     data_config = load_data_config(args.data_config)
     train_config = TrainConfig.from_path(args.train_config)
 
+    surrogate_pretrain = not args.no_pretrain
+
     if args.output_dir is None:
-        output_dir = get_eval_outputs_dir(train_config, data_config, args.strategy)
+        output_dir = get_eval_outputs_dir(
+            train_config, data_config, args.strategy, surrogate_pretrain
+        )
     else:
         output_dir = args.output_dir
 
@@ -95,5 +99,5 @@ if __name__ == "__main__":
         evaluate_steps=evaluate_steps,
         output_dir=output_dir,
         retrain_every=args.retrain_every,
-        surrogate_pretrain=not args.no_pretrain,
+        surrogate_pretrain=surrogate_pretrain,
     )
