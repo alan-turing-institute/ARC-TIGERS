@@ -1,6 +1,8 @@
+import logging
 import os
-import warnings
 from abc import abstractmethod
+from dataclasses import dataclass
+from pathlib import Path
 
 import joblib
 import numpy as np
@@ -9,9 +11,10 @@ from datasets import Dataset
 from scipy.spatial.distance import cdist
 from sklearn.ensemble import IsolationForest, RandomForestClassifier
 
-from arc_tigers.eval.utils import softmax
-from arc_tigers.sample.sampler import Sampler
-from arc_tigers.sample.utils import get_mpnet_embeddings
+from arc_tigers.samplers.sampler import Sampler
+from arc_tigers.sampling.metrics import softmax
+
+logger = logging.getLogger(__name__)
 
 
 class AcquisitionFunction(Sampler):
@@ -89,10 +92,11 @@ class AcquisitionFunctionWithEmbeds(AcquisitionFunction):
         eval_embed: Embeddings of the evaluation dataset.
     """
 
-    def __init__(self, eval_data: Dataset, seed: int, name: str, embed_dir: str):
+    def __init__(
+        self, eval_data: Dataset, seed: int, name: str, eval_embeds: np.ndarray
+    ):
         super().__init__(eval_data, seed, name)
-        self.embed_dir = embed_dir
-        self.eval_embed = get_mpnet_embeddings(self.eval_data, self.embed_dir)
+        self.eval_embeds = eval_embeds
 
 
 class DistanceSampler(AcquisitionFunctionWithEmbeds):
@@ -105,8 +109,10 @@ class DistanceSampler(AcquisitionFunctionWithEmbeds):
     See AcquisitionFunctionWithEmbeds for documentation of common functionality.
     """
 
-    def __init__(self, eval_data: Dataset, seed: int, embed_dir, **kwargs):
-        super().__init__(eval_data, seed, "distance", embed_dir)
+    def __init__(
+        self, eval_data: Dataset, seed: int, eval_embeds: np.ndarray, **kwargs
+    ):
+        super().__init__(eval_data, seed, "distance", eval_embeds)
 
     def sample(self) -> tuple[int, float]:
         """Sample based on embedding distance to previously labelled samples."""
@@ -119,8 +125,8 @@ class DistanceSampler(AcquisitionFunctionWithEmbeds):
 
         else:
             # Subset embeddings
-            remaining = self.eval_embed[np.array(self.remaining_idx)]
-            observed = self.eval_embed[np.array(self.observed_idx)]
+            remaining = self.eval_embeds[np.array(self.remaining_idx)]
+            observed = self.eval_embeds[np.array(self.observed_idx)]
 
             # Compute all pairwise Euclidean distances
             dists = cdist(remaining, observed, metric="euclidean")
@@ -132,6 +138,13 @@ class DistanceSampler(AcquisitionFunctionWithEmbeds):
             pmf /= pmf.sum()
 
         return self.sample_pmf(pmf)
+
+
+@dataclass
+class SurrogateData:
+    embed: np.ndarray
+    label: np.ndarray
+    cache_dir: Path
 
 
 class SurrogateSampler(AcquisitionFunctionWithEmbeds):
@@ -158,12 +171,19 @@ class SurrogateSampler(AcquisitionFunctionWithEmbeds):
         eval_data: Dataset,
         seed: int,
         name: str,
-        embed_dir: str,
+        eval_embeds: np.ndarray,
         model_preds: np.ndarray,
-        surrogate_data: Dataset | None = None,
+        surrogate_train_data: SurrogateData | None = None,
+        retrain_every: int = 1,
         **kwargs,
     ):
-        super().__init__(eval_data, seed, name, embed_dir)
+        super().__init__(eval_data, seed, name, eval_embeds)
+
+        msg = (
+            f"SurrogateSample({name}, init_seed={seed}, retrain_every={retrain_every}, "
+            f"pretrain={surrogate_train_data is not None})"
+        )
+        logger.info(msg)
 
         if len(model_preds) != len(eval_data):
             err_msg = (
@@ -179,63 +199,71 @@ class SurrogateSampler(AcquisitionFunctionWithEmbeds):
             (len(self.eval_data), self.num_classes), 1.0 / self.num_classes
         )
         self.surrogate_model = RandomForestClassifier(
-            random_state=self.rng.integers(int(1e9))
+            random_state=self.rng.integers(int(1e9)), n_jobs=16, verbose=1
         )
-        self.surrogate_train_data = surrogate_data
+        self.surrogate_train_data = surrogate_train_data
         self.surrogate_pretrain()
+        self.retrain_every = retrain_every
+        self.sample_count = 0
 
     def surrogate_pretrain(self):
         """Pre-trains the surrogate model if training data has been provided."""
         if self.surrogate_train_data is None:
-            warnings.warn(
+            logger.warning(
                 "No surrogate training data provided. Surrogate model will not be "
-                "pre-trained, and no training data will be used for surrogate updates.",
-                stacklevel=2,
+                "pre-trained, and no training data will be used for surrogate updates."
             )
-            self.train_embeds = None
             return
 
-        self.train_embeds = get_mpnet_embeddings(
-            self.surrogate_train_data,
-            self.embed_dir,
-            embedding_savename="surrogate_embeddings",
-        )
-        self.y_train = np.array(self.surrogate_train_data["label"])
-        surrogate_path = os.path.join(
-            self.embed_dir,
-            f"pretrained_surrogate_{self.surrogate_model.__class__.__name__}.joblib",
+        surrogate_path = (
+            self.surrogate_train_data.cache_dir
+            / "surrogate"
+            / f"{self.surrogate_model.__class__.__name__}.joblib"
         )
         if os.path.exists(surrogate_path):
-            print(f"Loading pre-trained surrogate model from {surrogate_path} ...")
+            logger.info("Loading pre-trained surrogate model from %s", surrogate_path)
             self.surrogate_model = joblib.load(surrogate_path)
         else:
-            print(f"Pre-training surrogate model and saving to {surrogate_path} ...")
-            self.surrogate_model = self.surrogate_model.fit(
-                self.train_embeds, self.y_train
+            logger.info(
+                "Pre-training surrogate model and saving to %s...", surrogate_path
             )
+            self.surrogate_model = self.surrogate_model.fit(
+                self.surrogate_train_data.embed, self.surrogate_train_data.label
+            )
+            os.makedirs(surrogate_path.parent, exist_ok=True)
             joblib.dump(self.surrogate_model, surrogate_path)
 
     def update_surrogate(self):
         """Updates the surrogate model with newly labelled data, and re-computes its
         predictions on the unlabelled data."""
         if len(self.observed_idx) == 0:
-            self.surrogate_preds = np.zeros_like(self.surrogate_preds)
+            logger.warning(
+                "No samples have been labelled. Surrogate model will not be updated."
+            )
             return
-        X_acquired = self.eval_embed[np.array(self.observed_idx)]
-        y_acquired = np.array(self.eval_data["label"])[np.array(self.observed_idx)]
+        if len(self.observed_idx) % self.retrain_every != 0:
+            logger.debug(
+                "Not retraining surrogate model yet. Number of labelled samples: %d",
+                len(self.observed_idx),
+            )
+            return
 
-        if self.train_embeds is not None:
-            train_X = np.concat((self.train_embeds, X_acquired))
-            train_y = np.concat((self.y_train, y_acquired))
-        else:
-            train_X = X_acquired
-            train_y = y_acquired
+        logger.info(
+            "Updating surrogate model after %d labelled samples", len(self.observed_idx)
+        )
+
+        train_X = self.eval_embeds[np.array(self.observed_idx)]
+        train_y = np.array(self.eval_data["label"])[np.array(self.observed_idx)]
+
+        if self.surrogate_train_data is not None:
+            train_X = np.concat((self.surrogate_train_data.embed, train_X))
+            train_y = np.concat((self.surrogate_train_data.label, train_y))
 
         self.surrogate_model = self.surrogate_model.fit(train_X, train_y)
 
         # Get surrogate predictions for all samples
         intermediate_surrogate_preds = self.surrogate_model.predict_proba(
-            self.eval_embed
+            self.eval_embeds
         )
         classes_ = self.surrogate_model.classes_
         # Fill a full array with zeros for all classes
@@ -281,7 +309,10 @@ class SurrogateSampler(AcquisitionFunctionWithEmbeds):
 
         # Sample according to the acquisition values
         sample = self.sample_pmf(q)
-        self.update_surrogate()
+        self.sample_count += 1
+        if self.sample_count == self.retrain_every:
+            self.update_surrogate()
+            self.sample_count = 0
         return sample
 
 
@@ -297,13 +328,20 @@ class AccSampler(SurrogateSampler):
         self,
         eval_data: Dataset,
         seed: int,
-        embed_dir: str,
+        eval_embeds: np.ndarray,
         model_preds: np.ndarray,
-        surrogate_data: Dataset,
+        surrogate_train_data: SurrogateData | None = None,
+        retrain_every: int = 1,
         **kwargs,
     ):
         super().__init__(
-            eval_data, seed, "accuracy", embed_dir, model_preds, surrogate_data
+            eval_data,
+            seed,
+            "accuracy",
+            eval_embeds,
+            model_preds,
+            surrogate_train_data,
+            retrain_every,
         )
 
     def acquisition_fn(
@@ -331,13 +369,20 @@ class InformationGainSampler(SurrogateSampler):
         self,
         eval_data: Dataset,
         seed: int,
-        embed_dir: str,
+        eval_embeds: np.ndarray,
         model_preds: np.ndarray,
-        surrogate_data: Dataset,
+        surrogate_train_data: SurrogateData | None = None,
+        retrain_every: int = 1,
         **kwargs,
     ):
         super().__init__(
-            eval_data, seed, "info_gain", embed_dir, model_preds, surrogate_data
+            eval_data,
+            seed,
+            "info_gain",
+            eval_embeds,
+            model_preds,
+            surrogate_train_data,
+            retrain_every,
         )
 
     def acquisition_fn(
@@ -361,8 +406,10 @@ class IsolationForestSampler(AcquisitionFunctionWithEmbeds):
     See AcquisitionFunctionWithEmbeds for documentation of common functionality.
     """
 
-    def __init__(self, eval_data: Dataset, seed: int, embed_dir: str, **kwargs):
-        super().__init__(eval_data, seed, "isolation", embed_dir)
+    def __init__(
+        self, eval_data: Dataset, seed: int, eval_embeds: np.ndarray, **kwargs
+    ):
+        super().__init__(eval_data, seed, "isolation", eval_embeds)
 
     def sample(self) -> tuple[int, float]:
         """
@@ -373,8 +420,8 @@ class IsolationForestSampler(AcquisitionFunctionWithEmbeds):
             N = len(self.eval_data)
             pmf = np.ones(N, dtype=np.float64) / N
         else:
-            observed = self.eval_embed[np.array(self.observed_idx)]
-            remaining = self.eval_embed[np.array(self.remaining_idx)]
+            observed = self.eval_embeds[np.array(self.observed_idx)]
+            remaining = self.eval_embeds[np.array(self.remaining_idx)]
             iso = IsolationForest(random_state=self.rng.integers(int(1e9)))
             iso.fit(observed)
             # Higher score = more normal, so invert for anomaly

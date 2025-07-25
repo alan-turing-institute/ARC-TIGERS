@@ -1,0 +1,13 @@
+# specifies trained model to evaluate (name of a config in configs/training)
+train_config: football_one_vs_all_distilbert
+
+# specifies test set to evaluate model on (name of a config in configs/data)
+data_config: football_one_vs_all_1_in_10
+
+# sampling strategy
+strategy: distance
+n_repeats: 5
+max_labels: 1000
+eval_every: 50
+min_labels: 50
+seed: 42
