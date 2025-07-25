@@ -19,6 +19,7 @@ from transformers import (
     DataCollatorWithPadding,
     Trainer,
     TrainingArguments,
+    pipeline,
 )
 
 from arc_tigers.data.config import HFDataConfig, SyntheticDataConfig
@@ -187,15 +188,83 @@ def get_preds(
 
     if len(glob(f"{train_config.model_dir}/*.joblib")) > 0:
         preds = get_tfidf_preds(train_config, test_dataset)
-    preds = get_transformers_preds(
-        train_config, test_dataset, data_config.test_imbalance
-    )
+    elif train_config.model_config.model_kwargs.get("zero_shot", False):
+        preds = get_zero_shot_preds(test_dataset, train_config)
+    else:
+        preds = get_transformers_preds(
+            train_config, test_dataset, data_config.test_imbalance
+        )
 
     os.makedirs(cache_path.parent, exist_ok=True)
     np.save(cache_path, preds)
     logger.info("Saved predictions to %s", cache_path)
 
     return preds
+
+
+def get_zero_shot_preds(
+    test_dataset: Dataset,
+    train_config: TrainConfig,
+) -> np.ndarray:
+    """
+    Get predictions from a zero-shot model using the transformers library.
+
+    Args:
+        test_dataset: Dataset to use for predictions.
+        train_config: Train config, specifies the previously trained model to use.
+        imbalance: Optional imbalance ratio for if train_config specifies a synthetic
+            model.
+
+    Returns:
+        Predictions from the model on the test dataset.
+    """
+
+    # cast data_config to help the type checker
+    data_config = train_config.data_config
+    if not isinstance(data_config, HFDataConfig):
+        err_msg = (
+            "Zero-shot models are only supported with HFDataConfig, "
+            "not SyntheticDataConfig."
+        )
+        raise ValueError(err_msg)
+
+    model_path = train_config.model_config.model_id
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    task = data_config.task
+
+    if task == "one-vs-all":
+        candidate_labels = [data_config.target_config]
+    else:
+        err_msg = f"Unsupported task: {task}. Expected 'one-vs-all'."
+        raise ValueError(err_msg)
+
+    model = pipeline(
+        "zero-shot-classification",
+        model=model_path,
+        tokenizer=tokenizer,
+        device=0 if torch.cuda.is_available() else -1,
+    )
+
+    logger.info("Computing zero-shot predictions...")
+    outputs = model(
+        test_dataset["text"],
+        candidate_labels=candidate_labels,
+        hypothesis_template=train_config.model_config.model_kwargs[
+            "hypothesis_template"
+        ],
+    )
+
+    # Extract numerical predictions for binary classification
+    predictions = []
+    for output in outputs:
+        # Get the probability for the target class
+        target_score = output["scores"][0]  # Only one label, so first score
+        # Calculate complement for binary classification
+        not_target_score = 1.0 - target_score
+        # Return as logits format [prob_class_0, prob_class_1]
+        predictions.append([not_target_score, target_score])
+
+    return np.array(predictions)
 
 
 def get_transformers_preds(

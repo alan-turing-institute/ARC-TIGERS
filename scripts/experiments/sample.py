@@ -17,7 +17,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "data_config",
-        help="path to the data config file specifying the test set to use",
+        help="path to g data config file specifying the test set to use",
     )
     parser.add_argument(
         "train_config",
