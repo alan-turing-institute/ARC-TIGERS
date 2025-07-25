@@ -182,7 +182,7 @@ def get_preds(
 
     if len(glob(f"{train_config.model_dir}/*.joblib")) > 0:
         preds = get_tfidf_preds(train_config, test_dataset)
-    elif train_config.model_config.model_id == "zero-shot":
+    elif train_config.model_config.model_kwargs.get("zero_shot", False):
         preds = get_zero_shot_preds(test_dataset, train_config)
     else:
         preds = get_transformers_preds(
@@ -222,12 +222,12 @@ def get_zero_shot_preds(
         )
         raise ValueError(err_msg)
 
-    model_path = "facebook/bart-large-mnli"
+    model_path = train_config.model_config.model_id
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     task = data_config.task
 
     if task == "one-vs-all":
-        candidate_labels = ["something else", data_config.target_config]
+        candidate_labels = [data_config.target_config]
     else:
         err_msg = f"Unsupported task: {task}. Expected 'one-vs-all'."
         raise ValueError(err_msg)
@@ -248,16 +248,15 @@ def get_zero_shot_preds(
         ],
     )
 
-    # Extract numerical predictions properly with consistent ordering
+    # Extract numerical predictions for binary classification
     predictions = []
     for output in outputs:
-        # Create a mapping from label to score for consistent ordering
-        label_scores = dict(zip(output["labels"], output["scores"], strict=True))
-        # Get scores for both classes in consistent order
-        something_else_score = label_scores["something else"]
-        target_score = label_scores[data_config.target_config]
+        # Get the probability for the target class
+        target_score = output["scores"][0]  # Only one label, so first score
+        # Calculate complement for binary classification
+        not_target_score = 1.0 - target_score
         # Return as logits format [prob_class_0, prob_class_1]
-        predictions.append([something_else_score, target_score])
+        predictions.append([not_target_score, target_score])
 
     return np.array(predictions)
 

@@ -1,3 +1,4 @@
-model_id: "zero-shot"
+model_id: "facebook/bart-large-mnli"
 model_kwargs:
-  hypothesis_template: "This text is about {}."
+  zero_shot: true
+  hypothesis_template: "This example is {}."
