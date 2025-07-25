@@ -154,12 +154,15 @@ def get_eval_outputs_dir(
     data_config: HFDataConfig | SyntheticDataConfig,
     acq_strat: str,
     surrogate_pretrain: bool = True,
+    surrogate_type: str = "lightgbm",
 ) -> Path:
-    strat_name = (
-        acq_strat
-        if surrogate_pretrain or acq_strat not in ["info_gain", "accuracy"]
-        else f"{acq_strat}_no_pretrain"
-    )
+    if acq_strat in ["info_gain", "accuracy"]:
+        strat_name = f"{acq_strat}_{surrogate_type}"
+        if not surrogate_pretrain:
+            strat_name = f"{acq_strat}_no_pretrain"
+    else:
+        strat_name = acq_strat
+
     return (
         train_config.model_dir
         / "eval_outputs"
