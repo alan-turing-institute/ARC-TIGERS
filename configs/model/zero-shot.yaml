@@ -1,0 +1,3 @@
+model_id: "zero-shot"
+model_kwargs:
+  hypothesis_template: "This text is about {}."
