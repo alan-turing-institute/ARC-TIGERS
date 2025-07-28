@@ -159,7 +159,7 @@ def get_eval_outputs_dir(
     if acq_strat in ["info_gain", "accuracy"]:
         strat_name = f"{acq_strat}_{surrogate_type}"
         if not surrogate_pretrain:
-            strat_name = f"{acq_strat}_no_pretrain"
+            strat_name = f"{strat_name}_no_pretrain"
     else:
         strat_name = acq_strat
 

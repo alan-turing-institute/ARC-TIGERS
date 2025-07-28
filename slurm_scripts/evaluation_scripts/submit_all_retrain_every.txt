@@ -1,0 +1,11 @@
+sbatch slurm_scripts/evaluation_scripts/run_sampling_retrain_every.sh configs/data/football_one_vs_all_1_in_10.yaml configs/training/balanced_train_distilbert.yaml accuracy 5 01
+sbatch slurm_scripts/evaluation_scripts/run_sampling_retrain_every.sh configs/data/football_one_vs_all_1_in_10.yaml configs/training/balanced_train_distilbert.yaml accuracy 10 01
+sbatch slurm_scripts/evaluation_scripts/run_sampling_retrain_every.sh configs/data/football_one_vs_all_1_in_10.yaml configs/training/balanced_train_distilbert.yaml accuracy 20 01
+sbatch slurm_scripts/evaluation_scripts/run_sampling_retrain_every.sh configs/data/football_one_vs_all_1_in_10.yaml configs/training/balanced_train_distilbert.yaml accuracy 50 01
+sbatch slurm_scripts/evaluation_scripts/run_sampling_retrain_every.sh configs/data/football_one_vs_all_1_in_10.yaml configs/training/balanced_train_distilbert.yaml accuracy 100 01
+
+sbatch slurm_scripts/evaluation_scripts/run_sampling_retrain_every.sh configs/data/football_one_vs_all_1_in_100.yaml configs/training/balanced_train_distilbert.yaml accuracy 5 001
+sbatch slurm_scripts/evaluation_scripts/run_sampling_retrain_every.sh configs/data/football_one_vs_all_1_in_100.yaml configs/training/balanced_train_distilbert.yaml accuracy 10 001
+sbatch slurm_scripts/evaluation_scripts/run_sampling_retrain_every.sh configs/data/football_one_vs_all_1_in_100.yaml configs/training/balanced_train_distilbert.yaml accuracy 20 001
+sbatch slurm_scripts/evaluation_scripts/run_sampling_retrain_every.sh configs/data/football_one_vs_all_1_in_100.yaml configs/training/balanced_train_distilbert.yaml accuracy 50 001
+sbatch slurm_scripts/evaluation_scripts/run_sampling_retrain_every.sh configs/data/football_one_vs_all_1_in_100.yaml configs/training/balanced_train_distilbert.yaml accuracy 100 001
