@@ -162,65 +162,73 @@ def create_fixed_sampler_from_experiment(
 def create_replay_output_dir(
     original_experiment_dir: str | Path,
     new_train_config: TrainConfig,
-    base_output_dir: str | Path,
     seed_to_replay: int,
 ) -> Path:
     """
     Create a structured output directory for replay experiments.
 
+    Creates structure like:
+    outputs/{data}/{task}/{model_id}/replays/{eval_id}/replay_from_{orig_model}_{orig_hparams}_{orig_strategy}/to_{new_model}_{new_hparams}/seed_{seed}
+
     Args:
         original_experiment_dir: Path to original experiment
         new_train_config: Configuration for the new model
-        base_output_dir: Base directory for outputs
         seed_to_replay: Seed being replayed
 
     Returns:
         Path to the structured output directory
     """
-    base_dir = Path(base_output_dir)
-
-    # Extract original model info from path
     original_path = Path(original_experiment_dir)
     original_parts = original_path.parts
 
-    # Find model info in the path structure
-    # Typically: .../data_config/task/model/hparams/eval_outputs/...
-    try:
-        model_idx = -1
-        for i, part in enumerate(original_parts):
-            if part in ["eval_outputs"]:
-                model_idx = i - 2  # Model is typically 2 levels up from eval_outputs
-                break
+    # Parse original path to extract components
+    # Path: outputs/{data}/{task}/{model_id}/{orig_model}/{orig_hparams}/
+    #       eval_outputs/{eval_id}/{strategy}
 
-        if model_idx >= 0:
-            original_model = original_parts[model_idx]
-            original_hparams = (
-                original_parts[model_idx + 1]
-                if model_idx + 1 < len(original_parts)
-                else "unknown"
-            )
-        else:
-            original_model = "unknown"
-            original_hparams = "unknown"
-    except (IndexError, AttributeError):
-        original_model = "unknown"
-        original_hparams = "unknown"
+    for i, part in enumerate(original_parts):
+        if part == "eval_outputs":
+            # Extract components using the eval_outputs index as reference (i=7)
+            if i >= 1:
+                original_hparams = original_parts[i - 1]  # batch128 (index 6)
+            if i >= 2:
+                original_model = original_parts[i - 2]  # zero-shot (index 5)
+            # For the directory structure components, use absolute indices
+            if len(original_parts) > 1:
+                data_config = original_parts[1]  # reddit_dataset_12
+            if len(original_parts) > 2:
+                task = original_parts[2]  # one-vs-all
+            if len(original_parts) > 4:
+                model_id = original_parts[4]  # 42_05
 
-    # Create structured path
+            # Get strategy (after eval_id) and eval_id
+            if i + 1 < len(original_parts):
+                eval_id = original_parts[i + 1]  # 05 (index 8)
+            if i + 2 < len(original_parts):
+                original_strategy = original_parts[i + 2]  # random (index 9)
+            break
+
+    # Get new model configuration names
     new_model = getattr(
         new_train_config.model_config,
         "config_name",
-        str(new_train_config.model_config)[:20],
+        "unknown_new_model",
     )
     new_hparams = getattr(
         new_train_config.hparams_config,
         "config_name",
-        str(new_train_config.hparams_config)[:20],
+        "unknown_new_hparams",
     )
 
+    # Create structured path
     replay_dir = (
-        base_dir
-        / f"replay_from_{original_model}_{original_hparams}"
+        Path("outputs")
+        / data_config  # data
+        / task  # task
+        / original_parts[3]  # data config
+        / model_id  # seed/train imbalance
+        / "replays"
+        / eval_id  # (evaluation data imbalance)
+        / f"from_{original_model}_{original_hparams}_{original_strategy}"
         / f"to_{new_model}_{new_hparams}"
         / f"seed_{seed_to_replay}"
     )
@@ -274,7 +282,7 @@ def replay_experiment_with_new_model(
     original_experiment_dir: str | Path,
     new_train_config: TrainConfig | str | Path,
     output_dir: str | Path,
-    seed_to_replay: int | None = None,
+    seed_to_replay: int,
     max_samples: int | None = None,
     eval_every: int = 50,
 ) -> None:
@@ -306,14 +314,12 @@ def replay_experiment_with_new_model(
     # Create structured output directory if not provided as absolute path
     output_path = Path(output_dir)
     if not output_path.is_absolute() or str(output_path).startswith("outputs/test"):
-        # Create structured directory for better organization
-        structured_output_dir = create_replay_output_dir(
+        # Create structured directory under the model's base directory
+        output_dir = create_replay_output_dir(
             original_experiment_dir=original_dir,
             new_train_config=new_train_config,
-            base_output_dir="outputs/replays",
-            seed_to_replay=seed_to_replay or 42,
+            seed_to_replay=seed_to_replay,
         )
-        output_dir = structured_output_dir
         logger.info("Using structured output directory: %s", output_dir)
 
     # Load data config (should be the same as original)
@@ -356,7 +362,7 @@ def replay_experiment_with_new_model(
         train_config=new_train_config,
         n_repeats=1,  # Only one repeat since we're replaying specific sequence
         sampling_strategy="fixed",
-        init_seed=seed_to_replay or 42,
+        init_seed=seed_to_replay,
         evaluate_steps=evaluate_steps,
         output_dir=output_dir,
         retrain_every=1,
@@ -370,7 +376,7 @@ def replay_experiment_with_new_model(
         output_dir=Path(output_dir),
         original_experiment_dir=original_dir,
         new_train_config=new_train_config,
-        seed_to_replay=seed_to_replay or 42,
+        seed_to_replay=seed_to_replay,
         max_samples=max_samples,
         n_samples_replayed=n_samples,
     )
