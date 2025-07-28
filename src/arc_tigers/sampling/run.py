@@ -13,6 +13,7 @@ from arc_tigers.samplers.acquisition import (
     AcquisitionFunctionWithEmbeds,
     SurrogateSampler,
 )
+from arc_tigers.samplers.fixed import FixedSampler
 from arc_tigers.samplers.methods import SAMPLING_STRATEGIES
 from arc_tigers.samplers.sampler import Sampler
 from arc_tigers.sampling.bias import BiasCorrector
@@ -79,6 +80,8 @@ def sampling_loop(
     output_dir: str | Path,
     retrain_every: int,
     surrogate_pretrain: bool,
+    replay_sample_indices: list[int] | None = None,
+    replay_sample_probabilities: list[float] | None = None,
 ):
     """
     Repeat sampling and evaluation on a dataset a specified number of times.
@@ -93,6 +96,8 @@ def sampling_loop(
         output_dir: Directory to save evaluation outputs.
         retrain_every: Surrogate update frequency, if used.
         surrogate_pretrain: If True, pre-train surrogate model on the training set.
+        replay_sample_indices: Optional list of sample indices for replay experiments.
+        replay_sample_probabilities: Optional list of sample probabilities for replay.
     """
     eval_data = data_config.get_test_split()
 
@@ -135,14 +140,30 @@ def sampling_loop(
         raise KeyError(err_msg)
     sampler_class = SAMPLING_STRATEGIES[sampling_strategy]
 
-    sampler_args = {
-        "eval_data": eval_data,
-        "minority_class": 1,  # Assuming class 1 is the minority class
-        "model_preds": predictions,
-        "retrain_every": retrain_every,
-    }
+    # Check if this is a replay experiment
+    is_replay = (
+        replay_sample_indices is not None and replay_sample_probabilities is not None
+    )
 
-    if isinstance(data_config, HFDataConfig):
+    if is_replay:
+        # For replay experiments, use FixedSampler regardless of sampling_strategy
+        sampler_class = FixedSampler
+        sampler_args = {
+            "eval_data": eval_data,
+            "seed": init_seed,
+            "sample_indices": replay_sample_indices,
+            "sample_probabilities": replay_sample_probabilities,
+        }
+    else:
+        # Standard sampler arguments for non-replay experiments
+        sampler_args = {
+            "eval_data": eval_data,
+            "minority_class": 1,  # Assuming class 1 is the minority class
+            "model_preds": predictions,
+            "retrain_every": retrain_every,
+        }
+
+    if isinstance(data_config, HFDataConfig) and not is_replay:
         if issubclass(sampler_class, SurrogateSampler) and surrogate_pretrain:
             sampler_args["surrogate_train_data"] = get_surrogate_data(
                 data_config, "train"
@@ -155,9 +176,16 @@ def sampling_loop(
     # Start sampling
     rng = np.random.default_rng(init_seed)
 
-    for _ in tqdm(range(n_repeats)):
-        seed = rng.integers(1, 2**32 - 1)  # Generate a random seed
-        sampler_args["seed"] = seed
+    # For replay experiments, only run once with the predetermined sequence
+    actual_n_repeats = 1 if is_replay else n_repeats
+
+    for _ in tqdm(range(actual_n_repeats)):
+        # For replay, use original seed; for normal experiments, generate random seed
+        seed = init_seed if is_replay else rng.integers(1, 2**32 - 1)
+
+        if not is_replay:
+            sampler_args["seed"] = seed
+
         sampler = sampler_class(**sampler_args)
         bias_corrector = (
             BiasCorrector(N=len(predictions), M=max_labels)
