@@ -167,11 +167,14 @@ def create_replay_output_dir(
     """
     Create a structured output directory for replay experiments.
 
-    Creates structure like:
-    outputs/{data}/{task}/{model_id}/replays/{eval_id}/replay_from_{orig_model}_{orig_hparams}_{orig_strategy}/to_{new_model}_{new_hparams}/seed_{seed}
+    Creates output directory structure like:
+    `outputs/{data}/{task}/{model_id}/replays/{eval_id}/replay_from_{orig_model}_{orig_hparams}_{orig_strategy}/to_{new_model}_{new_hparams}/seed_{seed}`
+
+    `original_experiment_directory` should be structured like:
+    `outputs/{dataset}/{task}/{model_id}/{orig_model}/{orig_hparams}/eval_outputs/{eval_id}/{strategy}`
 
     Args:
-        original_experiment_dir: Path to original experiment
+        original_experiment_dir: Path to original experiment.
         new_train_config: Configuration for the new model
         seed_to_replay: Seed being replayed
 
@@ -199,22 +202,20 @@ def create_replay_output_dir(
             if part == "eval_outputs":
                 # Extract components using the eval_outputs index as reference (i=7)
                 if i >= 1:
-                    original_hparams = original_parts[i - 1]  # batch128 (index 6)
+                    original_hparams = original_parts[i - 1]  # train config
                 if i >= 2:
-                    original_model = original_parts[i - 2]  # zero-shot (index 5)
+                    original_model = original_parts[i - 2]  # model
                 # For the directory structure components, use absolute indices
                 if len(original_parts) > 1:
-                    data_config = original_parts[1]  # reddit_dataset_12
+                    data_config = original_parts[1]  # dataset
                 if len(original_parts) > 2:
-                    task = original_parts[2]  # one-vs-all
+                    task = original_parts[2]  # task
                 if len(original_parts) > 4:
-                    model_id = original_parts[4]  # 42_05
-
-                # Get strategy (after eval_id) and eval_id
+                    model_id = original_parts[4]  # data seed and train imbalance
                 if i + 1 < len(original_parts):
-                    eval_id = original_parts[i + 1]  # 05 (index 8)
+                    eval_id = original_parts[i + 1]  # test imbalance 05 (index 8)
                 if i + 2 < len(original_parts):
-                    original_strategy = original_parts[i + 2]  # random (index 9)
+                    original_strategy = original_parts[i + 2]  # sample strategy
                 break
         except IndexError as e:
             logger.warning("Could not parse full directory structure: %s", e)
