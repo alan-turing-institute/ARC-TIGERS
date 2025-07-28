@@ -8,6 +8,7 @@ import joblib
 import numpy as np
 import numpy.typing as npt
 from datasets import Dataset
+from lightgbm.sklearn import LGBMClassifier
 from scipy.spatial.distance import cdist
 from sklearn.ensemble import IsolationForest, RandomForestClassifier
 
@@ -175,6 +176,7 @@ class SurrogateSampler(AcquisitionFunctionWithEmbeds):
         model_preds: np.ndarray,
         surrogate_train_data: SurrogateData | None = None,
         retrain_every: int = 1,
+        surrogate_type: str = "random_forest",
         **kwargs,
     ):
         super().__init__(eval_data, seed, name, eval_embeds)
@@ -198,9 +200,18 @@ class SurrogateSampler(AcquisitionFunctionWithEmbeds):
         self.surrogate_preds = np.full(
             (len(self.eval_data), self.num_classes), 1.0 / self.num_classes
         )
-        self.surrogate_model = RandomForestClassifier(
-            random_state=self.rng.integers(int(1e9)), n_jobs=16, verbose=1
-        )
+        self.surrogate_type = surrogate_type
+        if surrogate_type == "random_forest":
+            self.surrogate_model = RandomForestClassifier(
+                random_state=self.rng.integers(int(1e9)), n_jobs=16, verbose=1
+            )
+        elif surrogate_type == "lightgbm":
+            self.surrogate_model = LGBMClassifier(
+                random_state=self.rng.integers(int(1e9)), n_jobs=16, verbose=1
+            )
+        else:
+            err_msg = f"Unsupported surrogate type: {surrogate_type}."
+            raise ValueError(err_msg)
         self.surrogate_train_data = surrogate_train_data
         self.surrogate_pretrain()
         self.retrain_every = retrain_every
@@ -332,6 +343,7 @@ class AccSampler(SurrogateSampler):
         model_preds: np.ndarray,
         surrogate_train_data: SurrogateData | None = None,
         retrain_every: int = 1,
+        surrogate_type: str = "lightgbm",
         **kwargs,
     ):
         super().__init__(
@@ -342,6 +354,7 @@ class AccSampler(SurrogateSampler):
             model_preds,
             surrogate_train_data,
             retrain_every,
+            surrogate_type,
         )
 
     def acquisition_fn(
@@ -373,6 +386,7 @@ class InformationGainSampler(SurrogateSampler):
         model_preds: np.ndarray,
         surrogate_train_data: SurrogateData | None = None,
         retrain_every: int = 1,
+        surrogate_type: str = "lightgbm",
         **kwargs,
     ):
         super().__init__(
@@ -383,6 +397,7 @@ class InformationGainSampler(SurrogateSampler):
             model_preds,
             surrogate_train_data,
             retrain_every,
+            surrogate_type,
         )
 
     def acquisition_fn(

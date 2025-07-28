@@ -1,0 +1,6 @@
+model_config: ModernBERT
+hparams_config: fp16
+
+# Only one model needs to be trained per unique train set, which is specified
+# by all the parameters in the data config excluding test_imbalance.
+data_config: football_large_train_balanced

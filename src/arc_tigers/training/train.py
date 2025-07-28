@@ -52,6 +52,10 @@ def train_transformers(train_config: TrainConfig):
     model: PreTrainedModel = AutoModelForSequenceClassification.from_pretrained(
         model_name, **train_config.model_config.model_kwargs
     )
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+        # Ensure the model config also knows about the padding token
+        model.config.pad_token_id = tokenizer.pad_token_id
 
     # Data collator
     logger.info("Loading data...")

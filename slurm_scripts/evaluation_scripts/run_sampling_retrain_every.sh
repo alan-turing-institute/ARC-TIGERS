@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --qos turing
 #SBATCH --job-name run_sampling
-#SBATCH --time 0-12:00:0
+#SBATCH --time 0-10:00:0
 #SBATCH --nodes 1
 #SBATCH --gpus 1
 #SBATCH --output /bask/projects/v/vjgo8416-tigers/ARC-TIGERS/slurm_logs/run_sampling-%j.out
@@ -27,4 +27,5 @@ export HF_HOME="/bask/projects/v/vjgo8416-tigers/hf_cache"
 # $2 = Training config
 # $3 = Acquisition strategy
 # $4 = Retrain frequency
-python scripts/experiments/sample.py $1 $2 $3 --retrain_every $4 --n_repeats 20 --max_labels 1000 --seed 456
+# $5 = Test imbalance
+python scripts/experiments/sample.py $1 $2 $3 --retrain_every $4 --n_repeats 10 --max_labels 1000 --seed 321 --output_dir /bask/projects/v/vjgo8416-tigers/ARC-TIGERS/outputs/reddit_dataset_12/one-vs-all/football/42_05/distilbert/default/eval_outputs_retrain_every/$5/eval_outputs_retrain_$4
