@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
@@ -14,7 +15,7 @@ model_eval_files = [
 
 results = []
 for file in model_eval_files:
-    with open(file, "r") as f:
+    with open(file) as f:
         data = json.load(f)
     proc_data = {}
     for key, values in data.items():
@@ -41,7 +42,7 @@ model_eval_dirs = [
 
 results = []
 for path in model_eval_dirs:
-    with open(Path(path) / "metrics_full.json", "r") as f:
+    with open(Path(path) / "metrics_full.json") as f:
         data = json.load(f)
     results.append(data)
 
@@ -50,7 +51,7 @@ df = pd.DataFrame(results)
 pred_0 = []
 pred_1 = []
 for path in model_eval_dirs:
-    with open(Path(path) / "stats_full.json", "r") as f:
+    with open(Path(path) / "stats_full.json") as f:
         data = json.load(f)
     preds = np.array(data["softmax"]) > 0.5
     pred_0.append(preds[:, 0].sum())
@@ -72,7 +73,7 @@ model_eval_dirs = [
 
 results = []
 for path in model_eval_dirs:
-    with open(Path(path) / "metrics_full.json", "r") as f:
+    with open(Path(path) / "metrics_full.json") as f:
         data = json.load(f)
     results.append(data)
 
@@ -81,7 +82,7 @@ df = pd.DataFrame(results)
 pred_0 = []
 pred_1 = []
 for path in model_eval_dirs:
-    with open(Path(path) / "stats_full.json", "r") as f:
+    with open(Path(path) / "stats_full.json") as f:
         data = json.load(f)
     preds = np.array(data["softmax"]) > 0.5
     pred_0.append(preds[:, 0].sum())
@@ -99,7 +100,7 @@ model_eval_dirs = [
 
 results = []
 for path in model_eval_dirs:
-    with open(Path(path) / "metrics_full.json", "r") as f:
+    with open(Path(path) / "metrics_full.json") as f:
         data = json.load(f)
     results.append(data)
 
@@ -108,7 +109,7 @@ df = pd.DataFrame(results)
 pred_0 = []
 pred_1 = []
 for path in model_eval_dirs:
-    with open(Path(path) / "stats_full.json", "r") as f:
+    with open(Path(path) / "stats_full.json") as f:
         data = json.load(f)
     preds = np.array(data["softmax"]) > 0.5
     pred_0.append(preds[:, 0].sum())
@@ -118,4 +119,3 @@ df["pred_1"] = pred_1
 
 print(df)
 df.to_csv("test_imbalanced_train.csv")
-
