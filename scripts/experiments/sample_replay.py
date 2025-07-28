@@ -14,9 +14,6 @@ if __name__ == "__main__":
         "new_train_config", help="Path to training config for new model"
     )
     parser.add_argument(
-        "output_dir", help="Directory to save replayed experiment results"
-    )
-    parser.add_argument(
         "--seed",
         type=int,
         default=None,
@@ -39,7 +36,6 @@ if __name__ == "__main__":
     replay_experiment_with_new_model(
         original_experiment_dir=args.original_experiment_dir,
         new_train_config=args.new_train_config,
-        output_dir=args.output_dir,
         seed_to_replay=args.seed,
         max_samples=args.max_samples,
         eval_every=args.eval_every,

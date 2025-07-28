@@ -294,7 +294,6 @@ def save_replay_metadata(
 def replay_experiment_with_new_model(
     original_experiment_dir: str | Path,
     new_train_config: TrainConfig | str | Path,
-    output_dir: str | Path,
     seed_to_replay: int,
     max_samples: int | None = None,
     eval_every: int = 50,
@@ -325,15 +324,12 @@ def replay_experiment_with_new_model(
         new_train_config = TrainConfig.from_path(new_train_config)
 
     # Create structured output directory if not provided as absolute path
-    output_path = Path(output_dir)
-    if not output_path.is_absolute() or str(output_path).startswith("outputs/test"):
-        # Create structured directory under the model's base directory
-        output_dir = create_replay_output_dir(
-            original_experiment_dir=original_dir,
-            new_train_config=new_train_config,
-            seed_to_replay=seed_to_replay,
-        )
-        logger.info("Using structured output directory: %s", output_dir)
+    output_dir = create_replay_output_dir(
+        original_experiment_dir=original_dir,
+        new_train_config=new_train_config,
+        seed_to_replay=seed_to_replay,
+    )
+    logger.info("Using structured output directory: %s", output_dir)
 
     # Load data config (should be the same as original)
     data_config_path = f"configs/data/{original_config['data_config']}.yaml"
