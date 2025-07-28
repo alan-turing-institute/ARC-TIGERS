@@ -185,27 +185,39 @@ def create_replay_output_dir(
     # Path: outputs/{data}/{task}/{model_id}/{orig_model}/{orig_hparams}/
     #       eval_outputs/{eval_id}/{strategy}
 
-    for i, part in enumerate(original_parts):
-        if part == "eval_outputs":
-            # Extract components using the eval_outputs index as reference (i=7)
-            if i >= 1:
-                original_hparams = original_parts[i - 1]  # batch128 (index 6)
-            if i >= 2:
-                original_model = original_parts[i - 2]  # zero-shot (index 5)
-            # For the directory structure components, use absolute indices
-            if len(original_parts) > 1:
-                data_config = original_parts[1]  # reddit_dataset_12
-            if len(original_parts) > 2:
-                task = original_parts[2]  # one-vs-all
-            if len(original_parts) > 4:
-                model_id = original_parts[4]  # 42_05
+    # Initialize defaults
+    data_config = "unknown_data"
+    task = "unknown_task"
+    model_id = "unknown_model"
+    eval_id = "unknown_eval"
+    original_model = "unknown_orig_model"
+    original_hparams = "unknown_orig_hparams"
+    original_strategy = "unknown_strategy"
 
-            # Get strategy (after eval_id) and eval_id
-            if i + 1 < len(original_parts):
-                eval_id = original_parts[i + 1]  # 05 (index 8)
-            if i + 2 < len(original_parts):
-                original_strategy = original_parts[i + 2]  # random (index 9)
-            break
+    for i, part in enumerate(original_parts):
+        try:
+            if part == "eval_outputs":
+                # Extract components using the eval_outputs index as reference (i=7)
+                if i >= 1:
+                    original_hparams = original_parts[i - 1]  # batch128 (index 6)
+                if i >= 2:
+                    original_model = original_parts[i - 2]  # zero-shot (index 5)
+                # For the directory structure components, use absolute indices
+                if len(original_parts) > 1:
+                    data_config = original_parts[1]  # reddit_dataset_12
+                if len(original_parts) > 2:
+                    task = original_parts[2]  # one-vs-all
+                if len(original_parts) > 4:
+                    model_id = original_parts[4]  # 42_05
+
+                # Get strategy (after eval_id) and eval_id
+                if i + 1 < len(original_parts):
+                    eval_id = original_parts[i + 1]  # 05 (index 8)
+                if i + 2 < len(original_parts):
+                    original_strategy = original_parts[i + 2]  # random (index 9)
+                break
+        except IndexError as e:
+            logger.warning("Could not parse full directory structure: %s", e)
 
     # Get new model configuration names
     new_model = getattr(
