@@ -126,7 +126,7 @@ def plot_metrics(
         plt.close()
 
 
-def plot_sampling_error(
+def model_comparison_mse(
     save_dir: str,
     metric_stats: dict[
         str,
@@ -149,6 +149,7 @@ def plot_sampling_error(
             mse = metric_stats[model_name][metric]["mse"]
             mse_std = metric_stats[model_name][metric]["mse_std"]
             mse = metric_stats[model_name][metric]["mse"]
+            # ignore first index as mse is very high at low label counts
             x_vals = metric_stats[model_name]["n_labels"][1:]  # type: ignore[index]
             y_vals = mse[1:]
             y_std = mse_std[1:]
@@ -164,7 +165,7 @@ def plot_sampling_error(
         plt.close()
 
 
-def plot_raw_results(
+def model_comparison_raw(
     save_dir: str,
     metric_stats: dict[
         str,
@@ -195,7 +196,6 @@ def plot_raw_results(
                 label=model_name,
                 linestyle="-",
                 linewidth=2,
-                marker="o",
                 markersize=4,
             )
             plt.fill_between(
@@ -206,9 +206,105 @@ def plot_raw_results(
         plt.xlabel("Number of labelled samples")
         plt.legend()
         plt.title(f"Model Comparison: {metric}")
-        plt.grid(True, alpha=0.3)
         plt.tight_layout()
         plt.savefig(f"{save_dir}/raw/{metric}.png", dpi=300)
+        plt.close()
+
+
+def sampling_comparison_raw(
+    save_dir: str,
+    metric_stats: dict[str, dict[str, npt.NDArray | dict[str, npt.NDArray]]],
+    full_metrics: dict[str, dict[str, int | float]] | None = None,
+):
+    """Plot raw metric values for sampling strategy comparison."""
+    strategy_names = list(metric_stats.keys())
+    metrics = metric_stats[strategy_names[0]].keys()
+
+    for metric in metrics:
+        if metric == "n_labels":
+            continue
+        if "n_class" in metric:
+            continue
+
+        plt.figure(figsize=(12, 6))
+
+        # Plot baseline (full test set) if available
+        if full_metrics and "n_class" not in metric:
+            # Use the baseline from the first strategy (they should all be the same)
+            baseline_value = next(iter(full_metrics.values()))[metric]
+            plt.axhline(
+                y=baseline_value,
+                color="k",
+                linestyle="--",
+                alpha=0.7,
+                linewidth=2,
+                label="Full Test Set (Ground Truth)",
+            )
+
+        for strategy_name in strategy_names:
+            mean_values = metric_stats[strategy_name][metric]["mean"]
+            std_values = metric_stats[strategy_name][metric]["std"]
+            x_vals = metric_stats[strategy_name]["n_labels"]
+
+            plt.plot(
+                x_vals,
+                mean_values,
+                label=strategy_name,
+                linestyle="-",
+                linewidth=2,
+                markersize=4,
+            )
+            plt.fill_between(
+                x_vals, mean_values - std_values, mean_values + std_values, alpha=0.2
+            )
+
+        plt.ylabel(f"{metric}")
+        plt.xlabel("Number of labelled samples")
+        plt.legend()
+        plt.title(f"Sampling Strategy Comparison: Raw {metric}")
+        plt.tight_layout()
+        plt.savefig(f"{save_dir}/raw/{metric}.png", dpi=300)
+        plt.close()
+
+
+def sampling_comparison_mse(
+    save_dir: str,
+    metric_stats: dict[str, dict[str, npt.NDArray | dict[str, npt.NDArray]]],
+):
+    """Plot MSE (sampling error) for sampling strategy comparison."""
+    strategy_names = list(metric_stats.keys())
+    metrics = metric_stats[strategy_names[0]].keys()
+
+    for metric in metrics:
+        if metric == "n_labels":
+            continue
+        if "n_class" in metric:
+            continue
+
+        plt.figure(figsize=(12, 6))
+        plt.axhline(
+            y=0,
+            color="k",
+            linestyle="--",
+            alpha=0.5,
+        )
+
+        for strategy_name in strategy_names:
+            mse = metric_stats[strategy_name][metric]["mse"]
+            mse_std = metric_stats[strategy_name][metric]["mse_std"]
+            x_vals = metric_stats[strategy_name]["n_labels"][1:]  # type: ignore[index]
+            y_vals = mse[1:]
+            y_std = mse_std[1:]
+
+            plt.plot(x_vals, y_vals, label=strategy_name, linestyle="-", linewidth=2)
+            plt.fill_between(x_vals, y_vals - y_std, y_vals + y_std, alpha=0.2)
+
+        plt.ylabel(f"MSE from full test {metric}")
+        plt.xlabel("Number of labelled samples")
+        plt.legend()
+        plt.title(f"Sampling Strategy Comparison: Sampling Error {metric}")
+        plt.tight_layout()
+        plt.savefig(f"{save_dir}/mse/{metric}.png", dpi=300)
         plt.close()
 
 
