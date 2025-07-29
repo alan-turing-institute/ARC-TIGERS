@@ -4,8 +4,8 @@ import os
 from arc_tigers.eval.utils import (
     find_model_directories,
     get_metric_stats,
-    plot_raw_results,
-    plot_sampling_error,
+    model_comparison_mse,
+    model_comparison_raw,
 )
 
 
@@ -50,8 +50,10 @@ def main(base_path: str, models: list[str], test_imbalance: str, sampling_method
         return
 
     # Generate plots
-    plot_raw_results(save_dir=save_dir, metric_stats=metric_stats)
-    plot_sampling_error(save_dir=save_dir, metric_stats=metric_stats)
+    model_comparison_raw(
+        save_dir=save_dir, metric_stats=metric_stats, full_metrics=full_metrics
+    )
+    model_comparison_mse(save_dir=save_dir, metric_stats=metric_stats)
 
     print(f"Plots saved to {save_dir}")
 

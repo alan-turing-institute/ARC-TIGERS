@@ -143,8 +143,13 @@ def model_comparison_mse(
             continue
         if "n_class" in metric:
             continue
-        plt.figure(figsize=(10, 6))
-        plt.axhline(y=0, color="k", linestyle="--", alpha=0.2)
+        plt.figure(figsize=(7, 5))
+        plt.axhline(
+            y=0,
+            color="k",
+            linestyle="--",
+            alpha=0.5,
+        )
         for model_name in model_names:
             mse = metric_stats[model_name][metric]["mse"]
             mse_std = metric_stats[model_name][metric]["mse_std"]
@@ -174,6 +179,7 @@ def model_comparison_raw(
             npt.NDArray[np.integer] | dict[str, npt.NDArray[np.integer | np.floating]],
         ],
     ],
+    full_metrics: dict[str, dict[str, int | float]] | None = None,
 ):
     """Plot the raw metric values for each model."""
     model_names = list(metric_stats.keys())
@@ -183,7 +189,7 @@ def model_comparison_raw(
             continue
         if "n_class" in metric:
             continue
-        plt.figure(figsize=(10, 6))
+        plt.figure(figsize=(7, 5))
 
         for model_name in model_names:
             mean_values = metric_stats[model_name][metric]["mean"]
@@ -201,6 +207,19 @@ def model_comparison_raw(
             plt.fill_between(
                 x_vals, mean_values - std_values, mean_values + std_values, alpha=0.2
             )
+
+            # Plot baseline (full test set) for this specific model if available
+            if full_metrics and model_name in full_metrics and "n_class" not in metric:
+                baseline_value = full_metrics[model_name][metric]
+                # Use same color as model line
+                model_color = plt.gca().lines[-1].get_color()
+                plt.axhline(
+                    y=baseline_value,
+                    color=model_color,
+                    linestyle="--",
+                    alpha=0.7,
+                    linewidth=1,
+                )
 
         plt.ylabel(f"{metric}")
         plt.xlabel("Number of labelled samples")
@@ -226,7 +245,7 @@ def sampling_comparison_raw(
         if "n_class" in metric:
             continue
 
-        plt.figure(figsize=(12, 6))
+        plt.figure(figsize=(7, 5))
 
         # Plot baseline (full test set) if available
         if full_metrics and "n_class" not in metric:
@@ -281,7 +300,7 @@ def sampling_comparison_mse(
         if "n_class" in metric:
             continue
 
-        plt.figure(figsize=(12, 6))
+        plt.figure(figsize=(7, 5))
         plt.axhline(
             y=0,
             color="k",
