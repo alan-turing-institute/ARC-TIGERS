@@ -126,6 +126,133 @@ def plot_metrics(
         plt.close()
 
 
+def plot_sampling_error(
+    save_dir: str,
+    metric_stats: dict[
+        str,
+        dict[
+            str,
+            npt.NDArray[np.integer] | dict[str, npt.NDArray[np.integer | np.floating]],
+        ],
+    ],
+):
+    model_names = list(metric_stats.keys())
+    metrics = list(metric_stats[model_names[0]].keys())
+    for metric in metrics:
+        if metric == "n_labels":
+            continue
+        if "n_class" in metric:
+            continue
+        plt.figure(figsize=(10, 6))
+        plt.axhline(y=0, color="k", linestyle="--", alpha=0.2)
+        for model_name in model_names:
+            mse = metric_stats[model_name][metric]["mse"]
+            mse_std = metric_stats[model_name][metric]["mse_std"]
+            mse = metric_stats[model_name][metric]["mse"]
+            x_vals = metric_stats[model_name]["n_labels"][1:]  # type: ignore[index]
+            y_vals = mse[1:]
+            y_std = mse_std[1:]
+            plt.plot(x_vals, y_vals, label=model_name, linestyle="-", linewidth=2)
+            plt.fill_between(x_vals, y_vals - y_std, y_vals + y_std, alpha=0.2)
+
+        plt.ylabel(f"Difference to full test {metric}")
+        plt.xlabel("Number of labelled samples")
+        plt.legend()
+        plt.title(f"Model Comparison: {metric}")
+        plt.tight_layout()
+        plt.savefig(f"{save_dir}/mse/{metric}.png", dpi=300)
+        plt.close()
+
+
+def plot_raw_results(
+    save_dir: str,
+    metric_stats: dict[
+        str,
+        dict[
+            str,
+            npt.NDArray[np.integer] | dict[str, npt.NDArray[np.integer | np.floating]],
+        ],
+    ],
+):
+    """Plot the raw metric values for each model."""
+    model_names = list(metric_stats.keys())
+    metrics = metric_stats[model_names[0]].keys()
+    for metric in metrics:
+        if metric == "n_labels":
+            continue
+        if "n_class" in metric:
+            continue
+        plt.figure(figsize=(10, 6))
+
+        for model_name in model_names:
+            mean_values = metric_stats[model_name][metric]["mean"]
+            std_values = metric_stats[model_name][metric]["std"]
+            x_vals = metric_stats[model_name]["n_labels"]
+
+            plt.plot(
+                x_vals,
+                mean_values,
+                label=model_name,
+                linestyle="-",
+                linewidth=2,
+                marker="o",
+                markersize=4,
+            )
+            plt.fill_between(
+                x_vals, mean_values - std_values, mean_values + std_values, alpha=0.2
+            )
+
+        plt.ylabel(f"{metric}")
+        plt.xlabel("Number of labelled samples")
+        plt.legend()
+        plt.title(f"Model Comparison: {metric}")
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(f"{save_dir}/raw/{metric}.png", dpi=300)
+        plt.close()
+
+
+def find_model_directories(
+    base_path: str, models: list[str], test_imbalance: str, sampling_method: str
+) -> dict[str, str]:
+    """
+    Find the sampling method directories for each model.
+
+    Args:
+        base_path: Base path like "outputs/reddit_dataset_12/one-vs-all/football/42_05"
+        models: List of model names to search for
+        test_imbalance: Test imbalance level (e.g., "05", "01", "001")
+        sampling_method: Sampling method directory name (e.g., "random")
+
+    Returns:
+        Dictionary mapping model names to their sampling method directory paths
+    """
+    model_paths = {}
+
+    for model in models:
+        # Look for pattern:
+        # base_path/model/*/eval_outputs/test_imbalance/sampling_method
+        pattern = (
+            f"{base_path}/{model}/*/eval_outputs/{test_imbalance}/{sampling_method}"
+        )
+        matches = glob(pattern)
+
+        if matches:
+            # Take the first match - this is the full path to the sampling method
+            # directory
+            sampling_method_path = matches[0]
+            model_paths[model] = sampling_method_path
+        else:
+            print(
+                f"Warning: No eval_outputs found for model '{model}' "
+                f"with test imbalance '{test_imbalance}' "
+                f"and sampling method '{sampling_method}'"
+            )
+            print(f"  Searched pattern: {pattern}")
+
+    return model_paths
+
+
 def get_metric_stats(
     data_dir: str, plot: bool = True
 ) -> tuple[dict[str, Any | dict[str, Any]], Any]:
