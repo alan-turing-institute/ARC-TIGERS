@@ -1,19 +1,22 @@
-import logging
-from arc_tigers.samplers.fixed import FixedSampler
-
-from arc_tigers.training.config import TrainConfig
-from typing import Any, Union
-from pathlib import Path
 import json
+import logging
+from pathlib import Path
+from typing import Any
+
 from datasets import Dataset
 
+from arc_tigers.samplers.fixed import FixedSampler
+from arc_tigers.training.config import TrainConfig
+
 logger = logging.getLogger(__name__)
+
 
 def extract_eval_data_config_from_path(experiment_output_dir: str | Path) -> str:
     """
     Extract the evaluation data config from the experiment output directory path.
 
-    For a path like: outputs/reddit_dataset_12/one-vs-all/football/42_05/distilbert/default/eval_outputs/05/random/
+    For a path like: outputs/reddit_dataset_12/one-vs-all/football/42_05/distilbert/
+    default/eval_outputs/05/random/
     This returns: "05" (the second to last component, before the sampling strategy)
 
     Args:
@@ -31,7 +34,8 @@ def extract_eval_data_config_from_path(experiment_output_dir: str | Path) -> str
     # Expected structure: .../eval_outputs/{eval_data_config}/{sampling_strategy}
     # So eval_data_config should be the second to last part
     if len(parts) < 2:
-        raise ValueError(f"Path too short to extract eval data config: {path}")
+        msg = f"Path too short to extract eval data config: {path}"
+        raise ValueError(msg)
 
     # Find eval_outputs in the path
     eval_outputs_idx = None
@@ -41,11 +45,13 @@ def extract_eval_data_config_from_path(experiment_output_dir: str | Path) -> str
             break
 
     if eval_outputs_idx is None:
-        raise ValueError(f"Path does not contain 'eval_outputs': {path}")
+        msg = f"Path does not contain 'eval_outputs': {path}"
+        raise ValueError(msg)
 
     # eval_data_config should be the part immediately after eval_outputs
     if eval_outputs_idx + 1 >= len(parts):
-        raise ValueError(f"No eval data config found after 'eval_outputs' in path: {path}")
+        msg = f"No eval data config found after 'eval_outputs' in path: {path}"
+        raise ValueError(msg)
 
     eval_data_config = parts[eval_outputs_idx + 1]
 
@@ -195,7 +201,8 @@ def create_replay_output_dir(
 
     Creates output directory structure like:
     `outputs/{data}/{task}/{model_id}/replays/{eval_id}/replay_from_{orig_model}_{orig_hparams}_{orig_strategy}/to_{new_model}_{new_hparams}/seed_{seed}`
-    If seed_to_replay is None, creates a shared directory without the seed suffix for multi-seed experiments.
+    If seed_to_replay is None, creates a shared directory without the seed suffix for
+    multi-seed experiments.
 
     `original_experiment_directory` should be structured like:
     `outputs/{dataset}/{task}/{model_id}/{orig_model}/{orig_hparams}/eval_outputs/{eval_id}/{strategy}`
@@ -203,7 +210,8 @@ def create_replay_output_dir(
     Args:
         original_experiment_dir: Path to original experiment.
         new_train_config: Configuration for the new model
-        seed_to_replay: Seed being replayed. If None, creates shared directory for all seeds
+        seed_to_replay: Seed being replayed. If None, creates shared directory for all
+        seeds
 
     Returns:
         Path to the structured output directory
@@ -290,4 +298,3 @@ def create_replay_output_dir(
 
     replay_dir.mkdir(parents=True, exist_ok=True)
     return replay_dir
-

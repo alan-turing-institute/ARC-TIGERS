@@ -4,11 +4,17 @@ from pathlib import Path
 import yaml
 
 from arc_tigers.data.config import load_data_config
+from arc_tigers.replay.utils import (
+    create_fixed_sampler_from_experiment,
+    create_replay_output_dir,
+    extract_eval_data_config_from_path,
+    load_sampling_data,
+)
 from arc_tigers.sampling.run import sampling_loop
 from arc_tigers.training.config import TrainConfig
-from arc_tigers.replay.utils import (extract_eval_data_config_from_path, create_replay_output_dir, create_fixed_sampler_from_experiment, load_sampling_data)
 
 logger = logging.getLogger(__name__)
+
 
 def replay_experiment_with_new_model(
     original_experiment_dir: str | Path,
@@ -31,7 +37,8 @@ def replay_experiment_with_new_model(
         seed_to_replay: Specific seed from original experiment to replay
         max_samples: Maximum number of samples to evaluate
         eval_every: Evaluate metrics every N samples
-        eval_data_config: Evaluation data config to use. If None, infers from experiment path
+        eval_data_config: Evaluation data config to use. If None, infers from experiment
+        path
     """
     original_dir = Path(original_experiment_dir)
 
@@ -59,7 +66,8 @@ def replay_experiment_with_new_model(
     logger.info("Using structured output directory: %s", output_dir)
 
     # Load the base data config and get the evaluation dataset
-    # Use the original training data config as the base, but apply eval data config for evaluation
+    # Use the original training data config as the base,
+    # but apply eval data config for evaluation
     base_data_config_path = f"configs/data/{original_config['data_config']}.yaml"
     base_data_config = load_data_config(base_data_config_path)
 
@@ -69,8 +77,8 @@ def replay_experiment_with_new_model(
 
     logger.info(
         "Using base data config '%s' with eval data config '%s'",
-        original_config['data_config'],
-        eval_data_config
+        original_config["data_config"],
+        eval_data_config,
     )
 
     # Create fixed sampler from original experiment
@@ -136,18 +144,21 @@ def replay_all_seeds_with_new_model(
     eval_data_config: str | None = None,
 ) -> None:
     """
-    Replay a previous experiment's sampling sequences for ALL available seeds using a different trained model.
+    Replay a previous experiment's sampling sequences for ALL available seeds using a
+    different trained model.
 
-    This function loads all available seeds from a previous experiment and replays each one
-    with the new model, saving all results under a shared directory structure.
+    This function loads all available seeds from a previous experiment and replays each
+    one with the new model, saving all results under a shared directory structure.
 
     Args:
         original_experiment_dir: Path to the original experiment's output directory
         new_train_config: TrainConfig or path to config for the new model to evaluate
         max_samples: Maximum number of samples to evaluate per seed
         eval_every: Evaluate metrics every N samples
-        shared_output_dir: Custom shared output directory. If None, uses structured naming
-        eval_data_config: Evaluation data config to use. If None, infers from experiment path
+        shared_output_dir: Custom shared output directory. If None, uses structured
+        naming
+        eval_data_config: Evaluation data config to use. If None, infers from experiment
+        path
     """
     original_dir = Path(original_experiment_dir)
 
@@ -170,11 +181,7 @@ def replay_all_seeds_with_new_model(
     sampling_data = load_sampling_data(original_dir)
     available_seeds = sampling_data["seeds"]
 
-    logger.info(
-        "Found %d seeds to replay: %s",
-        len(available_seeds),
-        available_seeds
-    )
+    logger.info("Found %d seeds to replay: %s", len(available_seeds), available_seeds)
 
     # Create shared output directory
     if shared_output_dir is None:
@@ -190,7 +197,8 @@ def replay_all_seeds_with_new_model(
     logger.info("Using shared output directory: %s", shared_output_dir)
 
     # Load the base data config and get the evaluation dataset
-    # Use the original training data config as the base, but apply eval data config for evaluation
+    # Use the original training data config as the base,
+    # but apply eval data config for evaluation
     base_data_config_path = f"configs/data/{original_config['data_config']}.yaml"
     base_data_config = load_data_config(base_data_config_path)
 
@@ -199,8 +207,8 @@ def replay_all_seeds_with_new_model(
 
     logger.info(
         "Using base data config '%s' with eval data config '%s'",
-        original_config['data_config'],
-        eval_data_config
+        original_config["data_config"],
+        eval_data_config,
     )
 
     # Replay each seed
@@ -234,15 +242,16 @@ def replay_all_seeds_with_new_model(
 
             try:
                 # Run the sampling loop directly in the shared output directory
-                # The sampling_loop will create metrics files with the seed in the filename
+                # The sampling_loop will create metrics files
+                # with the seed in the filename
                 sampling_loop(
                     data_config=base_data_config,
                     train_config=new_train_config,
-                    n_repeats=1,  # Only one repeat since we're replaying specific sequence
+                    n_repeats=1,
                     sampling_strategy="fixed",
                     init_seed=seed,
                     evaluate_steps=evaluate_steps,
-                    output_dir=shared_output_dir,  # All seeds use the same output directory
+                    output_dir=shared_output_dir,
                     retrain_every=1,
                     surrogate_pretrain=False,
                     replay_sample_indices=sample_indices,
@@ -272,7 +281,8 @@ def replay_experiment(
     """
     Replay a previous experiment's sampling sequence(s) using a different trained model.
 
-    This is a convenience function that can either replay a specific seed or all available seeds.
+    This is a convenience function that can either
+    replay a specific seed or all available seeds.
 
     Args:
         original_experiment_dir: Path to the original experiment's output directory
@@ -281,7 +291,8 @@ def replay_experiment(
         max_samples: Maximum number of samples to evaluate (per seed if replaying all)
         eval_every: Evaluate metrics every N samples
         shared_output_dir: Custom output directory (only used when replaying all seeds)
-        eval_data_config: Evaluation data config to use. If None, infers from experiment path
+        eval_data_config: Evaluation data config to use.
+        If None, infers from experiment path
     """
     if seed_to_replay is None:
         logger.info("No specific seed provided. Replaying ALL available seeds.")
