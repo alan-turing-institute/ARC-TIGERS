@@ -241,8 +241,8 @@ def create_replay_output_dir(
         / model_id  # seed/train imbalance
         / "replays"
         / eval_id  # (evaluation data imbalance)
-        / f"from_{original_model}_{original_hparams}_{original_strategy}"
-        / f"to_{new_model}_{new_hparams}"
+        / f"{new_model}_{new_hparams}"
+        / f"from_{original_model}_{original_hparams}/{original_strategy}"
         / f"seed_{seed_to_replay}"
     )
 
@@ -323,6 +323,18 @@ def replay_experiment_with_new_model(
     if isinstance(new_train_config, str | Path):
         new_train_config = TrainConfig.from_path(new_train_config)
 
+    # Validate that data configs match
+    original_data_config_name = original_config["data_config"]
+    new_data_config_name = getattr(
+        new_train_config.data_config, "config_name", "unknown"
+    )
+    if original_data_config_name != new_data_config_name:
+        msg = (
+            f"Data config mismatch: original '{original_data_config_name}' "
+            f"vs new '{new_data_config_name}'"
+        )
+        raise ValueError(msg)
+
     # Create structured output directory if not provided as absolute path
     output_dir = create_replay_output_dir(
         original_experiment_dir=original_dir,
@@ -335,7 +347,7 @@ def replay_experiment_with_new_model(
     data_config_path = f"configs/data/{original_config['data_config']}.yaml"
     data_config = load_data_config(data_config_path)
 
-    # Get the test dataset
+    # Get the eval dataset
     eval_data = data_config.get_test_split()
 
     # Create fixed sampler from original experiment

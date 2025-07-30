@@ -163,3 +163,4 @@ outputs/
 tmp/
 .tmp/
 slurm_logs/
+.vscode/
