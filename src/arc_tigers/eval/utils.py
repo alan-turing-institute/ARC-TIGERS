@@ -152,16 +152,13 @@ def model_comparison_mse(
         )
         for model_name in model_names:
             mse = metric_stats[model_name][metric]["mse"]
-            mse_std = metric_stats[model_name][metric]["mse_std"]
             mse = metric_stats[model_name][metric]["mse"]
             # ignore first index as mse is very high at low label counts
             x_vals = metric_stats[model_name]["n_labels"][1:]  # type: ignore[index]
             y_vals = mse[1:]
-            y_std = mse_std[1:]
             plt.plot(x_vals, y_vals, label=model_name, linestyle="-", linewidth=2)
-            plt.fill_between(x_vals, y_vals - y_std, y_vals + y_std, alpha=0.2)
 
-        plt.ylabel(f"Difference to full test {metric}")
+        plt.ylabel(f"MSE from full test {metric}")
         plt.xlabel("Number of labelled samples")
         plt.legend()
         plt.title(f"Model Comparison: {metric}")
@@ -242,8 +239,6 @@ def sampling_comparison_raw(
     for metric in metrics:
         if metric == "n_labels":
             continue
-        if "n_class" in metric:
-            continue
 
         plt.figure(figsize=(7, 5))
 
@@ -257,7 +252,7 @@ def sampling_comparison_raw(
                 linestyle="--",
                 alpha=0.7,
                 linewidth=2,
-                label="Full Test Set (Ground Truth)",
+                label="Full Test Set",
             )
 
         for strategy_name in strategy_names:
@@ -310,13 +305,10 @@ def sampling_comparison_mse(
 
         for strategy_name in strategy_names:
             mse = metric_stats[strategy_name][metric]["mse"]
-            mse_std = metric_stats[strategy_name][metric]["mse_std"]
             x_vals = metric_stats[strategy_name]["n_labels"][1:]  # type: ignore[index]
             y_vals = mse[1:]
-            y_std = mse_std[1:]
 
             plt.plot(x_vals, y_vals, label=strategy_name, linestyle="-", linewidth=2)
-            plt.fill_between(x_vals, y_vals - y_std, y_vals + y_std, alpha=0.2)
 
         plt.ylabel(f"MSE from full test {metric}")
         plt.xlabel("Number of labelled samples")
@@ -324,6 +316,56 @@ def sampling_comparison_mse(
         plt.title(f"Sampling Strategy Comparison: Sampling Error {metric}")
         plt.tight_layout()
         plt.savefig(f"{save_dir}/mse/{metric}.png", dpi=300)
+        plt.close()
+
+
+def sampling_comparison_improvement(
+    save_dir: str,
+    metric_stats: dict[str, dict[str, npt.NDArray | dict[str, npt.NDArray]]],
+):
+    """Plot improvement of sampling strategies relative to random baseline."""
+    strategy_names = list(metric_stats.keys())
+    metrics = metric_stats[strategy_names[0]].keys()
+
+    # Check if random is available as baseline
+    if "random" not in strategy_names:
+        print("Warning: 'random' strategy not found, cannot compute improvements")
+        return
+
+    for metric in metrics:
+        if metric == "n_labels":
+            continue
+        if "n_class" in metric:
+            continue
+
+        plt.figure(figsize=(12, 6))
+        plt.axhline(y=1, color="k", linestyle="--", alpha=0.5, label="Random")
+
+        # Use random as baseline for comparison
+        baseline_mse = metric_stats["random"][metric]["mse"][1:]
+        x_vals = metric_stats["random"]["n_labels"][1:]  # type: ignore[index]
+
+        for strategy_name in strategy_names:
+            mse = metric_stats[strategy_name][metric]["mse"]
+            if strategy_name == "random":
+                continue
+            # Calculate improvement: baseline_mse / current_mse
+            # Values > 1 mean improvement, < 1 mean degradation
+            improvement = baseline_mse / mse[1:]
+            plt.plot(
+                x_vals,
+                improvement,
+                label=strategy_name,
+                linestyle="-",
+                linewidth=2,
+            )
+
+        plt.ylabel(f"Improvement over random: {metric}")
+        plt.xlabel("Number of labelled samples")
+        plt.legend()
+        plt.title(f"Sampling Strategy Comparison: Improvement in {metric}")
+        plt.tight_layout()
+        plt.savefig(f"{save_dir}/improvement/{metric}.png", dpi=300)
         plt.close()
 
 

@@ -4,6 +4,7 @@ from glob import glob
 
 from arc_tigers.eval.utils import (
     get_metric_stats,
+    sampling_comparison_improvement,
     sampling_comparison_mse,
     sampling_comparison_raw,
 )
@@ -69,6 +70,7 @@ def main(
     # Create subdirectories for different plot types
     os.makedirs(f"{save_dir}/raw", exist_ok=True)
     os.makedirs(f"{save_dir}/mse", exist_ok=True)
+    os.makedirs(f"{save_dir}/improvement", exist_ok=True)
 
     # Collect metrics for each sampling strategy
     metric_stats = {}
@@ -93,6 +95,7 @@ def main(
         save_dir=save_dir, metric_stats=metric_stats, full_metrics=full_metrics
     )
     sampling_comparison_mse(save_dir=save_dir, metric_stats=metric_stats)
+    sampling_comparison_improvement(save_dir=save_dir, metric_stats=metric_stats)
 
     print(f"Plots saved to {save_dir}")
 
