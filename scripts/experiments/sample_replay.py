@@ -1,7 +1,7 @@
 import argparse
 import logging
 
-from arc_tigers.sampling.replay import replay_experiment
+from arc_tigers.replay.run import replay_experiment
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
