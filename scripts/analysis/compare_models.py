@@ -1,12 +1,8 @@
 import argparse
 import os
 
-from arc_tigers.eval.utils import (
-    find_model_directories,
-    get_metric_stats,
-    model_comparison_mse,
-    model_comparison_raw,
-)
+from arc_tigers.eval.plotting import model_comparison_mse, model_comparison_raw
+from arc_tigers.eval.utils import find_model_directories, get_metric_stats
 
 
 def main(base_path: str, models: list[str], test_imbalance: str, sampling_method: str):

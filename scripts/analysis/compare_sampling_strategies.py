@@ -2,12 +2,12 @@ import argparse
 import os
 from glob import glob
 
-from arc_tigers.eval.utils import (
-    get_metric_stats,
+from arc_tigers.eval.plotting import (
     sampling_comparison_improvement,
     sampling_comparison_mse,
     sampling_comparison_raw,
 )
+from arc_tigers.eval.utils import get_metric_stats
 
 
 def find_sampling_strategy_directories(
