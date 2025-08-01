@@ -30,7 +30,7 @@ def sample_dataset_metrics(
     sampler: Sampler | SSEPySampler,
     evaluate_steps: list[int],
     bias_corrector: LUREBiasCorrector | HTBiasCorrector | None = None,
-) -> list[dict[str, float]]:
+) -> tuple[list[dict[str, int | float]], list[dict[str, list[int | float] | int]]]:
     """
     Simulate iteratively random sampling the whole dataset, re-computing metrics
     after each sample.
@@ -50,6 +50,7 @@ def sample_dataset_metrics(
     max_labels = evaluate_steps[-1]
     evaluate_steps = deepcopy(evaluate_steps)
     metrics = []
+    sample_history = []
     next_eval_step = evaluate_steps.pop(0)
     for n in tqdm(range(max_labels)):
         if isinstance(sampler, Sampler):
@@ -69,12 +70,22 @@ def sample_dataset_metrics(
             )
             metric["n"] = n + 1
             metrics.append(metric)
+
+            sample_history.append(
+                {
+                    "sample_idx": sampler.labelled_idx,
+                    "sample_prob": sampler.sample_prob,
+                    "dataset_size": len(preds),
+                    "n_labels": n + 1,
+                }
+            )
+
             if evaluate_steps:
                 next_eval_step = evaluate_steps.pop(0)
             else:
                 break
 
-    return metrics
+    return metrics, sample_history
 
 
 def sampling_loop(
@@ -204,7 +215,7 @@ def sampling_loop(
         else:
             bias_corrector = LUREBiasCorrector(N=len(predictions), M=max_labels)
 
-        metrics = sample_dataset_metrics(
+        metrics, sample_history = sample_dataset_metrics(
             eval_data,
             predictions,
             sampler,
@@ -213,12 +224,4 @@ def sampling_loop(
         )
 
         pd.DataFrame(metrics).to_csv(f"{output_dir}/metrics_{seed}.csv", index=False)
-        to_json(
-            {
-                "sample_idx": sampler.labelled_idx,
-                "sample_prob": sampler.sample_prob,
-                "dataset_size": len(predictions),
-                "n_labels": max_labels,
-            },
-            f"{output_dir}/sample_{seed}.json",
-        )
+        to_json(sample_history, f"{output_dir}/sample_{seed}.json")

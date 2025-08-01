@@ -45,8 +45,6 @@ class SSEPySampler:
 
     def sample(self, n_samples: int) -> tuple[list[int], list[float]]:
         cluster_n_samples, cluster_sizes = self._allocate_budget(n_samples)
-        print(cluster_sizes)
-        print(cluster_n_samples)
         observed_idx, sample_prob = self._draw_sample(cluster_n_samples, cluster_sizes)
         self._observed_idx = observed_idx.tolist()
         self._sample_prob = sample_prob.tolist()
