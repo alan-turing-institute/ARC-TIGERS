@@ -18,7 +18,8 @@ def plot_replay_results(replay_results, save_dir):
     figures_dir = f"{save_dir}/transfer_analysis"
     os.makedirs(figures_dir, exist_ok=True)
     os.makedirs(f"{figures_dir}/raw", exist_ok=True)
-    os.makedirs(f"{figures_dir}/comparison", exist_ok=True)
+    os.makedirs(f"{figures_dir}/mse", exist_ok=True)
+    os.makedirs(f"{figures_dir}/difference", exist_ok=True)
 
     # Get the base model results
     base_stats = replay_results.get("base")
@@ -28,10 +29,15 @@ def plot_replay_results(replay_results, save_dir):
 
     # Get list of metrics (excluding 'n_labels' and class count metrics)
     metrics = [m for m in base_stats[0] if m != "n_labels" and "n_class" not in m]
+    full_metrics = base_stats[1]
+
+    transfer_models = [
+        k for k in replay_results if k not in ["base", "random_baseline"]
+    ]
 
     # Plot 1: Raw performance comparison
     for metric in metrics:
-        plt.figure(figsize=(10, 6))
+        plt.figure(figsize=(8, 6))
 
         # Plot base model performance
         base_metric_stats = base_stats[0]
@@ -39,16 +45,47 @@ def plot_replay_results(replay_results, save_dir):
         mean_vals = base_metric_stats[metric]["mean"]
         std_vals = base_metric_stats[metric]["std"]
 
+        plt.axhline(
+            y=full_metrics[metric],
+            color="black",
+            linestyle="--",
+            alpha=0.95,
+            label="Full Test Set",
+        )
+
+        # Plot random baseline if available
+        if (
+            "random_baseline" in replay_results
+            and replay_results["random_baseline"] is not None
+        ):
+            random_stats = replay_results["random_baseline"][0]
+            x_vals_random = random_stats["n_labels"][1:]
+            mean_vals_random = random_stats[metric]["mean"][1:]
+            std_vals_random = random_stats[metric]["std"][1:]
+
+            plt.plot(
+                x_vals_random,
+                mean_vals_random,
+                label="Random baseline",
+                linestyle=":",
+                color="gray",
+            )
+            plt.fill_between(
+                x_vals_random,
+                mean_vals_random - std_vals_random,
+                mean_vals_random + std_vals_random,
+                alpha=0.2,
+            )
+
         plt.plot(
             x_vals,
             mean_vals,
-            label="Base Model (Original)",
+            label="Original model",
             linestyle="-",
         )
         plt.fill_between(x_vals, mean_vals - std_vals, mean_vals + std_vals, alpha=0.3)
 
         # Plot transfer results for each model
-        transfer_models = [k for k in replay_results if k != "base"]
 
         for model_name in transfer_models:
             if replay_results[model_name] is None:
@@ -74,27 +111,62 @@ def plot_replay_results(replay_results, save_dir):
 
         plt.ylabel(f"{metric}")
         plt.xlabel("Number of labelled samples")
-        plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+        plt.legend(loc="upper right")
         plt.title(f"Transfer Performance: {metric}")
         plt.tight_layout()
         plt.savefig(f"{figures_dir}/raw/{metric}.png", dpi=300, bbox_inches="tight")
         plt.close()
 
-    # Plot 2: Transfer efficiency (ratio to base model)
+    # Plot 2: Transfer efficiency (difference to full test set)
     for metric in metrics:
-        plt.figure(figsize=(10, 6))
+        plt.figure(figsize=(8, 6))
 
+        # Get full test set performance as baseline
+        full_test_value = full_metrics[metric]
+
+        # Baseline at 0 (same as full test set)
+        # plt.axhline(
+        #     y=0,
+        #     color="black",
+        #     linestyle="--",
+        #     alpha=0.9,
+        #     label="Full Test Set",
+        # )
+        # plot random baseline if available
+        if (
+            "random_baseline" in replay_results
+            and replay_results["random_baseline"] is not None
+        ):
+            random_stats = replay_results["random_baseline"][0]
+            x_vals_random = random_stats["n_labels"][1:]
+            mean_vals_random = random_stats[metric]["mean"][1:]
+
+            # Calculate difference from full test set performance for random baseline
+            random_difference = mean_vals_random - full_test_value
+
+            plt.plot(
+                x_vals_random,
+                random_difference,
+                label="Random baseline",
+                linestyle=":",
+                linewidth=2,
+                color="gray",
+            )
+
+        # Plot base model efficiency
         base_metric_stats = base_stats[0]
-        base_x_vals = base_metric_stats["n_labels"]
-        base_mean_vals = base_metric_stats[metric]["mean"]
+        base_x_vals = base_metric_stats["n_labels"][1:]
+        base_mean_vals = base_metric_stats[metric]["mean"][1:]
 
-        # Baseline at 0 (same as base model)
-        plt.axhline(
-            y=0,
-            color="black",
+        # Calculate difference from full test set performance for base model
+        base_difference = base_mean_vals - full_test_value
+
+        plt.plot(
+            base_x_vals,
+            base_difference,
+            label="Original model",
             linestyle="-",
-            alpha=0.5,
-            label="Base",
+            linewidth=2,
         )
 
         # Plot transfer efficiency for each model
@@ -106,14 +178,8 @@ def plot_replay_results(replay_results, save_dir):
             transfer_x_vals = transfer_stats["n_labels"]
             transfer_mean_vals = transfer_stats[metric]["mean"]
 
-            # Calculate efficiency ratio (transfer performance / base performance)
-            # Interpolate base values to match transfer x values if needed
-            if not np.array_equal(base_x_vals, transfer_x_vals):
-                base_interp = np.interp(transfer_x_vals, base_x_vals, base_mean_vals)
-            else:
-                base_interp = base_mean_vals
-
-            difference = base_interp - transfer_mean_vals
+            # Calculate difference from full test set performance
+            difference = transfer_mean_vals - full_test_value
 
             plt.plot(
                 transfer_x_vals,
@@ -122,13 +188,107 @@ def plot_replay_results(replay_results, save_dir):
                 linestyle="-",
             )
 
-        plt.ylabel("Transfer Efficiency (ratio to base)")
+        plt.ylabel(f"Difference from full test {metric}")
         plt.xlabel("Number of labelled samples")
-        plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+        plt.legend(loc="upper right")
         plt.title(f"Transfer Efficiency: {metric}")
         plt.tight_layout()
         plt.savefig(
-            f"{figures_dir}/comparison/{metric}_efficiency.png",
+            f"{figures_dir}/difference/{metric}_efficiency.png",
+            dpi=300,
+            bbox_inches="tight",
+        )
+        plt.close()
+
+    # plot MSE for each model
+    for metric in metrics:
+        plt.figure(figsize=(8, 6))
+
+        # plt.axhline(
+        #     y=0,
+        #     color="black",
+        #     linestyle="--",
+        #     alpha=0.9,
+        #     label="Perfect Match to Full Test",
+        # )
+        # plot random baseline if available
+        if (
+            "random_baseline" in replay_results
+            and replay_results["random_baseline"] is not None
+        ):
+            random_stats = replay_results["random_baseline"][0]
+            x_vals_random = random_stats["n_labels"][1:]
+
+            if "mse" in random_stats[metric]:
+                random_mse = random_stats[metric]["mse"][1:]
+            else:
+                # Calculate MSE manually if not available
+                mean_vals_random = random_stats[metric]["mean"]
+                random_mse = ((mean_vals_random - full_test_value) ** 2)[1:]
+
+            plt.plot(
+                x_vals_random,
+                random_mse,
+                label="Random baseline",
+                linestyle=":",
+                linewidth=2,
+                color="gray",
+            )
+
+        # Plot base model MSE
+        base_metric_stats = base_stats[0]
+        base_x_vals = base_metric_stats["n_labels"][1:]
+
+        if "mse" in base_metric_stats[metric]:
+            base_mse = base_metric_stats[metric]["mse"][1:]
+            plt.plot(
+                base_x_vals,
+                base_mse,
+                label="Original model",
+                linestyle="-",
+                linewidth=2,
+            )
+        else:
+            # Calculate MSE manually if not available
+            base_mean_vals = base_metric_stats[metric]["mean"][1:]
+            base_mse = (base_mean_vals - full_test_value) ** 2
+            plt.plot(
+                base_x_vals,
+                base_mse,
+                label="Original model",
+                linestyle="-",
+                linewidth=2,
+            )
+
+        # Plot transfer model MSE
+        for model_name in transfer_models:
+            if replay_results[model_name] is None:
+                continue
+
+            transfer_stats = replay_results[model_name][0]
+            transfer_x_vals = transfer_stats["n_labels"]
+
+            if "mse" in transfer_stats[metric]:
+                transfer_mse = transfer_stats[metric]["mse"]
+            else:
+                # Calculate MSE manually if not available
+                transfer_mean_vals = transfer_stats[metric]["mean"]
+                transfer_mse = (transfer_mean_vals - full_test_value) ** 2
+
+            plt.plot(
+                transfer_x_vals,
+                transfer_mse,
+                label=f"Transfer from {model_name}",
+                linestyle="-",
+            )
+
+        plt.ylabel(f"MSE from full test {metric}")
+        plt.xlabel("Number of labelled samples")
+        plt.legend(loc="upper right")
+        plt.title(f"Transfer Sampling Error: {metric}")
+        plt.tight_layout()
+        plt.savefig(
+            f"{figures_dir}/mse/{metric}_mse.png",
             dpi=300,
             bbox_inches="tight",
         )

@@ -14,6 +14,17 @@ logger = logging.getLogger(__name__)
 
 
 def get_replay_exp_results(source_model_dir, configs):
+    """
+    Get the replay experiment results for a given source model directory and a list of
+    configurations.
+
+    Args:
+        source_model_dir: Path to the source model's results directory.
+        configs: List of configurations to look for in the replay results.
+    Returns:
+        A dictionary containing the replay results for each configuration and the save
+        directory for the figures.
+    """
     replay_results = {}
 
     replay_results["base"] = get_metric_stats(source_model_dir, plot=False)
@@ -47,8 +58,23 @@ def get_replay_exp_results(source_model_dir, configs):
             replay_results[possible_config] = get_metric_stats(replay_path, plot=False)
 
     save_dir = os.sep.join(
-        [*parts[:data_split_loc], "figures", "resampling", model, sampling_method]
+        [
+            *parts[:data_split_loc],
+            "figures",
+            "resampling",
+            model,
+            eval_imbalance,
+            sampling_method,
+        ]
     )
+
+    if sampling_method != "random":
+        random_path = os.sep.join([*source_model_dir.split(os.sep)[:-1], "random"])
+        if os.path.exists(random_path):
+            print(f"Found random sampling results at {random_path}")
+            replay_results["random_baseline"] = get_metric_stats(
+                random_path, plot=False
+            )
 
     return replay_results, save_dir
 

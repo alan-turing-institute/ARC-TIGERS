@@ -5,7 +5,8 @@ from arc_tigers.replay.run import replay_experiment
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Replay sampling sequence(s) from one experiment on a different model"
+        description="Replay sampling sequence(s) from "
+        "one experiment on a different model"
     )
     parser.add_argument(
         "original_experiment_dir", help="Path to original experiment output directory"
@@ -17,7 +18,8 @@ if __name__ == "__main__":
         "--seed",
         type=int,
         default=None,
-        help="Specific seed to replay from original experiment. If not provided, replays ALL available seeds",
+        help="Specific seed to replay from original experiment. "
+        "If not provided, replays ALL available seeds",
     )
     parser.add_argument(
         "--max_samples",
@@ -38,7 +40,8 @@ if __name__ == "__main__":
         "--eval_data_config",
         type=str,
         default=None,
-        help="Evaluation data config to use (e.g., '05', '01'). If not provided, infers from experiment path",
+        help="Evaluation data config to use (e.g., '05', '01'). "
+        "If not provided, infers from experiment path",
     )
 
     args = parser.parse_args()
