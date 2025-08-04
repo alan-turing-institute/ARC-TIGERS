@@ -1,4 +1,7 @@
-class BiasCorrector:
+import numpy as np
+
+
+class LUREBiasCorrector:
     """
     Implements a bias correction weighting factor for active testing sampling.
 
@@ -29,7 +32,7 @@ class BiasCorrector:
     def __init__(self, N: int, M: int):
         self.N = N
         self.M = M
-        self.v_values: list[float] = []
+        self.sample_weights: list[float] = []
 
     def compute_weighting_factor(self, q_im: float, m: int) -> float:
         """
@@ -44,7 +47,7 @@ class BiasCorrector:
         """
         inner = (1 / ((self.N - m + 1) * q_im)) - 1
         v_m = 1 + ((self.N - self.M) / (self.N - m)) * inner
-        self.v_values.append(v_m)
+        self.sample_weights.append(v_m)
         return v_m
 
     def apply_weighting_to_dict(
@@ -64,3 +67,8 @@ class BiasCorrector:
 
         weighting = self.compute_weighting_factor(q, m)
         return {k: v * weighting for k, v in metrics.items()}
+
+
+class HTBiasCorrector:
+    def __init__(self, sample_probabilities: list[float]):
+        self.sample_weights = (1 / np.array(sample_probabilities)).tolist()

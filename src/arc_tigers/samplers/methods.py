@@ -7,6 +7,7 @@ from arc_tigers.samplers.acquisition import (
 )
 from arc_tigers.samplers.fixed import FixedSampler
 from arc_tigers.samplers.random import RandomSampler
+from arc_tigers.samplers.ssepy import SSEPySampler
 
 SAMPLING_STRATEGIES = {
     "random": RandomSampler,
@@ -16,4 +17,5 @@ SAMPLING_STRATEGIES = {
     "isolation": IsolationForestSampler,
     "minority": MinorityClassSampler,
     "fixed": FixedSampler,
+    "ssepy": SSEPySampler,
 }

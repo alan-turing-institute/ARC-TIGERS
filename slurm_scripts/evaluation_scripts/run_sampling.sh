@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --qos turing
 #SBATCH --job-name run_sampling
-#SBATCH --time 0-12:00:0
+#SBATCH --time 0-24:00:0
 #SBATCH --nodes 1
 #SBATCH --gpus 1
 #SBATCH --output /bask/projects/v/vjgo8416-tigers/ARC-TIGERS/slurm_logs/run_sampling-%j.out
@@ -11,7 +11,8 @@
 module purge
 module load baskerville
 module load bask-apps/live/live
-module load Python/3.10.8-GCCcore-12.2.0
+module load CUDA/12.6.0
+module load Python/3.11.3-GCCcore-12.3.0
 
 PROJECT_ROOT="/bask/projects/v/vjgo8416-tigers/ARC-TIGERS"
 
