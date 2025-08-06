@@ -80,7 +80,11 @@ def get_replay_exp_results(source_model_dir, configs):
 
 
 def find_model_directories(
-    base_path: str, models: list[str], test_imbalance: str, sampling_method: str
+    base_path: str,
+    models: list[str],
+    test_imbalance: str,
+    sampling_method: str,
+    plot_first: bool = False,
 ) -> dict[str, str]:
     """
     Find the sampling method directories for each model.
@@ -105,10 +109,20 @@ def find_model_directories(
         matches = glob(pattern)
 
         if matches:
-            # Take the first match - this is the full path to the sampling method
-            # directory
-            sampling_method_path = matches[0]
-            model_paths[model] = sampling_method_path
+            if len(matches) > 1:
+                print("multiple matches found for model:", model)
+                if plot_first:
+                    print("Plotting first match only.")
+                    sampling_method_path = matches[0]
+                    model_paths[model] = sampling_method_path
+                else:
+                    print("Plotting all matches.")
+                    for _, match in enumerate(matches):
+                        config = match.split(os.sep)[-4]
+                        model_paths[f"{model}_{config}"] = match
+            else:
+                model_paths[model] = matches[0]
+
         else:
             print(
                 f"Warning: No eval_outputs found for model '{model}' "
