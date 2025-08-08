@@ -134,6 +134,23 @@ def find_model_directories(
     return model_paths
 
 
+def get_se_values(data_dir: str):
+    """
+    SE values for a level of imbalance, sampling strategy, and number of labels
+    dict[sampling_strategy][imbalance_level][n_labels] = se_values
+    using get_metric_stats
+    """
+    stats, _ = get_metric_stats(data_dir, plot=False)
+    se_vals = {}
+
+    for metric in stats:
+        if metric == "n_labels":
+            continue
+        se_vals[metric] = stats[metric]["se"]
+
+    return se_vals
+
+
 def get_metric_stats(
     data_dir: str, plot: bool = True
 ) -> tuple[dict[str, Any | dict[str, Any]], Any]:
@@ -190,6 +207,7 @@ def get_metric_stats(
         stats[metric]["mean"] = np.mean(metric_repeats, axis=0)
         stats[metric]["median"] = np.median(metric_repeats, axis=0)
         stats[metric]["std"] = np.std(metric_repeats, axis=0)
+        stats[metric]["se"] = (metric_repeats - full_metrics[metric]) ** 2
         stats[metric]["mse"] = np.mean(
             (metric_repeats - full_metrics[metric]) ** 2, axis=0
         )
@@ -223,58 +241,3 @@ def get_metric_stats(
         )
 
     return stats, full_metrics
-
-
-def better_than_random(
-    base_path: str,
-    model: str,
-    test_imbalance: str,
-    sampling_method: str,
-    metric: str,
-) -> dict[int, float]:
-    """
-    Compute percent improvement of a sampling method
-    over random baseline for a specific metric.
-
-    Args:
-        base_path: Base experiment path (e.g. 'outputs/…/42_05').
-        model: Model name directory.
-        test_imbalance: Test imbalance identifier (e.g. '05').
-        sampling_method: Strategy to evaluate (e.g. 'info_gain').
-        metric: Metric name (e.g. 'accuracy', 'f1_1', 'loss').
-
-    Returns:
-        Mapping from number of labels to percent
-        improvement over random (positive means better).
-    """
-    # locate random baseline path
-    rand_pattern = os.path.join(
-        base_path, model, "*", "eval_outputs", test_imbalance, "random"
-    )
-    rand_matches = sorted(glob(rand_pattern))
-    if not rand_matches:
-        msg = f"No random baseline found for model={model}, imbalance={test_imbalance}"
-        raise ValueError(msg)
-    rand_dir = rand_matches[0]
-    rand_stats, _ = get_metric_stats(rand_dir, plot=False)
-
-    # locate strategy path
-    strat_pattern = os.path.join(
-        base_path, model, "*", "eval_outputs", test_imbalance, sampling_method
-    )
-    strat_matches = sorted(glob(strat_pattern))
-    if not strat_matches:
-        msg = f"No path for sampling method '{sampling_method}' for model={model}"
-        raise ValueError(msg)
-    strat_dir = strat_matches[0]
-    strat_stats, _ = get_metric_stats(strat_dir, plot=False)
-
-    # compare values across all sample counts
-    n_labels = rand_stats["n_labels"]
-    results: dict[int, float] = {}
-    for idx, n in enumerate(n_labels):
-        rv = rand_stats[metric]["mean"][idx]
-        sv = strat_stats[metric]["mean"][idx]
-        imp = ((sv - rv) / rv * 100) if rv != 0 else 0.0
-        results[int(n)] = imp
-    return results

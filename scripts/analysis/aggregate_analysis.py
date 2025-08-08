@@ -5,7 +5,8 @@ from glob import glob
 import numpy as np
 import pandas as pd
 
-from arc_tigers.eval.utils import better_than_random, get_metric_stats
+from arc_tigers.eval.aggregate_utils import better_than_random
+from arc_tigers.eval.utils import get_metric_stats
 
 
 def aggregate_strategy_results(
@@ -55,7 +56,7 @@ def aggregate_strategy_results(
                             }
                         )
 
-    n_vals = [10, 60, 110, 510, 1000]
+    n_vals = [10, 60, 110, 260, 510, 760, 1000]
 
     for imbalance in imbalances:
         for metric in metrics:
