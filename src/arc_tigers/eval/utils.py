@@ -134,6 +134,34 @@ def find_model_directories(
     return model_paths
 
 
+def get_se_differences(target_data_dir: str, reference_data_dir: str):
+    """
+    Calculate the differences in SE values between target and reference directories.
+
+    Args:
+        target_data_dir: Directory containing target SE values.
+        reference_data_dir: Directory containing reference SE values.
+
+    Returns:
+        A dictionary with the differences in SE values.
+    """
+    target_se_vals = get_se_values(target_data_dir)
+    reference_se_vals = get_se_values(reference_data_dir)
+
+    se_differences = {}
+    for metric in target_se_vals:
+        if metric in reference_se_vals:
+            min_len = min(len(target_se_vals[metric]), len(reference_se_vals[metric]))
+            target_vals = np.array(target_se_vals[metric])[:min_len]
+            reference_vals = np.array(reference_se_vals[metric])[:min_len]
+            se_differences[metric] = target_vals - reference_vals
+        else:
+            err_msg = f"Metric {metric} not found in reference data."
+            raise ValueError(err_msg)
+
+    return se_differences
+
+
 def get_se_values(data_dir: str):
     """
     SE values for a level of imbalance, sampling strategy, and number of labels

@@ -1,13 +1,14 @@
 import argparse
 
 from arc_tigers.eval.aggregate_utils import (
+    collect_se_differences,
     collect_se_values,
     generate_tables,
     get_evaluate_steps,
     perform_bootstrap,
     print_results,
     save_json_results,
-    stack_se_values,
+    stack_values,
 )
 
 
@@ -17,6 +18,7 @@ def main(
     imbalances: list[str],
     sampling_methods: list[str],
     verbose: bool = False,
+    selected_steps: list[int] | None = None,
 ) -> None:
     """Main function to run bootstrap RMSE analysis."""
     metrics = [
@@ -36,22 +38,70 @@ def main(
     if verbose:
         print(f"Found evaluate_steps: {evaluate_steps}")
 
+    # Filter to selected steps if provided
+    if selected_steps is not None:
+        # Find indices of selected steps in evaluate_steps
+        step_indices = []
+        filtered_steps = []
+        for step in selected_steps:
+            if step in evaluate_steps:
+                idx = evaluate_steps.index(step)
+                step_indices.append(idx)
+                filtered_steps.append(step)
+            else:
+                msg = (
+                    f"Warning: Selected step {step} not found in "
+                    f"available steps {evaluate_steps}"
+                )
+                print(msg)
+
+        if not filtered_steps:
+            error_msg = (
+                f"None of the selected steps {selected_steps} are "
+                f"available in {evaluate_steps}"
+            )
+            raise ValueError(error_msg)
+
+        evaluate_steps = filtered_steps
+        if verbose:
+            print(f"Filtered to selected steps: {evaluate_steps}")
+    else:
+        step_indices = None
+
     # Collect SE values
     se_vals = collect_se_values(
         base_path, models, imbalances, sampling_methods, metrics
     )
+    # Remove "random" from sampling_methods if present
+    diff_sampling_methods = [
+        method for method in sampling_methods if method != "random"
+    ]
+
+    se_diffs = collect_se_differences(
+        base_path, models, imbalances, diff_sampling_methods, metrics
+    )
 
     # Stack SE values for bootstrap analysis
-    stacked_se_vals = stack_se_values(se_vals, imbalances, sampling_methods, metrics)
+    stacked_se_vals = stack_values(
+        se_vals, imbalances, sampling_methods, metrics, step_indices
+    )
+    # Stack SE differences for bootstrap analysis
+    stacked_se_diffs = stack_values(
+        se_diffs, imbalances, diff_sampling_methods, metrics, step_indices
+    )
 
     # Perform bootstrap analysis
-    boot_results = perform_bootstrap(
+    raw_boot_results = perform_bootstrap(
         stacked_se_vals, imbalances, sampling_methods, metrics
     )
+    diff_boot_results = perform_bootstrap(
+        stacked_se_diffs, imbalances, diff_sampling_methods, metrics
+    )
+
     if verbose:
         # Print results
         print_results(
-            boot_results,
+            raw_boot_results,
             stacked_se_vals,
             imbalances,
             sampling_methods,
@@ -59,18 +109,32 @@ def main(
         )
 
     # Generate tables
+    raw_dir = f"{base_path}/tables/bootstrap_rmse/raw"
     generate_tables(
-        boot_results,
+        raw_boot_results,
         stacked_se_vals,
         evaluate_steps,
         imbalances,
         sampling_methods,
         metrics,
+        raw_dir,
+        verbose,
+    )
+    diff_dir = f"{base_path}/tables/bootstrap_rmse/differences"
+    generate_tables(
+        diff_boot_results,
+        stacked_se_diffs,
+        evaluate_steps,
+        imbalances,
+        diff_sampling_methods,
+        metrics,
+        diff_dir,
         verbose,
     )
 
     # Save JSON results
-    save_json_results(boot_results, stacked_se_vals)
+    save_json_results(raw_boot_results, stacked_se_vals, raw_dir)
+    save_json_results(diff_boot_results, stacked_se_diffs, diff_dir)
 
 
 if __name__ == "__main__":
@@ -114,6 +178,13 @@ if __name__ == "__main__":
         action="store_true",
         help="Print detailed output and tables",
     )
+    parser.add_argument(
+        "--selected-steps",
+        "-n",
+        nargs="+",
+        type=int,
+        help="Only include specific evaluation steps (e.g., 10 100 500)",
+    )
 
     args = parser.parse_args()
     main(
@@ -122,4 +193,5 @@ if __name__ == "__main__":
         args.imbalances,
         args.sampling_methods,
         args.verbose,
+        args.selected_steps,
     )

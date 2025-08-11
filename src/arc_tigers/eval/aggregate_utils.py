@@ -7,15 +7,26 @@ import pandas as pd
 import yaml
 from scipy.stats import bootstrap
 
-from arc_tigers.eval.utils import get_metric_stats, get_se_values
+from arc_tigers.eval.utils import get_metric_stats, get_se_differences, get_se_values
 
 
 def sqrt_mean(x: np.ndarray, axis: int | None = None):
-    """Return sqrt of the mean along axis (no forced scalar cast).
+    """
+    Return sqrt of the mean along axis (no forced scalar cast).
     When axis is None a scalar is returned; otherwise an array result is fine
     for scipy.bootstrap which supplies axis=-1 and expects reduction.
+    The sqrt of the mean is taken because the square error is passed as x.
+
+    Args:
+        x: Input array of square errors.
+        axis: Axis along which to compute the mean. If None, computes over the entire
+        array
+    Returns:
+        The square root of the mean of the input array along the specified axis.
     """
-    return np.sqrt(np.nanmean(x, axis=axis))
+    mean = np.nanmean(x, axis=axis)
+    negative_mask = np.where(mean < 0, -1, 1)  # Convert boolean to -1/1
+    return np.sqrt(abs(mean)) * (-1) * negative_mask
 
 
 def get_evaluate_steps(
@@ -100,25 +111,95 @@ def collect_se_values(
     return se_vals
 
 
-def stack_se_values(
-    se_vals: dict,
+def collect_se_differences(
+    base_path: str,
+    models: list[str],
     imbalances: list[str],
     sampling_methods: list[str],
     metrics: list[str],
 ) -> dict:
-    """Stack SE values into numpy arrays for bootstrap analysis."""
-    return {
+    """Collect standard error values from evaluation outputs."""
+    se_diff_vals: dict[str, dict[str, dict[str, dict[str, list]]]] = {
         imbalance: {
-            strat: {
-                metric: np.squeeze(
-                    np.hstack(list(se_vals[imbalance][strat][metric].values())), axis=0
-                )
-                for metric in metrics
-            }
+            strat: {metric: {model: [] for model in models} for metric in metrics}
             for strat in sampling_methods
         }
         for imbalance in imbalances
     }
+
+    for imbalance in imbalances:
+        for model in models:
+            for sampling_method in sampling_methods:
+                path_pattern = os.path.join(
+                    base_path,
+                    model,
+                    "*",
+                    "eval_outputs",
+                    imbalance,
+                    sampling_method,
+                )
+                random_pattern = os.path.join(
+                    base_path,
+                    model,
+                    "*",
+                    "eval_outputs",
+                    imbalance,
+                    "random",
+                )
+
+                target_config_dirs = glob(path_pattern)
+                if not target_config_dirs:
+                    err_msg = f"Warning: No configs found for model '{model}' "
+                    raise ValueError(err_msg)
+                random_config_dirs = glob(random_pattern)
+                if not random_config_dirs:
+                    err_msg = f"Warning: No random baseline found for model '{model}' "
+                    raise ValueError(err_msg)
+
+                first_target_config = target_config_dirs[0]
+                first_random_config = random_config_dirs[0]
+
+                run_se_diffs = get_se_differences(
+                    first_target_config, first_random_config
+                )
+
+                for metric in metrics:
+                    se_diff_vals[imbalance][sampling_method][metric][model].append(
+                        run_se_diffs[metric]
+                    )
+
+    return se_diff_vals
+
+
+def stack_values(
+    se_vals: dict,
+    imbalances: list[str],
+    sampling_methods: list[str],
+    metrics: list[str],
+    step_indices: list[int] | None = None,
+) -> dict:
+    """Stack SE values into numpy arrays for bootstrap analysis."""
+    stacked: dict[str, dict[str, dict[str, np.ndarray]]] = {}
+    for imbalance in imbalances:
+        stacked[imbalance] = {}
+        for strat in sampling_methods:
+            stacked[imbalance][strat] = {}
+            for metric in metrics:
+                # Stack all model values for this metric
+                all_values = list(se_vals[imbalance][strat][metric].values())
+                stacked_array = np.squeeze(np.hstack(all_values), axis=0)
+
+                # Filter to selected step indices if provided
+                if step_indices is not None:
+                    # Handle both 1D and 2D arrays
+                    if stacked_array.ndim == 1:
+                        stacked_array = stacked_array[step_indices]
+                    else:
+                        stacked_array = stacked_array[:, step_indices]
+
+                stacked[imbalance][strat][metric] = stacked_array
+
+    return stacked
 
 
 def perform_bootstrap(
@@ -195,6 +276,7 @@ def generate_tables(
     imbalances: list[str],
     sampling_methods: list[str],
     metrics: list[str],
+    save_dir: str,
     verbose: bool = False,
 ) -> None:
     """Generate LaTeX tables for bootstrap results."""
@@ -221,26 +303,29 @@ def generate_tables(
                         stat_val = float(np.asarray(stat).ravel()[0])
                         step_stats.append(stat_val)
 
-                    # Use mean across models if multiple
-                    values.append(np.mean(step_stats))
+                    # Use mean across models if multiple, handle empty arrays
+                    if step_stats:
+                        values.append(np.mean(step_stats))
+                    else:
+                        values.append(np.nan)
 
                 df.loc[len(df)] = [strategy, *values]
 
             # Save LaTeX table
-            save_dir = f"tmp/tables/bootstrap_rmse/{imbalance}/"
-            os.makedirs(save_dir, exist_ok=True)
+            table_dir = f"{save_dir}/{imbalance}/"
+            os.makedirs(table_dir, exist_ok=True)
             latex_table = df.to_latex(index=False, float_format="%.4f")
-            with open(f"{save_dir}/{metric}.tex", "w") as f:
+            with open(f"{table_dir}/{metric}.tex", "w") as f:
                 f.write(latex_table)
             if verbose:
-                print(f"Bootstrap RMSE table saved to {save_dir}/{metric}.tex")
+                print(f"Bootstrap RMSE table saved to {table_dir}/{metric}.tex")
                 print(df)
 
 
-def save_json_results(boot_results: dict, stacked_se_vals: dict) -> None:
+def save_json_results(boot_results: dict, stacked_se_vals: dict, save_dir: str) -> None:
     """Save bootstrap results to JSON format."""
-    os.makedirs("tmp", exist_ok=True)
-    with open("tmp/bootstrapped_rmse_results.json", "w") as f:
+    os.makedirs(save_dir, exist_ok=True)
+    with open(f"{save_dir}/all_results.json", "w") as f:
         # Convert BootstrapResult objects to serializable format
         serializable_results: dict[
             str, dict[str, dict[str, dict[int, dict[str, float]]]]
