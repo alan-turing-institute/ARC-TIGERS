@@ -1,8 +1,11 @@
 import os
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
+import pandas as pd
+import seaborn as sns
 
 
 def plot_replay_results(replay_results, save_dir):
@@ -653,3 +656,161 @@ def sampling_comparison_improvement(
         plt.tight_layout()
         plt.savefig(f"{save_dir}/improvement/{metric}.png", dpi=300)
         plt.close()
+
+
+def class_pct_summary_by_size(df: pd.DataFrame) -> pd.DataFrame:
+    """Create summary statistics by sampling method and sample size."""
+    if df.empty:
+        return pd.DataFrame()
+
+    # Group by sampling method and sample size
+    summary = (
+        df.groupby(["sampling_method", "sample_size"])
+        .agg(
+            {
+                "positive_class_pct": ["mean", "std", "count"],
+                "negative_class_pct": ["mean", "std"],
+                "n_class_0": "mean",
+                "n_class_1": "mean",
+            }
+        )
+        .round(3)
+    )
+
+    # Flatten column names
+    summary.columns = [f"{col[0]}_{col[1]}" for col in summary.columns]
+    return summary.reset_index()
+
+
+def class_percentage_table(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Create a clean table suitable for LaTeX output like the aggregate analysis
+    scripts.
+    """
+    if df.empty:
+        return pd.DataFrame()
+
+    # Create pivot table with sampling methods as rows and sample sizes as columns
+    pivot_df = df.pivot(
+        index="sampling_method", columns="sample_size", values="positive_class_pct_mean"
+    ).round(2)
+
+    # Add a column with method names for cleaner display
+    pivot_df.index.name = None  # Remove index name
+
+    return pivot_df
+
+
+def save_latex_summary_table(df: pd.DataFrame, output_file: str, caption: str = ""):
+    """Save a summary table as LaTeX like the other analysis scripts."""
+    output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output_file, "w") as f:
+        latex_str = df.to_latex(
+            float_format="%.2f",
+            caption=caption,
+            label=f"tab:{output_path.stem}",
+        )
+        f.write(latex_str)
+
+
+def plot_class_distribution_by_size(df: pd.DataFrame, output_dir: str, imbalance: str):
+    """Create separate plots showing class distribution vs sample size."""
+
+    # Set up the plotting style
+    plt.style.use("default")
+    sns.set_palette("husl")
+
+    # Get summary data
+    summary_df = class_pct_summary_by_size(df)
+
+    if summary_df.empty:
+        print("No data available for plotting")
+        return None
+
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    # Plot 1: Positive class percentage vs sample size
+    fig1, ax1 = plt.subplots(figsize=(8, 6))
+
+    for method in summary_df["sampling_method"].unique():
+        method_data = summary_df[summary_df["sampling_method"] == method]
+
+        ax1.plot(
+            method_data["sample_size"],
+            method_data["positive_class_pct_mean"],
+            marker="o",
+            label=method,
+            linewidth=2,
+            markersize=4,
+        )
+
+        # Add error bars (shaded region)
+        if "positive_class_pct_std" in method_data.columns:
+            ax1.fill_between(
+                method_data["sample_size"],
+                method_data["positive_class_pct_mean"]
+                - method_data["positive_class_pct_std"],
+                method_data["positive_class_pct_mean"]
+                + method_data["positive_class_pct_std"],
+                alpha=0.2,
+            )
+
+    ax1.set_xlabel("Sample Size", fontsize=12)
+    ax1.set_ylabel("Positive Class Percentage (%)", fontsize=12)
+    ax1.set_title(
+        f"Positive Class % vs Sample Size (Imbalance {imbalance})", fontsize=14
+    )
+    ax1.legend(loc="best")
+    ax1.grid(True, alpha=0.3)
+    ax1.set_xlim(left=0)
+
+    plt.tight_layout()
+
+    # Save Plot 1
+    plot1_file = (
+        output_path / f"positive_class_pct_vs_sample_size_imbalance_{imbalance}.png"
+    )
+    plt.savefig(plot1_file, dpi=300, bbox_inches="tight")
+    plt.close()
+
+    # Plot 2: Standard deviation vs sample size (sampling variability)
+    fig2, ax2 = plt.subplots(figsize=(8, 6))
+
+    for method in summary_df["sampling_method"].unique():
+        method_data = summary_df[summary_df["sampling_method"] == method]
+
+        if "positive_class_pct_std" in method_data.columns:
+            ax2.plot(
+                method_data["sample_size"],
+                method_data["positive_class_pct_std"],
+                marker="s",
+                label=method,
+                linewidth=2,
+                markersize=4,
+            )
+
+    ax2.set_xlabel("Sample Size", fontsize=12)
+    ax2.set_ylabel("Standard Deviation (%)", fontsize=12)
+    ax2.set_title(
+        f"Sampling Variability vs Sample Size (Imbalance {imbalance})", fontsize=14
+    )
+    ax2.legend(loc="best")
+    ax2.grid(True, alpha=0.3)
+    ax2.set_xlim(left=0)
+
+    plt.tight_layout()
+
+    # Save Plot 2
+    plot2_file = (
+        output_path / f"sampling_variability_vs_sample_size_imbalance_{imbalance}.png"
+    )
+    plt.savefig(plot2_file, dpi=300, bbox_inches="tight")
+    plt.close()
+
+    print(f"Figures saved to: {output_path}/figures/")
+    print(f"Tables saved to: {output_path}/tables/")
+
+    return fig1, fig2

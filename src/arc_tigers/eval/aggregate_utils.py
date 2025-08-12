@@ -1,13 +1,20 @@
 import json
 import os
 from glob import glob
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import yaml
 from scipy.stats import bootstrap
 
-from arc_tigers.eval.utils import get_metric_stats, get_se_differences, get_se_values
+from arc_tigers.eval.utils import (
+    get_class_percentages,
+    get_metric_stats,
+    get_se_differences,
+    get_se_values,
+    load_metrics_file_to_df,
+)
 
 
 def sqrt_mean(x: np.ndarray, axis: int | None = None):
@@ -412,3 +419,69 @@ def better_than_random(
         imp = ((sv - rv) / rv * 100) if rv != 0 else 0.0
         results[int(n)] = imp
     return results
+
+
+def compute_class_distributions(
+    base_path: str,
+    imbalance: str,
+    models: list[str],
+    sampling_methods: list[str],
+    sample_sizes: list[int],
+    max_runs_per_method: int | None = None,
+) -> pd.DataFrame:
+    """Analyze class distribution from metrics files."""
+
+    results = []
+
+    for model in models:
+        for sampling_method in sampling_methods:
+            # Find metrics files for this configuration
+            pattern = os.path.join(
+                base_path,
+                model,
+                "*",
+                "eval_outputs",
+                imbalance,
+                sampling_method,
+                "metrics_*.csv",
+            )
+            metrics_files = glob(pattern)
+
+            if not metrics_files:
+                print(f"Warning: No metrics files found for {model}/{sampling_method}")
+                continue
+
+            # Limit number of runs for faster processing (set to None for all files)
+            if max_runs_per_method is not None:
+                metrics_files = metrics_files[:max_runs_per_method]
+
+            # Analyze each metrics file
+            for metrics_file in metrics_files:
+                df = load_metrics_file_to_df(metrics_file)
+                if df.empty:
+                    continue
+
+                # Calculate class percentages
+                df = get_class_percentages(df)
+                if df.empty:
+                    continue
+
+                # Filter by requested sample sizes if specified
+                if sample_sizes is not None:
+                    df = df[df["sample_size"].isin(sample_sizes)]
+                    if df.empty:
+                        continue
+
+                # Extract run ID from filename
+                run_id = Path(metrics_file).stem.replace("metrics_", "")
+
+                # Add metadata to each row
+                df["model"] = model
+                df["sampling_method"] = sampling_method
+                df["run_id"] = run_id
+
+                results.append(df)
+
+    if results:
+        return pd.concat(results, ignore_index=True)
+    return pd.DataFrame()

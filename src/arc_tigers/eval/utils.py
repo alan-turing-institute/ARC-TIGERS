@@ -269,3 +269,27 @@ def get_metric_stats(
         )
 
     return stats, full_metrics
+
+
+def load_metrics_file_to_df(metrics_file: str) -> pd.DataFrame:
+    """Load a metrics CSV file."""
+    try:
+        return pd.read_csv(metrics_file)
+
+    except Exception as e:
+        print(f"Error reading {metrics_file}: {e}")
+        return pd.DataFrame()
+
+
+def get_class_percentages(df: pd.DataFrame) -> pd.DataFrame:
+    """Calculate class percentages from metrics data."""
+    if df.empty or "n_class_0" not in df.columns or "n_class_1" not in df.columns:
+        return df
+
+    # Calculate percentages
+    df = df.copy()
+    df["positive_class_pct"] = (df["n_class_1"] / df["n"]) * 100
+    df["negative_class_pct"] = (df["n_class_0"] / df["n"]) * 100
+    df["sample_size"] = df["n"]
+
+    return df
