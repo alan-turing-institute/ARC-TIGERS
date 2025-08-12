@@ -58,9 +58,9 @@ def main():
     results_df = compute_class_distributions(
         args.base_path,
         args.imbalance,
-        args.sample_sizes,
         args.models,
         args.sampling_methods,
+        args.sample_sizes,
         args.max_runs,
     )
 
