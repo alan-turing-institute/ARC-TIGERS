@@ -16,7 +16,7 @@ MODEL_NAME_MAP = {
 
 SAMPLE_STRAT_NAME_MAP = {
     "random": "Random",
-    "ssepy": "SSEPY",
+    "ssepy": "ssepy",
     "minority": "Minority",
     "info_gain_lightgbm": "Cross-Entropy",
     "accuracy_lightgbm": "Accuracy",
@@ -712,9 +712,31 @@ def class_percentage_table(df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
 
     # Create pivot table with sampling methods as rows and sample sizes as columns
+
     pivot_df = df.pivot(
-        index="sampling_method", columns="sample_size", values="positive_class_pct_mean"
+        index="sampling_method",
+        columns="sample_size",
+        values=["positive_class_pct_mean", "positive_class_pct_std"],
     ).round(2)
+
+    # Create a new DataFrame with combined mean ± std strings
+    combined_data = {}
+    for col in pivot_df.columns:
+        if col[0] == "positive_class_pct_mean":
+            sample_size = col[1]
+            mean_col = ("positive_class_pct_mean", sample_size)
+            std_col = ("positive_class_pct_std", sample_size)
+
+            if std_col in pivot_df.columns:
+                combined_data[sample_size] = (
+                    pivot_df[mean_col].astype(str)
+                    + " $\\pm$ "
+                    + pivot_df[std_col].astype(str)
+                )
+            else:
+                combined_data[sample_size] = pivot_df[mean_col].astype(str)
+
+    pivot_df = pd.DataFrame(combined_data, index=pivot_df.index)
 
     # Add a column with method names for cleaner display
     pivot_df.index.name = None  # Remove index name
@@ -723,7 +745,6 @@ def class_percentage_table(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def save_latex_summary_table(df: pd.DataFrame, output_file: str, caption: str = ""):
-    """Save a summary table as LaTeX like the other analysis scripts."""
     output_path = Path(output_file)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 

@@ -1,8 +1,11 @@
 import argparse
 from pathlib import Path
 
+import pandas as pd
+
 from arc_tigers.eval.aggregate_utils import compute_class_distributions
 from arc_tigers.eval.plotting import (
+    SAMPLE_STRAT_NAME_MAP,
     class_pct_summary_by_size,
     class_percentage_table,
     plot_class_distribution_by_size,
@@ -25,7 +28,7 @@ def main():
     parser.add_argument(
         "--models",
         nargs="+",
-        default=["distilbert", "ModernBERT", "gpt2"],
+        default=["distilbert", "ModernBERT", "gpt2", "zero-shot"],
         help="Models to analyze",
     )
     parser.add_argument(
@@ -54,12 +57,12 @@ def main():
     )
 
     args = parser.parse_args()
-
+    tables = []
     for imbalance in args.imbalances:
         # Analyze sampling strategies from metrics files
         results_df = compute_class_distributions(
             args.base_path,
-            args.imbalance,
+            imbalance,
             args.models,
             args.sampling_methods,
             args.sample_sizes,
@@ -92,11 +95,16 @@ def main():
 
             # Create and save clean percentage table (like aggregate analysis scripts)
             percentage_table = class_percentage_table(summary_df)
+            percentage_table.index = [
+                SAMPLE_STRAT_NAME_MAP.get(method, method)
+                for method in percentage_table.index
+            ]
+            # Rename sampling strategies
             if not percentage_table.empty:
                 # Save as CSV
+                tables.append(percentage_table)
                 percentage_file = table_dir / "class_percentage_by_sample_size.csv"
                 percentage_table.to_csv(percentage_file)
-
                 # Save as LaTeX
                 latex_percentage_file = (
                     table_dir / f"class_percentage_by_sample_size_{imbalance}.tex"
@@ -115,6 +123,66 @@ def main():
 
         # Create and save plots
         plot_class_distribution_by_size(results_df, str(plots_dir), imbalance)
+
+    # concatenate all tables into one if we have ran multiple imbalances
+    # ...existing code...
+
+    # concatenate all tables into one if we have ran multiple imbalances
+    if len(tables) > 1:
+        # Filter each table to only include specific sample sizes
+        filtered_tables = []
+        selected_sample_sizes = [10, 1000]
+
+        for i, table in enumerate(tables):
+            # Filter columns to only include selected sample sizes
+            available_cols = [
+                col for col in selected_sample_sizes if col in table.columns
+            ]
+            if available_cols:
+                filtered_table = table[available_cols].copy()
+                filtered_table.columns = [
+                    f"{args.imbalances[i]}_{col}" for col in filtered_table.columns
+                ]
+                filtered_tables.append(filtered_table)
+
+        if filtered_tables:
+            # Concatenate horizontally (along columns)
+            combined_table = pd.concat(filtered_tables, axis=1)
+
+            # Reorder columns to group by imbalance
+            ordered_columns = []
+            for imbalance in args.imbalances:
+                for size in selected_sample_sizes:
+                    col_name = f"{imbalance}_{size}"
+                    if col_name in combined_table.columns:
+                        ordered_columns.append(col_name)
+
+            combined_table = combined_table[ordered_columns]
+
+            # Save combined table
+            combined_dir = Path(args.base_path) / "tables" / "class_distributions"
+            combined_dir.mkdir(parents=True, exist_ok=True)
+
+            combined_file = (
+                combined_dir / "combined_class_percentage_by_sample_size.csv"
+            )
+            combined_table.to_csv(combined_file)
+
+            # Save as LaTeX
+            latex_combined_file = (
+                combined_dir / "combined_class_percentage_by_sample_size.tex"
+            )
+            caption = (
+                f"Positive class percentage by sampling method for selected sample "
+                f"sizes ({', '.join(map(str, selected_sample_sizes))}) "
+                f"across imbalance levels ({', '.join(args.imbalances)})."
+            )
+            save_latex_summary_table(combined_table, str(latex_combined_file), caption)
+
+            print("\nCombined Class Percentage Summary Table:")
+            print(combined_table)
+        else:
+            print("Warning: No data available for selected sample sizes")
 
     results_df.to_csv(Path(args.base_path) / "full_results.csv", index=False)
 
