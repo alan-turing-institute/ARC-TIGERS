@@ -284,7 +284,8 @@ def load_metrics_file_to_df(metrics_file: str) -> pd.DataFrame:
 def get_class_percentages(df: pd.DataFrame) -> pd.DataFrame:
     """Calculate class percentages from metrics data."""
     if df.empty or "n_class_0" not in df.columns or "n_class_1" not in df.columns:
-        return df
+        err_msg = "All DataFrames must contain 'n_class_0' and 'n_class_1' columns."
+        raise ValueError(err_msg)
 
     # Calculate percentages
     df = df.copy()

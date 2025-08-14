@@ -7,6 +7,21 @@ import numpy.typing as npt
 import pandas as pd
 import seaborn as sns
 
+MODEL_NAME_MAP = {
+    "distilbert": "DistilBERT",
+    "ModernBERT": "ModernBERT",
+    "gpt2": "GPT-2",
+    "zero-shot": "Zero-Shot",
+}
+
+SAMPLE_STRAT_NAME_MAP = {
+    "random": "Random",
+    "ssepy": "SSEPY",
+    "minority": "Minority",
+    "info_gain_lightgbm": "Cross-Entropy",
+    "accuracy_lightgbm": "Accuracy",
+}
+
 
 def plot_replay_results(replay_results, save_dir):
     """
@@ -552,7 +567,7 @@ def sampling_comparison_raw(
             plt.plot(
                 x_vals,
                 mean_values,
-                label=strategy_name,
+                label=SAMPLE_STRAT_NAME_MAP.get(strategy_name, strategy_name),
                 linestyle="-",
                 linewidth=2,
                 markersize=4,
@@ -597,7 +612,13 @@ def sampling_comparison_mse(
             x_vals = metric_stats[strategy_name]["n_labels"][1:]  # type: ignore[index]
             y_vals = mse[1:]
 
-            plt.plot(x_vals, y_vals, label=strategy_name, linestyle="-", linewidth=2)
+            plt.plot(
+                x_vals,
+                y_vals,
+                label=SAMPLE_STRAT_NAME_MAP.get(strategy_name, strategy_name),
+                linestyle="-",
+                linewidth=2,
+            )
 
         plt.ylabel(f"MSE from full test {metric}")
         plt.xlabel("Number of labelled samples")

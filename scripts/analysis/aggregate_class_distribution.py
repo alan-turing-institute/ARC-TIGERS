@@ -16,9 +16,10 @@ def main():
     )
     parser.add_argument("base_path", help="Base experiment path")
     parser.add_argument(
-        "--imbalance",
-        default="01",
-        help="Imbalance level (e.g., '01', '05')",
+        "--imbalances",
+        nargs="+",
+        default=["01"],
+        help="Imbalance levels (e.g., '01', '05')",
         required=True,
     )
     parser.add_argument(
@@ -54,65 +55,68 @@ def main():
 
     args = parser.parse_args()
 
-    # Analyze sampling strategies from metrics files
-    results_df = compute_class_distributions(
-        args.base_path,
-        args.imbalance,
-        args.models,
-        args.sampling_methods,
-        args.sample_sizes,
-        args.max_runs,
-    )
-
-    if results_df.empty:
-        print("No data found. Please check your paths and parameters.")
-        return
-
-    # Create summary table
-    summary_df = class_pct_summary_by_size(results_df)
-    if not summary_df.empty:
-        print(
-            f"\nSummary statistics calculated for {len(summary_df)}"
-            " method-size combinations"
+    for imbalance in args.imbalances:
+        # Analyze sampling strategies from metrics files
+        results_df = compute_class_distributions(
+            args.base_path,
+            args.imbalance,
+            args.models,
+            args.sampling_methods,
+            args.sample_sizes,
+            args.max_runs,
         )
 
-    # Create output directory
-    table_dir = Path(args.base_path) / "tables" / "class_distributions" / args.imbalance
-    plots_dir = (
-        Path(args.base_path) / "figures" / "class_distributions" / args.imbalance
-    )
+        if results_df.empty:
+            print("No data found. Please check your paths and parameters.")
+            return
 
-    table_dir.mkdir(parents=True, exist_ok=True)
-    plots_dir.mkdir(parents=True, exist_ok=True)
-
-    # Save summary results
-    if not summary_df.empty:
-        summary_file = table_dir / "summary_class_distribution_from_metrics.csv"
-        summary_df.to_csv(summary_file, index=False)
-
-        # Create and save clean percentage table (like aggregate analysis scripts)
-        percentage_table = class_percentage_table(summary_df)
-        if not percentage_table.empty:
-            # Save as CSV
-            percentage_file = table_dir / "class_percentage_by_sample_size.csv"
-            percentage_table.to_csv(percentage_file)
-
-            # Save as LaTeX
-            latex_percentage_file = table_dir / "class_percentage_by_sample_size.tex"
-            caption = (
-                f"Positive class percentage by sampling method and sample size "
-                f"(imbalance {args.imbalance})."
-                f"Values show mean percentage across runs."
-            )
-            save_latex_summary_table(
-                percentage_table, str(latex_percentage_file), caption
+        # Create summary table
+        summary_df = class_pct_summary_by_size(results_df)
+        if not summary_df.empty:
+            print(
+                f"\nSummary statistics calculated for {len(summary_df)}"
+                " method-size combinations"
             )
 
-            print("\nClass Percentage Summary Table:")
-            print(percentage_table)
+        # Create output directory
+        table_dir = Path(args.base_path) / "tables" / "class_distributions" / imbalance
+        plots_dir = Path(args.base_path) / "figures" / "class_distributions" / imbalance
 
-    # Create and save plots
-    plot_class_distribution_by_size(results_df, str(plots_dir), args.imbalance)
+        table_dir.mkdir(parents=True, exist_ok=True)
+        plots_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save summary results
+        if not summary_df.empty:
+            summary_file = table_dir / "summary_class_distribution_from_metrics.csv"
+            summary_df.to_csv(summary_file, index=False)
+
+            # Create and save clean percentage table (like aggregate analysis scripts)
+            percentage_table = class_percentage_table(summary_df)
+            if not percentage_table.empty:
+                # Save as CSV
+                percentage_file = table_dir / "class_percentage_by_sample_size.csv"
+                percentage_table.to_csv(percentage_file)
+
+                # Save as LaTeX
+                latex_percentage_file = (
+                    table_dir / f"class_percentage_by_sample_size_{imbalance}.tex"
+                )
+                caption = (
+                    f"Positive class percentage by sampling method and sample size "
+                    f"(imbalance {imbalance})."
+                    f"Values show mean percentage across runs."
+                )
+                save_latex_summary_table(
+                    percentage_table, str(latex_percentage_file), caption
+                )
+
+                print("\nClass Percentage Summary Table:")
+                print(percentage_table)
+
+        # Create and save plots
+        plot_class_distribution_by_size(results_df, str(plots_dir), imbalance)
+
+    results_df.to_csv(Path(args.base_path) / "full_results.csv", index=False)
 
 
 if __name__ == "__main__":

@@ -33,7 +33,7 @@ def sqrt_mean(x: np.ndarray, axis: int | None = None):
     """
     mean = np.nanmean(x, axis=axis)
     negative_mask = np.where(mean < 0, -1, 1)  # Convert boolean to -1/1
-    return np.sqrt(abs(mean)) * (-1) * negative_mask
+    return np.sqrt(abs(mean)) * negative_mask
 
 
 def get_evaluate_steps(
@@ -226,14 +226,15 @@ def perform_bootstrap(
     for imbalance in imbalances:
         for sampling_strat in sampling_methods:
             for metric in metrics:
-                n_repeats = stacked_se_vals[imbalance][sampling_strat][metric].shape[1]
-                for n in range(n_repeats):
+                sampling_counts = stacked_se_vals[imbalance][sampling_strat][
+                    metric
+                ].shape[1]
+                for n in range(sampling_counts):
                     vals = stacked_se_vals[imbalance][sampling_strat][metric][:, n]
                     boot_results[imbalance][sampling_strat][metric][n] = bootstrap(
                         (vals,),
                         sqrt_mean,
                         n_resamples=1000,
-                        method="basic",
                     )
 
     return boot_results
