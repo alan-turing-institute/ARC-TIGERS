@@ -23,6 +23,9 @@ cd $PROJECT_ROOT
 # change huggingface cache to be in project dir rather than user home
 export HF_HOME="/bask/projects/v/vjgo8416-tigers/hf_cache"
 
+# Disable torch compilation to avoid Python.h dependency
+export TORCH_COMPILE_DISABLE=1
+
 # $1 = Data config
 # $2 = Training config
 # $3 = Acquisition strategy
