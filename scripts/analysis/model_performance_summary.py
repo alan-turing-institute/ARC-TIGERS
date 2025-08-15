@@ -50,12 +50,8 @@ def main():
                 "Accuracy": data["accuracy"],
                 "Loss": data["loss"],
                 "Average precision": data["average_precision"],
-                "F1 target": data["f1_1"],
-                "F1 non-target": data["f1_0"],
-                "Precision target": data["precision_1"],
-                "Precision non-target": data["precision_0"],
-                "Recall target": data["recall_1"],
-                "Recall non-target": data["recall_0"],
+                "Target Precision": data["precision_1"],
+                "Target Recall": data["recall_1"],
             }
             df = pd.DataFrame([new_data])
             results.append(df)

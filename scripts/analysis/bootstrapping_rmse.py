@@ -147,21 +147,18 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--models",
-        "-m",
         nargs="+",
         default=["distilbert", "ModernBERT", "gpt2", "zero-shot"],
         help="Model names to include",
     )
     parser.add_argument(
         "--imbalances",
-        "-i",
         nargs="+",
         default=["05", "01", "001"],
         help="Test imbalance levels (e.g. '05', '01')",
     )
     parser.add_argument(
         "--sampling-methods",
-        "-s",
         nargs="+",
         default=[
             "random",
@@ -169,6 +166,7 @@ if __name__ == "__main__":
             "minority",
             "info_gain_lightgbm",
             "accuracy_lightgbm",
+            "isolation",
         ],
         help="Sampling strategies to evaluate",
     )
@@ -180,7 +178,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--selected-steps",
-        "-n",
         nargs="+",
         type=int,
         help="Only include specific evaluation steps (e.g., 10 100 500)",

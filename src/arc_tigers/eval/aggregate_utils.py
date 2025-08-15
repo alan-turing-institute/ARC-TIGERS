@@ -8,6 +8,7 @@ import pandas as pd
 import yaml
 from scipy.stats import bootstrap
 
+from arc_tigers.eval.plotting import SAMPLE_STRAT_NAME_MAP
 from arc_tigers.eval.utils import (
     get_class_percentages,
     get_metric_stats,
@@ -288,6 +289,8 @@ def generate_tables(
     verbose: bool = False,
 ) -> None:
     """Generate LaTeX tables for bootstrap results."""
+
+    metric_aggregate_results: dict[str, list] = {metric: [] for metric in metrics}
     for imbalance in imbalances:
         for metric in metrics:
             # Create DataFrame for this imbalance/metric combination
@@ -328,6 +331,46 @@ def generate_tables(
             if verbose:
                 print(f"Bootstrap RMSE table saved to {table_dir}/{metric}.tex")
                 print(df)
+
+            metric_aggregate_results[metric].append(df.to_numpy()[:, 1:])
+
+    # Save all results as a single DataFrame
+    agg_table_dir = f"{save_dir}/aggregate/"
+    os.makedirs(agg_table_dir, exist_ok=True)
+    sampling_methods_labels = [
+        SAMPLE_STRAT_NAME_MAP.get(method, method) for method in sampling_methods
+    ]
+    for metric, results in metric_aggregate_results.items():
+        # take mean across all tables
+        # Round to 3 significant figures
+        stacked_df = np.dstack(results)
+        mean_over_imbalances = np.mean(stacked_df, axis=-1)
+        mean_over_sample_counts = np.mean(stacked_df, axis=1)
+        mean_df = pd.DataFrame(
+            mean_over_imbalances, columns=evaluate_steps, index=sampling_methods_labels
+        )
+        mean_df.to_latex(
+            f"{agg_table_dir}/{metric}_over_imbalances.tex",
+            index=True,
+            float_format="%.4f",
+            caption=f"Bootstrapped RMSE for "
+            f"{metric.replace('_', ' ')} across sampling methods.",
+            label=f"tab:bootstrapped_rmse_{metric}",
+        )
+
+        mean_df = pd.DataFrame(
+            mean_over_sample_counts,
+            columns=imbalances,
+            index=sampling_methods_labels,
+        )
+        mean_df.to_latex(
+            f"{agg_table_dir}/{metric}_over_sample_count.tex",
+            index=True,
+            float_format="%.4f",
+            caption=f"Bootstrapped RMSE for "
+            f"{metric.replace('_', ' ')} across sampling methods.",
+            label=f"tab:bootstrapped_rmse_{metric}",
+        )
 
 
 def save_json_results(boot_results: dict, stacked_se_vals: dict, save_dir: str) -> None:
