@@ -264,7 +264,6 @@ def replay_all_seeds_with_new_model(
         except Exception as e:
             logger.error("Failed to replay seed %d: %s", seed, e)
             # Continue with other seeds instead of failing completely
-            continue
 
     logger.info("All results saved under: %s", shared_output_dir)
 

@@ -99,11 +99,20 @@ def load_sampling_data(experiment_output_dir: str | Path) -> dict[str, Any]:
         seed = int(sample_file.stem.split("_")[1])
         seeds.append(seed)
 
+        if type(data) is list:
+            data = data[-1]
+
         # Validate dataset size consistency
         if dataset_size is None:
             dataset_size = data["dataset_size"]
 
         sample_data.append(data)
+
+    msg = (
+        "Lists found in sample files, expected dicts of final sampling runs. "
+        "Taken final index assuming they contain final sampling run."
+    )
+    logger.warning(msg)
 
     return {
         "sample_files": sample_files,

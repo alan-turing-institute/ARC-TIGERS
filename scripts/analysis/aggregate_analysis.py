@@ -56,7 +56,7 @@ def aggregate_strategy_results(
                             }
                         )
 
-    n_vals = [10, 60, 110, 260, 510, 760, 1000]
+    n_vals = [110, 260, 510, 1000]
 
     for imbalance in imbalances:
         for metric in metrics:

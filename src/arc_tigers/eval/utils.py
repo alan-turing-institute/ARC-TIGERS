@@ -168,6 +168,7 @@ def get_se_values(data_dir: str):
     dict[sampling_strategy][imbalance_level][n_labels] = se_values
     using get_metric_stats
     """
+    print(f"Loading SE values from {data_dir}")
     stats, _ = get_metric_stats(data_dir, plot=False)
     se_vals = {}
 

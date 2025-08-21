@@ -1,15 +1,19 @@
 import argparse
 
 from arc_tigers.eval.aggregate_utils import (
+    all_metrics_table,
     collect_se_differences,
     collect_se_values,
     generate_tables,
     get_evaluate_steps,
+    group_metrics,
+    grouped_bootstrap,
     perform_bootstrap,
     print_results,
     save_json_results,
     stack_values,
 )
+from arc_tigers.eval.plotting import generate_grouped_tables
 
 
 def main(
@@ -23,7 +27,6 @@ def main(
     """Main function to run bootstrap RMSE analysis."""
     metrics = [
         "accuracy",
-        "loss",
         "average_precision",
         "f1_0",
         "f1_1",
@@ -98,6 +101,19 @@ def main(
         stacked_se_diffs, imbalances, diff_sampling_methods, metrics
     )
 
+    grouped_metrics = group_metrics(stacked_se_vals, imbalances, sampling_methods)
+    grouped_bootstrap_results = grouped_bootstrap(
+        grouped_metrics, imbalances, sampling_methods
+    )
+
+    all_metrics_table(
+        se_vals,
+        imbalances,
+        sampling_methods,
+        metrics,
+        save_dir=f"{base_path}/tables/bootstrap_rmse/all_metrics/",
+    )
+
     if verbose:
         # Print results
         print_results(
@@ -135,6 +151,17 @@ def main(
     # Save JSON results
     save_json_results(raw_boot_results, stacked_se_vals, raw_dir)
     save_json_results(diff_boot_results, stacked_se_diffs, diff_dir)
+
+    # Generate grouped bootstrap tables for each imbalance level
+    grouped_dir = f"{base_path}/tables/bootstrap_rmse/grouped"
+    generate_grouped_tables(
+        grouped_bootstrap_results,
+        evaluate_steps,
+        imbalances,
+        sampling_methods,
+        grouped_dir,
+        verbose,
+    )
 
 
 if __name__ == "__main__":

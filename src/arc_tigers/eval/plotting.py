@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
+import scipy.stats as stats
 import seaborn as sns
 
 MODEL_NAME_MAP = {
@@ -18,6 +19,7 @@ SAMPLE_STRAT_NAME_MAP = {
     "random": "Random",
     "ssepy": "ssepy",
     "minority": "Minority",
+    "isolation": "Isolation",
     "info_gain_lightgbm": "Cross-Entropy",
     "accuracy_lightgbm": "Accuracy",
 }
@@ -679,6 +681,20 @@ def sampling_comparison_improvement(
         plt.close()
 
 
+def confidence_interval_lower(x, confidence_level: float = 0.95) -> float:
+    mean = x.mean()
+    std_err = x.std() / np.sqrt(len(x))
+    t_value = stats.t.ppf((1 + confidence_level) / 2, len(x) - 1)
+    return mean - t_value * std_err
+
+
+def confidence_interval_upper(x, confidence_level: float = 0.95) -> float:
+    mean = x.mean()
+    std_err = x.std() / np.sqrt(len(x))
+    t_value = stats.t.ppf((1 + confidence_level) / 2, len(x) - 1)
+    return mean + t_value * std_err
+
+
 def class_pct_summary_by_size(df: pd.DataFrame) -> pd.DataFrame:
     """Create summary statistics by sampling method and sample size."""
     if df.empty:
@@ -689,8 +705,19 @@ def class_pct_summary_by_size(df: pd.DataFrame) -> pd.DataFrame:
         df.groupby(["sampling_method", "sample_size"])
         .agg(
             {
-                "positive_class_pct": ["mean", "std", "count"],
-                "negative_class_pct": ["mean", "std"],
+                "positive_class_pct": [
+                    "mean",
+                    "std",
+                    "count",
+                    confidence_interval_lower,
+                    confidence_interval_upper,
+                ],
+                "negative_class_pct": [
+                    "mean",
+                    "std",
+                    confidence_interval_lower,
+                    confidence_interval_upper,
+                ],
                 "n_class_0": "mean",
                 "n_class_1": "mean",
             }
@@ -703,6 +730,90 @@ def class_pct_summary_by_size(df: pd.DataFrame) -> pd.DataFrame:
     return summary.reset_index()
 
 
+def generate_grouped_tables(
+    grouped_bootstrap_results: dict,
+    evaluate_steps: list[int],
+    imbalances: list[str],
+    sampling_methods: list[str],
+    save_dir: str,
+    verbose: bool = False,
+) -> None:
+    """Generate tables for grouped bootstrap results, one per imbalance level."""
+
+    # Define metric groups
+    minority_metrics = ["f1_1", "precision_1", "recall_1"]
+    majority_metrics = ["f1_0", "precision_0", "recall_0"]
+    overall_metrics = [
+        "accuracy",
+        "average_precision",
+        *minority_metrics,
+        *majority_metrics,
+    ]
+
+    metric_groups = {
+        "Minority": minority_metrics,
+        "Majority": majority_metrics,
+        "Overall": overall_metrics,
+    }
+
+    for imbalance in imbalances:
+        if verbose:
+            print(f"Generating grouped table for imbalance {imbalance}")
+
+        # Create table for this imbalance
+        rows = []
+
+        for sampling_method in sampling_methods:
+            strategy_name = SAMPLE_STRAT_NAME_MAP.get(sampling_method, sampling_method)
+            row = {"Strategy": strategy_name}
+
+            # Add columns for each metric group and sample count
+            for group_name in metric_groups:
+                for step_idx, step in enumerate(evaluate_steps):
+                    col_name = f"{group_name} - {step}"
+
+                    # Get bootstrap result for this configuration
+                    group_key = group_name.lower()
+                    results = grouped_bootstrap_results[imbalance][group_key][
+                        sampling_method
+                    ]
+                    result = results[step_idx]
+                    row[col_name] = (
+                        f"${result[0]:.3f}^"
+                        f"{{{result[1][1]:.3f}}}_"
+                        f"{{{result[1][0]:.3f}}}$"
+                    )  # mean^high_low
+
+            rows.append(row)
+
+        # Create DataFrame and save
+        df = pd.DataFrame(rows)
+
+        # Create directory for this imbalance
+        imbalance_dir = f"{save_dir}/{imbalance}"
+        os.makedirs(imbalance_dir, exist_ok=True)
+
+        # Save as LaTeX and CSV
+        latex_file = f"{imbalance_dir}/grouped_bootstrap_table_{imbalance}.tex"
+        csv_file = f"{imbalance_dir}/grouped_bootstrap_table_{imbalance}.csv"
+
+        df.to_latex(
+            latex_file,
+            index=False,
+            float_format="%.4f",
+            caption=f"Grouped Bootstrap RMSE Results for Imbalance {imbalance}",
+            label=f"tab:grouped_bootstrap_{imbalance}",
+        )
+        df.to_csv(csv_file, index=False)
+
+        if verbose:
+            print(f"Saved grouped table for imbalance {imbalance}")
+            print(f"LaTeX: {latex_file}")
+            print(f"CSV: {csv_file}")
+            print(df)
+            print()
+
+
 def class_percentage_table(df: pd.DataFrame) -> pd.DataFrame:
     """
     Create a clean table suitable for LaTeX output like the aggregate analysis
@@ -711,37 +822,81 @@ def class_percentage_table(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame()
 
+    # First, let's debug what columns we have
+    print("Available columns in df:")
+    print(df.columns.tolist())
+    print("\nFirst few rows:")
+    print(df.head())
+
     # Create pivot table with sampling methods as rows and sample sizes as columns
+    try:
+        pivot_df = df.pivot(
+            index="sampling_method",
+            columns="sample_size",
+            values=[
+                "positive_class_pct_mean",
+                "positive_class_pct_confidence_interval_lower",
+                "positive_class_pct_confidence_interval_upper",
+            ],
+        )
 
-    pivot_df = df.pivot(
-        index="sampling_method",
-        columns="sample_size",
-        values=["positive_class_pct_mean", "positive_class_pct_std"],
-    ).round(2)
+        print("Pivot table shape:", pivot_df.shape)
+        print("Pivot table columns:", pivot_df.columns.tolist())
 
-    # Create a new DataFrame with combined mean ± std strings
+    except Exception as e:
+        print(f"Error creating pivot table: {e}")
+        return pd.DataFrame()
+
+    # Create a new DataFrame with combined mean and CI strings
     combined_data = {}
-    for col in pivot_df.columns:
-        if col[0] == "positive_class_pct_mean":
-            sample_size = col[1]
-            mean_col = ("positive_class_pct_mean", sample_size)
-            std_col = ("positive_class_pct_std", sample_size)
 
-            if std_col in pivot_df.columns:
-                combined_data[sample_size] = (
-                    pivot_df[mean_col].astype(str)
-                    + " $\\pm$ "
-                    + pivot_df[std_col].astype(str)
+    # Get unique sample sizes
+    sample_sizes = df["sample_size"].unique()
+
+    for sample_size in sample_sizes:
+        mean_col = ("positive_class_pct_mean", sample_size)
+        ci_lower_col = ("positive_class_pct_confidence_interval_lower", sample_size)
+        ci_upper_col = ("positive_class_pct_confidence_interval_upper", sample_size)
+
+        if (
+            mean_col in pivot_df.columns
+            and ci_lower_col in pivot_df.columns
+            and ci_upper_col in pivot_df.columns
+        ):
+            # Format as LaTeX with confidence intervals
+            combined_data[sample_size] = (
+                pivot_df[mean_col].apply(lambda x: f"${x:.2f}")
+                + "^{"
+                + pivot_df[ci_upper_col].apply(lambda x: f"{x:.2f}")
+                + "}_"
+                + "{"
+                + pivot_df[ci_lower_col].apply(lambda x: f"{x:.2f}")
+                + "}$"
+            )
+        else:
+            print(f"Missing columns for sample size {sample_size}")
+            # Fallback to just mean values if available
+            if mean_col in pivot_df.columns:
+                combined_data[sample_size] = pivot_df[mean_col].apply(
+                    lambda x: f"{x:.2f}"
                 )
             else:
-                combined_data[sample_size] = pivot_df[mean_col].astype(str)
+                combined_data[sample_size] = "N/A"
 
-    pivot_df = pd.DataFrame(combined_data, index=pivot_df.index)
+    # Create final DataFrame
+    result_df = pd.DataFrame(combined_data, index=pivot_df.index)
 
-    # Add a column with method names for cleaner display
-    pivot_df.index.name = None  # Remove index name
+    # Clean up the index
+    result_df.index.name = None
 
-    return pivot_df
+    # Map sampling method names to more readable versions
+    result_df.index = result_df.index.map(lambda x: SAMPLE_STRAT_NAME_MAP.get(x, x))
+
+    print("Final table shape:", result_df.shape)
+    print("Final table:")
+    print(result_df.head())
+
+    return result_df
 
 
 def save_latex_summary_table(df: pd.DataFrame, output_file: str, caption: str = ""):

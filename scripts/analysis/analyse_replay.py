@@ -4,7 +4,12 @@ import os
 from arc_tigers.eval.plotting import plot_replay_results
 from arc_tigers.eval.utils import get_replay_exp_results
 
-CONFIGS = ["distilbert_default", "gpt2_default", "ModernBERT_fp16", "zero-shot_default"]
+CONFIGS = [
+    "distilbert_default",
+    "gpt2_default",
+    "ModernBERT_short",
+    "zero-shot_default",
+]
 
 
 if __name__ == "__main__":

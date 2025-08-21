@@ -125,9 +125,6 @@ def main():
         plot_class_distribution_by_size(results_df, str(plots_dir), imbalance)
 
     # concatenate all tables into one if we have ran multiple imbalances
-    # ...existing code...
-
-    # concatenate all tables into one if we have ran multiple imbalances
     if len(tables) > 1:
         # Filter each table to only include specific sample sizes
         filtered_tables = []

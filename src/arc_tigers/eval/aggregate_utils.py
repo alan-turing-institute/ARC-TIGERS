@@ -17,6 +17,17 @@ from arc_tigers.eval.utils import (
     load_metrics_file_to_df,
 )
 
+METRIC_GROUPS = {
+    "minority": ["f1_1", "precision_1", "recall_1"],
+    "majority": ["f1_0", "precision_0", "recall_0"],
+    "overall": [
+        "accuracy",
+        "average_precision",
+        *["f1_1", "precision_1", "recall_1"],
+        *["f1_0", "precision_0", "recall_0"],
+    ],
+}
+
 
 def sqrt_mean(x: np.ndarray, axis: int | None = None):
     """
@@ -241,6 +252,70 @@ def perform_bootstrap(
     return boot_results
 
 
+def group_metrics(
+    stacked_se_vals: dict,
+    imbalances: list[str],
+    sampling_methods: list[str],
+    groups: dict[str, list[str]] | None = None,
+):
+    if groups is None:
+        groups = METRIC_GROUPS
+    stacked_groups: dict[str, dict[str, dict[str, np.ndarray]]] = {}
+    for imbalance in imbalances:
+        stacked_groups[imbalance] = {}
+        for group in groups:
+            stacked_groups[imbalance][group] = {}
+            for sampling_strat in sampling_methods:
+                stacked_groups[imbalance][group][sampling_strat] = []
+                for metric in groups[group]:
+                    stacked_groups[imbalance][group][sampling_strat].append(
+                        stacked_se_vals[imbalance][sampling_strat][metric]
+                    )
+                # Stack all metrics for this group
+                stacked_groups[imbalance][group][sampling_strat] = np.vstack(
+                    stacked_groups[imbalance][group][sampling_strat]
+                )
+
+    return stacked_groups
+
+
+def grouped_bootstrap(
+    stacked_groups: dict,
+    imbalances: list[str],
+    sampling_methods: list[str],
+):
+    """
+    groups bootstrapped results for each sampling method by minority, majority, and
+    overall metrics, within each imbalance level.
+    """
+    grouped_bootstrap_results: dict[
+        str, dict[str, dict[str, list[tuple[float, tuple[float, float]]]]]
+    ] = {imbalance: {} for imbalance in imbalances}
+    for imbalance in imbalances:
+        for group in stacked_groups[imbalance]:
+            grouped_bootstrap_results[imbalance][group] = {}
+            for sampling_strat in sampling_methods:
+                # Perform bootstrap on each group
+                vals = stacked_groups[imbalance][group][sampling_strat]
+                grouped_bootstrap_results[imbalance][group][sampling_strat] = []
+                for sample_count in range(vals.shape[1]):
+                    result = bootstrap(
+                        (vals[:, sample_count],),
+                        sqrt_mean,
+                        n_resamples=1000,
+                    )
+                    grouped_bootstrap_results[imbalance][group][sampling_strat].append(
+                        (
+                            float(result.bootstrap_distribution.mean()),
+                            (
+                                float(result.confidence_interval.low),
+                                float(result.confidence_interval.high),
+                            ),
+                        )
+                    )
+    return grouped_bootstrap_results
+
+
 def print_results(
     boot_results: dict,
     stacked_se_vals: dict,
@@ -276,6 +351,30 @@ def print_results(
                         f"Metric: {metric}, N: {n}, Value: {stat_val:.4f}, "
                         f"CI: ({ci_low:.4f}, {ci_high:.4f})"
                     )
+
+
+def all_metrics_table(
+    se_vals: dict,
+    imbalances: list[str],
+    sampling_methods: list[str],
+    metrics: list[str],
+):
+    """
+    aggregate all metrics into a single table for each sampling method, averaging across
+    each sample count. Creating a table for each imbalance level.
+    """
+
+    for imbalance in imbalances:
+        collected_results: dict[str, dict[str, list]] = {
+            sample_strategy: {} for sample_strategy in sampling_methods
+        }
+        for sampling_strategy in sampling_methods:
+            for metric in metrics:
+                vals = se_vals[imbalance][sampling_strategy][metric]
+                collected_results[sampling_strategy][metric] = np.hstack(
+                    list(vals.values())
+                ).flatten()
+    return collected_results
 
 
 def generate_tables(
@@ -526,6 +625,4 @@ def compute_class_distributions(
 
                 results.append(df)
 
-    if results:
-        return pd.concat(results, ignore_index=True)
-    return pd.DataFrame()
+    return pd.concat(results, ignore_index=True)
