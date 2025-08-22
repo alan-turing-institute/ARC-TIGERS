@@ -7,12 +7,24 @@ import numpy.typing as npt
 import pandas as pd
 import scipy.stats as stats
 import seaborn as sns
+from scipy.stats import bootstrap
 
 MODEL_NAME_MAP = {
     "distilbert": "DistilBERT",
     "ModernBERT": "ModernBERT",
     "gpt2": "GPT-2",
     "zero-shot": "Zero-Shot",
+}
+
+METRIC_NAME_MAP = {
+    "accuracy": "Accuracy",
+    "f1_0": "F1 (Majority)",
+    "f1_1": "F1 (Minority)",
+    "precision_0": "Precision (Majority)",
+    "precision_1": "Precision (Minority)",
+    "recall_0": "Recall (Majority)",
+    "recall_1": "Recall (Minority)",
+    "average_precision": "Average Precision",
 }
 
 SAMPLE_STRAT_NAME_MAP = {
@@ -695,6 +707,12 @@ def confidence_interval_upper(x, confidence_level: float = 0.95) -> float:
     return mean + t_value * std_err
 
 
+def bootstrap_confidence(x):
+    """Compute bootstrap confidence intervals for the given data."""
+    bootstrapped = bootstrap((x,), np.mean, confidence_level=0.95, n_resamples=10000)
+    return (bootstrapped.confidence_interval.low, bootstrapped.confidence_interval.high)
+
+
 def class_pct_summary_by_size(df: pd.DataFrame) -> pd.DataFrame:
     """Create summary statistics by sampling method and sample size."""
     if df.empty:
@@ -705,19 +723,8 @@ def class_pct_summary_by_size(df: pd.DataFrame) -> pd.DataFrame:
         df.groupby(["sampling_method", "sample_size"])
         .agg(
             {
-                "positive_class_pct": [
-                    "mean",
-                    "std",
-                    "count",
-                    confidence_interval_lower,
-                    confidence_interval_upper,
-                ],
-                "negative_class_pct": [
-                    "mean",
-                    "std",
-                    confidence_interval_lower,
-                    confidence_interval_upper,
-                ],
+                "positive_class_pct": ["mean", "std", "count", bootstrap_confidence],
+                "negative_class_pct": ["mean", "std", bootstrap_confidence],
                 "n_class_0": "mean",
                 "n_class_1": "mean",
             }
@@ -835,8 +842,7 @@ def class_percentage_table(df: pd.DataFrame) -> pd.DataFrame:
             columns="sample_size",
             values=[
                 "positive_class_pct_mean",
-                "positive_class_pct_confidence_interval_lower",
-                "positive_class_pct_confidence_interval_upper",
+                "bootstrap_confidence",
             ],
         )
 
@@ -855,8 +861,8 @@ def class_percentage_table(df: pd.DataFrame) -> pd.DataFrame:
 
     for sample_size in sample_sizes:
         mean_col = ("positive_class_pct_mean", sample_size)
-        ci_lower_col = ("positive_class_pct_confidence_interval_lower", sample_size)
-        ci_upper_col = ("positive_class_pct_confidence_interval_upper", sample_size)
+        ci_lower_col = ("bootstrap_confidence", sample_size)[0]
+        ci_upper_col = ("bootstrap_confidence", sample_size)[1]
 
         if (
             mean_col in pivot_df.columns
@@ -1011,3 +1017,37 @@ def plot_class_distribution_by_size(df: pd.DataFrame, output_dir: str, imbalance
     print(f"Tables saved to: {output_path}/tables/")
 
     return fig1, fig2
+
+
+def generate_all_metrics_rmse_tables(
+    all_metric_stats: dict[
+        str, dict[str, dict[str, tuple[float, tuple[float, float]]]]
+    ],
+    metrics: list[str],
+    tables_dir: str,
+):
+    os.makedirs(tables_dir, exist_ok=True)
+    metric_names = [METRIC_NAME_MAP.get(metric, metric) for metric in metrics]
+    """Generate a table with RMSE for all metrics."""
+    for imbalance, imbalance_dict in all_metric_stats.items():
+        df = pd.DataFrame(columns=["Sampling Strategy", *metric_names])
+        for sampling_strategy in imbalance_dict:
+            row = [SAMPLE_STRAT_NAME_MAP.get(sampling_strategy, sampling_strategy)]
+            if metrics != list(imbalance_dict[sampling_strategy].keys()):
+                err_msg = (
+                    "Metrics in imbalance_dict do not match provided metrics list."
+                )
+                raise ValueError(err_msg)
+            for _, values in imbalance_dict[sampling_strategy].items():
+                mean_val, ci = values
+                row.append(f"${mean_val:.3f}^{{{ci[0]:.3f}}}_{{{ci[1]:.3f}}}$")
+            df.loc[len(df)] = row
+        df.to_latex(
+            f"{tables_dir}/all_metric_rmse_table_{imbalance}.tex",
+            index=False,
+            float_format="%.3f",
+            column_format="l" + "c" * len(metrics),
+            caption=f"RMSE for all metrics at imbalance {imbalance}",
+            label=f"tab:all_metric_rmse_{imbalance}",
+        )
+        df.to_csv(f"{tables_dir}/all_metric_rmse_table_{imbalance}.csv", index=False)

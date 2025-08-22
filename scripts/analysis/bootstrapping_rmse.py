@@ -1,7 +1,7 @@
 import argparse
 
 from arc_tigers.eval.aggregate_utils import (
-    all_metrics_table,
+    all_metrics_results,
     collect_se_differences,
     collect_se_values,
     generate_tables,
@@ -13,7 +13,10 @@ from arc_tigers.eval.aggregate_utils import (
     save_json_results,
     stack_values,
 )
-from arc_tigers.eval.plotting import generate_grouped_tables
+from arc_tigers.eval.plotting import (
+    generate_all_metrics_rmse_tables,
+    generate_grouped_tables,
+)
 
 
 def main(
@@ -106,13 +109,15 @@ def main(
         grouped_metrics, imbalances, sampling_methods
     )
 
-    all_metrics_table(
+    all_metric_outputs = all_metrics_results(
         se_vals,
         imbalances,
         sampling_methods,
         metrics,
-        save_dir=f"{base_path}/tables/bootstrap_rmse/all_metrics/",
     )
+
+    all_metrics_dir = f"{base_path}/tables/bootstrap_rmse/all_metrics"
+    generate_all_metrics_rmse_tables(all_metric_outputs, metrics, all_metrics_dir)
 
     if verbose:
         # Print results

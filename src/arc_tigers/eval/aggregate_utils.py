@@ -18,14 +18,9 @@ from arc_tigers.eval.utils import (
 )
 
 METRIC_GROUPS = {
-    "minority": ["f1_1", "precision_1", "recall_1"],
-    "majority": ["f1_0", "precision_0", "recall_0"],
-    "overall": [
-        "accuracy",
-        "average_precision",
-        *["f1_1", "precision_1", "recall_1"],
-        *["f1_0", "precision_0", "recall_0"],
-    ],
+    "f1_1": ["f1_1"],
+    "f1_0": ["f1_0"],
+    "average_precision": ["average_precision"],
 }
 
 
@@ -353,7 +348,7 @@ def print_results(
                     )
 
 
-def all_metrics_table(
+def all_metrics_results(
     se_vals: dict,
     imbalances: list[str],
     sampling_methods: list[str],
@@ -363,113 +358,29 @@ def all_metrics_table(
     aggregate all metrics into a single table for each sampling method, averaging across
     each sample count. Creating a table for each imbalance level.
     """
-
+    bootstrap_results: dict[str, dict[str, dict[str, tuple]]] = {
+        imbalance: {sampling_strategy: {} for sampling_strategy in sampling_methods}
+        for imbalance in imbalances
+    }
     for imbalance in imbalances:
-        collected_results: dict[str, dict[str, list]] = {
-            sample_strategy: {} for sample_strategy in sampling_methods
-        }
         for sampling_strategy in sampling_methods:
             for metric in metrics:
-                vals = se_vals[imbalance][sampling_strategy][metric]
-                collected_results[sampling_strategy][metric] = np.hstack(
-                    list(vals.values())
+                vals = np.hstack(
+                    list(se_vals[imbalance][sampling_strategy][metric].values())
                 ).flatten()
-    return collected_results
-
-
-def generate_tables(
-    boot_results: dict,
-    stacked_se_vals: dict,
-    evaluate_steps: list[int],
-    imbalances: list[str],
-    sampling_methods: list[str],
-    metrics: list[str],
-    save_dir: str,
-    verbose: bool = False,
-) -> None:
-    """Generate LaTeX tables for bootstrap results."""
-
-    metric_aggregate_results: dict[str, list] = {metric: [] for metric in metrics}
-    for imbalance in imbalances:
-        for metric in metrics:
-            # Create DataFrame for this imbalance/metric combination
-            df = pd.DataFrame(columns=["strategy", *evaluate_steps])
-
-            for strategy in sampling_methods:
-                values = []
-                for step_idx, _ in enumerate(evaluate_steps):
-                    # Collect bootstrap statistics for this sample size
-                    step_stats = []
-                    if (
-                        strategy in boot_results[imbalance]
-                        and metric in boot_results[imbalance][strategy]
-                        and step_idx in boot_results[imbalance][strategy][metric]
-                    ):
-                        result = boot_results[imbalance][strategy][metric][step_idx]
-                        # Handle older SciPy versions
-                        vals = stacked_se_vals[imbalance][strategy][metric][:, step_idx]
-                        pre_stat = sqrt_mean(vals)
-                        stat = getattr(result, "statistic", pre_stat)
-                        stat_val = float(np.asarray(stat).ravel()[0])
-                        step_stats.append(stat_val)
-
-                    # Use mean across models if multiple, handle empty arrays
-                    if step_stats:
-                        values.append(np.mean(step_stats))
-                    else:
-                        values.append(np.nan)
-
-                df.loc[len(df)] = [strategy, *values]
-
-            # Save LaTeX table
-            table_dir = f"{save_dir}/{imbalance}/"
-            os.makedirs(table_dir, exist_ok=True)
-            latex_table = df.to_latex(index=False, float_format="%.4f")
-            with open(f"{table_dir}/{metric}.tex", "w") as f:
-                f.write(latex_table)
-            if verbose:
-                print(f"Bootstrap RMSE table saved to {table_dir}/{metric}.tex")
-                print(df)
-
-            metric_aggregate_results[metric].append(df.to_numpy()[:, 1:])
-
-    # Save all results as a single DataFrame
-    agg_table_dir = f"{save_dir}/aggregate/"
-    os.makedirs(agg_table_dir, exist_ok=True)
-    sampling_methods_labels = [
-        SAMPLE_STRAT_NAME_MAP.get(method, method) for method in sampling_methods
-    ]
-    for metric, results in metric_aggregate_results.items():
-        # take mean across all tables
-        # Round to 3 significant figures
-        stacked_df = np.dstack(results)
-        mean_over_imbalances = np.mean(stacked_df, axis=-1)
-        mean_over_sample_counts = np.mean(stacked_df, axis=1)
-        mean_df = pd.DataFrame(
-            mean_over_imbalances, columns=evaluate_steps, index=sampling_methods_labels
-        )
-        mean_df.to_latex(
-            f"{agg_table_dir}/{metric}_over_imbalances.tex",
-            index=True,
-            float_format="%.4f",
-            caption=f"Bootstrapped RMSE for "
-            f"{metric.replace('_', ' ')} across sampling methods.",
-            label=f"tab:bootstrapped_rmse_{metric}",
-        )
-
-        mean_df = pd.DataFrame(
-            mean_over_sample_counts,
-            columns=imbalances,
-            index=sampling_methods_labels,
-        )
-        mean_df.to_latex(
-            f"{agg_table_dir}/{metric}_over_sample_count.tex",
-            index=True,
-            float_format="%.4f",
-            caption=f"Bootstrapped RMSE for "
-            f"{metric.replace('_', ' ')} across sampling methods.",
-            label=f"tab:bootstrapped_rmse_{metric}",
-        )
+                _bootstrap_result = bootstrap(
+                    (vals,),
+                    sqrt_mean,
+                    n_resamples=1000,
+                )
+                bootstrap_results[imbalance][sampling_strategy][metric] = (
+                    float(_bootstrap_result.bootstrap_distribution.mean()),
+                    (
+                        float(_bootstrap_result.confidence_interval.low),
+                        float(_bootstrap_result.confidence_interval.high),
+                    ),
+                )
+    return bootstrap_results
 
 
 def save_json_results(boot_results: dict, stacked_se_vals: dict, save_dir: str) -> None:
@@ -578,6 +489,8 @@ def compute_class_distributions(
 
     for model in models:
         for sampling_method in sampling_methods:
+            if sampling_method == "random" and model != "ModernBERT":
+                continue
             # Find metrics files for this configuration
             pattern = os.path.join(
                 base_path,
@@ -626,3 +539,98 @@ def compute_class_distributions(
                 results.append(df)
 
     return pd.concat(results, ignore_index=True)
+
+
+def generate_tables(
+    boot_results: dict,
+    stacked_se_vals: dict,
+    evaluate_steps: list[int],
+    imbalances: list[str],
+    sampling_methods: list[str],
+    metrics: list[str],
+    save_dir: str,
+    verbose: bool = False,
+) -> None:
+    """Generate LaTeX tables for bootstrap results."""
+
+    metric_aggregate_results: dict[str, list] = {metric: [] for metric in metrics}
+    for imbalance in imbalances:
+        for metric in metrics:
+            # Create DataFrame for this imbalance/metric combination
+            df = pd.DataFrame(columns=["strategy", *evaluate_steps])
+
+            for strategy in sampling_methods:
+                values = []
+                for step_idx, _ in enumerate(evaluate_steps):
+                    # Collect bootstrap statistics for this sample size
+                    step_stats = []
+                    if (
+                        strategy in boot_results[imbalance]
+                        and metric in boot_results[imbalance][strategy]
+                        and step_idx in boot_results[imbalance][strategy][metric]
+                    ):
+                        result = boot_results[imbalance][strategy][metric][step_idx]
+                        # Handle older SciPy versions
+                        vals = stacked_se_vals[imbalance][strategy][metric][:, step_idx]
+                        pre_stat = sqrt_mean(vals)
+                        stat = getattr(result, "statistic", pre_stat)
+                        stat_val = float(np.asarray(stat).ravel()[0])
+                        step_stats.append(stat_val)
+
+                    # Use mean across models if multiple, handle empty arrays
+                    if step_stats:
+                        values.append(np.mean(step_stats))
+                    else:
+                        values.append(np.nan)
+
+                df.loc[len(df)] = [strategy, *values]
+
+            # Save LaTeX table
+            table_dir = f"{save_dir}/{imbalance}/"
+            os.makedirs(table_dir, exist_ok=True)
+            latex_table = df.to_latex(index=False, float_format="%.4f")
+            with open(f"{table_dir}/{metric}.tex", "w") as f:
+                f.write(latex_table)
+            if verbose:
+                print(f"Bootstrap RMSE table saved to {table_dir}/{metric}.tex")
+                print(df)
+
+            metric_aggregate_results[metric].append(df.to_numpy()[:, 1:])
+
+    # Save all results as a single DataFrame
+    agg_table_dir = f"{save_dir}/aggregate/"
+    os.makedirs(agg_table_dir, exist_ok=True)
+    sampling_methods_labels = [
+        SAMPLE_STRAT_NAME_MAP.get(method, method) for method in sampling_methods
+    ]
+    for metric, results in metric_aggregate_results.items():
+        # take mean across all tables
+        # Round to 3 significant figures
+        stacked_df = np.dstack(results)
+        mean_over_imbalances = np.mean(stacked_df, axis=-1)
+        mean_over_sample_counts = np.mean(stacked_df, axis=1)
+        mean_df = pd.DataFrame(
+            mean_over_imbalances, columns=evaluate_steps, index=sampling_methods_labels
+        )
+        mean_df.to_latex(
+            f"{agg_table_dir}/{metric}_over_imbalances.tex",
+            index=True,
+            float_format="%.4f",
+            caption=f"Bootstrapped RMSE for "
+            f"{metric.replace('_', ' ')} across sampling methods.",
+            label=f"tab:bootstrapped_rmse_{metric}",
+        )
+
+        mean_df = pd.DataFrame(
+            mean_over_sample_counts,
+            columns=imbalances,
+            index=sampling_methods_labels,
+        )
+        mean_df.to_latex(
+            f"{agg_table_dir}/{metric}_over_sample_count.tex",
+            index=True,
+            float_format="%.4f",
+            caption=f"Bootstrapped RMSE for "
+            f"{metric.replace('_', ' ')} across sampling methods.",
+            label=f"tab:bootstrapped_rmse_{metric}",
+        )
