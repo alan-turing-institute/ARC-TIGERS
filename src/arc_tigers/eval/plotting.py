@@ -842,7 +842,7 @@ def class_percentage_table(df: pd.DataFrame) -> pd.DataFrame:
             columns="sample_size",
             values=[
                 "positive_class_pct_mean",
-                "bootstrap_confidence",
+                "positive_class_pct_bootstrap_confidence",
             ],
         )
 
@@ -851,7 +851,6 @@ def class_percentage_table(df: pd.DataFrame) -> pd.DataFrame:
 
     except Exception as e:
         print(f"Error creating pivot table: {e}")
-        return pd.DataFrame()
 
     # Create a new DataFrame with combined mean and CI strings
     combined_data = {}
@@ -861,22 +860,17 @@ def class_percentage_table(df: pd.DataFrame) -> pd.DataFrame:
 
     for sample_size in sample_sizes:
         mean_col = ("positive_class_pct_mean", sample_size)
-        ci_lower_col = ("bootstrap_confidence", sample_size)[0]
-        ci_upper_col = ("bootstrap_confidence", sample_size)[1]
+        ci = ("positive_class_pct_bootstrap_confidence", sample_size)
 
-        if (
-            mean_col in pivot_df.columns
-            and ci_lower_col in pivot_df.columns
-            and ci_upper_col in pivot_df.columns
-        ):
+        if mean_col in pivot_df.columns and ci in pivot_df.columns:
             # Format as LaTeX with confidence intervals
             combined_data[sample_size] = (
                 pivot_df[mean_col].apply(lambda x: f"${x:.2f}")
                 + "^{"
-                + pivot_df[ci_upper_col].apply(lambda x: f"{x:.2f}")
+                + pivot_df[ci].apply(lambda x: f"{x[1]:.2f}")
                 + "}_"
                 + "{"
-                + pivot_df[ci_lower_col].apply(lambda x: f"{x:.2f}")
+                + pivot_df[ci].apply(lambda x: f"{x[0]:.2f}")
                 + "}$"
             )
         else:

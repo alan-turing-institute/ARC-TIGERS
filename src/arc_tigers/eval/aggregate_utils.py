@@ -489,7 +489,7 @@ def compute_class_distributions(
 
     for model in models:
         for sampling_method in sampling_methods:
-            if sampling_method == "random" and model != "ModernBERT":
+            if sampling_method == "random" and model != "gpt2":
                 continue
             # Find metrics files for this configuration
             pattern = os.path.join(
