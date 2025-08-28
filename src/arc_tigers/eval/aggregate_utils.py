@@ -8,7 +8,7 @@ import pandas as pd
 import yaml
 from scipy.stats import bootstrap
 
-from arc_tigers.eval.plotting import SAMPLE_STRAT_NAME_MAP
+from arc_tigers.eval.plotting import METRIC_GROUPS, SAMPLE_STRAT_NAME_MAP
 from arc_tigers.eval.utils import (
     get_class_percentages,
     get_metric_stats,
@@ -16,12 +16,6 @@ from arc_tigers.eval.utils import (
     get_se_values,
     load_metrics_file_to_df,
 )
-
-METRIC_GROUPS = {
-    "f1_1": ["f1_1"],
-    "f1_0": ["f1_0"],
-    "average_precision": ["average_precision"],
-}
 
 
 def sqrt_mean(x: np.ndarray, axis: int | None = None):
@@ -489,7 +483,7 @@ def compute_class_distributions(
 
     for model in models:
         for sampling_method in sampling_methods:
-            if sampling_method == "random" and model != "gpt2":
+            if sampling_method == "random" and model != "distilbert":
                 continue
             # Find metrics files for this configuration
             pattern = os.path.join(

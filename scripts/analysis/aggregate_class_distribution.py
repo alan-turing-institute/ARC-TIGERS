@@ -40,6 +40,7 @@ def main():
             "minority",
             "info_gain_lightgbm",
             "accuracy_lightgbm",
+            "isolation",
         ],
         help="Sampling methods to analyze",
     )
@@ -128,7 +129,7 @@ def main():
     if len(tables) > 1:
         # Filter each table to only include specific sample sizes
         filtered_tables = []
-        selected_sample_sizes = [10, 1000]
+        selected_sample_sizes = [1000]
 
         for i, table in enumerate(tables):
             # Filter columns to only include selected sample sizes

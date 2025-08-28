@@ -9,6 +9,17 @@ import scipy.stats as stats
 import seaborn as sns
 from scipy.stats import bootstrap
 
+METRIC_GROUPS = {
+    "f1_1": ["f1_1"],
+    "f1_0": ["f1_0"],
+    "average_precision": ["average_precision"],
+}
+METRIC_GROUP_NAME_MAP = {
+    "f1_1": "F1 (Minority)",
+    "f1_0": "F1 (Majority)",
+    "average_precision": "Average Precision",
+}
+
 MODEL_NAME_MAP = {
     "distilbert": "DistilBERT",
     "ModernBERT": "ModernBERT",
@@ -747,22 +758,6 @@ def generate_grouped_tables(
 ) -> None:
     """Generate tables for grouped bootstrap results, one per imbalance level."""
 
-    # Define metric groups
-    minority_metrics = ["f1_1", "precision_1", "recall_1"]
-    majority_metrics = ["f1_0", "precision_0", "recall_0"]
-    overall_metrics = [
-        "accuracy",
-        "average_precision",
-        *minority_metrics,
-        *majority_metrics,
-    ]
-
-    metric_groups = {
-        "Minority": minority_metrics,
-        "Majority": majority_metrics,
-        "Overall": overall_metrics,
-    }
-
     for imbalance in imbalances:
         if verbose:
             print(f"Generating grouped table for imbalance {imbalance}")
@@ -775,7 +770,7 @@ def generate_grouped_tables(
             row = {"Strategy": strategy_name}
 
             # Add columns for each metric group and sample count
-            for group_name in metric_groups:
+            for group_name in METRIC_GROUPS:
                 for step_idx, step in enumerate(evaluate_steps):
                     col_name = f"{group_name} - {step}"
 

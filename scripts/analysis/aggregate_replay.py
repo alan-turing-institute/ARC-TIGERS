@@ -8,7 +8,12 @@ from matplotlib import pyplot as plt
 from scipy.stats import bootstrap
 from scipy.stats._resampling import BootstrapResult
 
-from arc_tigers.eval.plotting import SAMPLE_STRAT_NAME_MAP
+from arc_tigers.eval.plotting import (
+    METRIC_GROUP_NAME_MAP,
+    METRIC_GROUPS,
+    METRIC_NAME_MAP,
+    SAMPLE_STRAT_NAME_MAP,
+)
 from arc_tigers.eval.utils import get_se_values
 from arc_tigers.utils import to_json
 
@@ -27,25 +32,34 @@ models = [
 ]
 imbalances = ["05", "01", "001"]
 
-minority_metrics = ["f1_1", "precision_1", "recall_1"]
-majority_metrics = ["f1_0", "precision_0", "recall_0"]
-overall_metrics = [
-    "accuracy",
-    "average_precision",
-    *minority_metrics,
-    *majority_metrics,
-]
+# minority_metrics = ["f1_1", "precision_1", "recall_1"]
+# majority_metrics = ["f1_0", "precision_0", "recall_0"]
+# overall_metrics = [
+#     "accuracy",
+#     "average_precision",
+#     *minority_metrics,
+#     *majority_metrics,
+# ]
+
+
+metric_keys = list(METRIC_GROUPS.keys())
 
 
 def append_metric_results(
     se_history: dict[str, list], new_se: dict[str, np.ndarray]
 ) -> None:
-    for metric in minority_metrics:
-        se_history["minority"].extend(new_se[metric].flatten().tolist())
-    for metric in majority_metrics:
-        se_history["majority"].extend(new_se[metric].flatten().tolist())
-    for metric in overall_metrics:
-        se_history["overall"].extend(new_se[metric].flatten().tolist())
+    for metric in METRIC_GROUPS[metric_keys[0]]:
+        if metric_keys[0] not in se_history:
+            se_history[metric_keys[0]] = []
+        se_history[metric_keys[0]].extend(new_se[metric].flatten().tolist())
+    for metric in METRIC_GROUPS[metric_keys[1]]:
+        if metric_keys[1] not in se_history:
+            se_history[metric_keys[1]] = []
+        se_history[metric_keys[1]].extend(new_se[metric].flatten().tolist())
+    for metric in METRIC_GROUPS[metric_keys[2]]:
+        if metric_keys[2] not in se_history:
+            se_history[metric_keys[2]] = []
+        se_history[metric_keys[2]].extend(new_se[metric].flatten().tolist())
 
 
 def nan_root_mean(values):
@@ -81,11 +95,7 @@ def main():
     other_se = {imbalance: {} for imbalance in imbalances}
     for imbalance in imbalances:
         print("Aggregating imbalance:", imbalance)
-        self_se[imbalance]["random"] = {
-            "minority": [],
-            "majority": [],
-            "overall": [],
-        }
+        self_se[imbalance]["random"] = {}
         for self_model, self_config in models:
             se = get_se_values(
                 str(
@@ -100,16 +110,8 @@ def main():
             append_metric_results(self_se[imbalance]["random"], se)
 
         for sampler in samplers:
-            self_se[imbalance][sampler] = {
-                "minority": [],
-                "majority": [],
-                "overall": [],
-            }
-            other_se[imbalance][sampler] = {
-                "minority": [],
-                "majority": [],
-                "overall": [],
-            }
+            self_se[imbalance][sampler] = {}
+            other_se[imbalance][sampler] = {}
             for self_model, self_config in models:
                 se = get_se_values(
                     str(
@@ -146,6 +148,7 @@ def main():
 
 
 def make_table(imbalance="05"):
+    metric_keys = list(METRIC_GROUPS.keys())
     with open(f"{data_dir}/self_rmse_{imbalance}.json") as f:
         self_rmse = json.load(f)
     with open(f"{data_dir}/other_rmse_{imbalance}.json") as f:
@@ -154,45 +157,63 @@ def make_table(imbalance="05"):
     sampler = "random"
     rows = [
         {
-            "sampler": f"{SAMPLE_STRAT_NAME_MAP.get(sampler, sampler)}",
-            "Minority Metrics": f"${self_rmse[sampler]['minority'][0]:.3f}^"
-            f"{{{self_rmse[sampler]['minority'][2]:.3f}}}_"
-            f"{{{self_rmse[sampler]['minority'][1]:.3f}}}$",
-            "Majority Metrics": f"${self_rmse[sampler]['majority'][0]:.3f}^"
-            f"{{{self_rmse[sampler]['majority'][2]:.3f}}}_"
-            f"{{{self_rmse[sampler]['majority'][1]:.3f}}}$",
-            "All Metrics": f"${self_rmse[sampler]['overall'][0]:.3f}^"
-            f"{{{self_rmse[sampler]['overall'][2]:.3f}}}_"
-            f"{{{self_rmse[sampler]['overall'][1]:.3f}}}$",
+            "Strategy": f"{SAMPLE_STRAT_NAME_MAP.get(sampler, sampler)}",
+            METRIC_GROUP_NAME_MAP[
+                metric_keys[0]
+            ]: f"${self_rmse[sampler][metric_keys[0]][0]:.3f}^"
+            f"{{{self_rmse[sampler][metric_keys[0]][2]:.3f}}}_"
+            f"{{{self_rmse[sampler][metric_keys[0]][1]:.3f}}}$",
+            METRIC_GROUP_NAME_MAP[
+                metric_keys[1]
+            ]: f"${self_rmse[sampler][metric_keys[1]][0]:.3f}^"
+            f"{{{self_rmse[sampler][metric_keys[1]][2]:.3f}}}_"
+            f"{{{self_rmse[sampler][metric_keys[1]][1]:.3f}}}$",
+            METRIC_GROUP_NAME_MAP[
+                metric_keys[2]
+            ]: f"${self_rmse[sampler][metric_keys[2]][0]:.3f}^"
+            f"{{{self_rmse[sampler][metric_keys[2]][2]:.3f}}}_"
+            f"{{{self_rmse[sampler][metric_keys[2]][1]:.3f}}}$",
         }
     ]
     for sampler in other_rmse:
         rows.append(
             {
-                "sampler": f"{SAMPLE_STRAT_NAME_MAP.get(sampler, sampler)} (self)",
-                "Minority Metrics": f"${self_rmse[sampler]['minority'][0]:.3f}^"
-                f"{{{self_rmse[sampler]['minority'][2]:.3f}}}_"
-                f"{{{self_rmse[sampler]['minority'][1]:.3f}}}$",
-                "Majority Metrics": f"${self_rmse[sampler]['majority'][0]:.3f}^"
-                f"{{{self_rmse[sampler]['majority'][2]:.3f}}}_"
-                f"{{{self_rmse[sampler]['majority'][1]:.3f}}}$",
-                "All Metrics": f"${self_rmse[sampler]['overall'][0]:.3f}^"
-                f"{{{self_rmse[sampler]['overall'][2]:.3f}}}_"
-                f"{{{self_rmse[sampler]['overall'][1]:.3f}}}$",
+                "Strategy": f"{SAMPLE_STRAT_NAME_MAP.get(sampler, sampler)} (self)",
+                METRIC_GROUP_NAME_MAP[
+                    metric_keys[0]
+                ]: f"${self_rmse[sampler][metric_keys[0]][0]:.3f}^"
+                f"{{{self_rmse[sampler][metric_keys[0]][2]:.3f}}}_"
+                f"{{{self_rmse[sampler][metric_keys[0]][1]:.3f}}}$",
+                METRIC_GROUP_NAME_MAP[
+                    metric_keys[1]
+                ]: f"${self_rmse[sampler][metric_keys[1]][0]:.3f}^"
+                f"{{{self_rmse[sampler][metric_keys[1]][2]:.3f}}}_"
+                f"{{{self_rmse[sampler][metric_keys[1]][1]:.3f}}}$",
+                METRIC_GROUP_NAME_MAP[
+                    metric_keys[2]
+                ]: f"${self_rmse[sampler][metric_keys[2]][0]:.3f}^"
+                f"{{{self_rmse[sampler][metric_keys[2]][2]:.3f}}}_"
+                f"{{{self_rmse[sampler][metric_keys[2]][1]:.3f}}}$",
             }
         )
         rows.append(
             {
-                "sampler": f"{SAMPLE_STRAT_NAME_MAP.get(sampler, sampler)} (others)",
-                "Minority Metrics": f"${other_rmse[sampler]['minority'][0]:.3f}^"
-                f"{{{other_rmse[sampler]['minority'][2]:.3f}}}_"
-                f"{{{other_rmse[sampler]['minority'][1]:.3f}}}$",
-                "Majority Metrics": f"${other_rmse[sampler]['majority'][0]:.3f}^"
-                f"{{{other_rmse[sampler]['majority'][2]:.3f}}}_"
-                f"{{{other_rmse[sampler]['majority'][1]:.3f}}}$",
-                "All Metrics": f"${other_rmse[sampler]['overall'][0]:.3f}^"
-                f"{{{other_rmse[sampler]['overall'][2]:.3f}}}_"
-                f"{{{other_rmse[sampler]['overall'][1]:.3f}}}$",
+                "Strategy": f"{SAMPLE_STRAT_NAME_MAP.get(sampler, sampler)} (others)",
+                METRIC_GROUP_NAME_MAP[
+                    metric_keys[0]
+                ]: f"${other_rmse[sampler][metric_keys[0]][0]:.3f}^"
+                f"{{{other_rmse[sampler][metric_keys[0]][2]:.3f}}}_"
+                f"{{{other_rmse[sampler][metric_keys[0]][1]:.3f}}}$",
+                METRIC_GROUP_NAME_MAP[
+                    metric_keys[1]
+                ]: f"${other_rmse[sampler][metric_keys[1]][0]:.3f}^"
+                f"{{{other_rmse[sampler][metric_keys[1]][2]:.3f}}}_"
+                f"{{{other_rmse[sampler][metric_keys[1]][1]:.3f}}}$",
+                METRIC_GROUP_NAME_MAP[
+                    metric_keys[2]
+                ]: f"${other_rmse[sampler][metric_keys[2]][0]:.3f}^"
+                f"{{{other_rmse[sampler][metric_keys[2]][2]:.3f}}}_"
+                f"{{{other_rmse[sampler][metric_keys[2]][1]:.3f}}}$",
             }
         )
 
@@ -200,22 +221,71 @@ def make_table(imbalance="05"):
     print(df)
     df.to_latex(f"{tables_dir}/table_{imbalance}.tex", float_format="%.3f", index=False)
     df.to_csv(f"{tables_dir}/table_{imbalance}.csv", index=False)
-    df.set_index("sampler")["Minority Metrics"].plot.bar()
+
+    # Create a numeric DataFrame for plotting
+    plot_rows = []
+    plot_rows.append(
+        {
+            "Strategy": "Random",
+            METRIC_GROUP_NAME_MAP[metric_keys[0]]: self_rmse["random"][metric_keys[0]][
+                0
+            ],
+            METRIC_GROUP_NAME_MAP[metric_keys[1]]: self_rmse["random"][metric_keys[1]][
+                0
+            ],
+            METRIC_GROUP_NAME_MAP[metric_keys[2]]: self_rmse["random"][metric_keys[2]][
+                0
+            ],
+        }
+    )
+    for sampler in other_rmse:
+        plot_rows.append(
+            {
+                "Strategy": f"{SAMPLE_STRAT_NAME_MAP.get(sampler, sampler)} (self)",
+                METRIC_GROUP_NAME_MAP[metric_keys[0]]: self_rmse[sampler][
+                    metric_keys[0]
+                ][0],
+                METRIC_GROUP_NAME_MAP[metric_keys[1]]: self_rmse[sampler][
+                    metric_keys[1]
+                ][0],
+                METRIC_GROUP_NAME_MAP[metric_keys[2]]: self_rmse[sampler][
+                    metric_keys[2]
+                ][0],
+            }
+        )
+        plot_rows.append(
+            {
+                "Strategy": f"{SAMPLE_STRAT_NAME_MAP.get(sampler, sampler)} (others)",
+                METRIC_GROUP_NAME_MAP[metric_keys[0]]: other_rmse[sampler][
+                    metric_keys[0]
+                ][0],
+                METRIC_GROUP_NAME_MAP[metric_keys[1]]: other_rmse[sampler][
+                    metric_keys[1]
+                ][0],
+                METRIC_GROUP_NAME_MAP[metric_keys[2]]: other_rmse[sampler][
+                    metric_keys[2]
+                ][0],
+            }
+        )
+
+    plot_df = pd.DataFrame(plot_rows)
+
+    plot_df.set_index("Strategy")[METRIC_NAME_MAP[metric_keys[0]]].plot.bar()
     plt.tight_layout()
     plt.ylabel("RMSE")
-    plt.title(f"Minority Metrics (Imbalance {imbalance})")
+    plt.title(f"{METRIC_GROUP_NAME_MAP[metric_keys[0]]} (Imbalance {imbalance})")
     plt.tight_layout()
     plt.savefig(f"{figures_dir}/minority_metrics_{imbalance}.png")
     plt.clf()
-    df.set_index("sampler")["Majority Metrics"].plot.bar()
+    plot_df.set_index("Strategy")[METRIC_GROUP_NAME_MAP[metric_keys[1]]].plot.bar()
     plt.ylabel("RMSE")
-    plt.title(f"Majority Metrics (Imbalance {imbalance})")
+    plt.title(f"{METRIC_GROUP_NAME_MAP[metric_keys[1]]} (Imbalance {imbalance})")
     plt.tight_layout()
     plt.savefig(f"{figures_dir}/majority_metrics_{imbalance}.png")
     plt.clf()
-    df.set_index("sampler")["All Metrics"].plot.bar()
+    plot_df.set_index("Strategy")[METRIC_GROUP_NAME_MAP[metric_keys[2]]].plot.bar()
     plt.ylabel("RMSE")
-    plt.title(f"All Metrics (Imbalance {imbalance})")
+    plt.title(f"{METRIC_GROUP_NAME_MAP[metric_keys[2]]} (Imbalance {imbalance})")
     plt.tight_layout()
     plt.savefig(f"{figures_dir}/overall_metrics_{imbalance}.png")
     plt.clf()
@@ -224,6 +294,7 @@ def make_table(imbalance="05"):
 def make_combined_table():
     """Create a single table combining all metrics across all imbalance levels."""
     os.makedirs(tables_dir, exist_ok=True)
+    metric_keys = list(METRIC_GROUPS.keys())
 
     all_rows = []
 
@@ -238,16 +309,22 @@ def make_combined_table():
         all_rows.append(
             {
                 "Imbalance": imbalance,
-                "Sampler": f"{SAMPLE_STRAT_NAME_MAP.get(sampler, sampler)}",
-                "Minority Metrics": f"${self_rmse[sampler]['minority'][0]:.3f}^"
-                f"{{{self_rmse[sampler]['minority'][2]:.3f}}}_"
-                f"{{{self_rmse[sampler]['minority'][1]:.3f}}}$",
-                "Majority Metrics": f"${self_rmse[sampler]['majority'][0]:.3f}^"
-                f"{{{self_rmse[sampler]['majority'][2]:.3f}}}_"
-                f"{{{self_rmse[sampler]['majority'][1]:.3f}}}$",
-                "All Metrics": f"${self_rmse[sampler]['overall'][0]:.3f}^"
-                f"{{{self_rmse[sampler]['overall'][2]:.3f}}}_"
-                f"{{{self_rmse[sampler]['overall'][1]:.3f}}}$",
+                "Strategy": f"{SAMPLE_STRAT_NAME_MAP.get(sampler, sampler)}",
+                METRIC_GROUP_NAME_MAP[
+                    metric_keys[0]
+                ]: f"${self_rmse[sampler][metric_keys[0]][0]:.3f}^"
+                f"{{{self_rmse[sampler][metric_keys[0]][2]:.3f}}}_"
+                f"{{{self_rmse[sampler][metric_keys[0]][1]:.3f}}}$",
+                METRIC_GROUP_NAME_MAP[
+                    metric_keys[1]
+                ]: f"${self_rmse[sampler][metric_keys[1]][0]:.3f}^"
+                f"{{{self_rmse[sampler][metric_keys[1]][2]:.3f}}}_"
+                f"{{{self_rmse[sampler][metric_keys[1]][1]:.3f}}}$",
+                METRIC_GROUP_NAME_MAP[
+                    metric_keys[2]
+                ]: f"${self_rmse[sampler][metric_keys[2]][0]:.3f}^"
+                f"{{{self_rmse[sampler][metric_keys[2]][2]:.3f}}}_"
+                f"{{{self_rmse[sampler][metric_keys[2]][1]:.3f}}}$",
             }
         )
 
@@ -256,32 +333,44 @@ def make_combined_table():
             all_rows.append(
                 {
                     "Imbalance": imbalance,
-                    "Sampler": f"{SAMPLE_STRAT_NAME_MAP.get(sampler, sampler)}",
-                    "Minority Metrics": f"${self_rmse[sampler]['minority'][0]:.3f}^"
-                    f"{{{self_rmse[sampler]['minority'][2]:.3f}}}_"
-                    f"{{{self_rmse[sampler]['minority'][1]:.3f}}}$",
-                    "Majority Metrics": f"${self_rmse[sampler]['majority'][0]:.3f}^"
-                    f"{{{self_rmse[sampler]['majority'][2]:.3f}}}_"
-                    f"{{{self_rmse[sampler]['majority'][1]:.3f}}}$",
-                    "All Metrics": f"${self_rmse[sampler]['overall'][0]:.3f}^"
-                    f"{{{self_rmse[sampler]['overall'][2]:.3f}}}_"
-                    f"{{{self_rmse[sampler]['overall'][1]:.3f}}}$",
+                    "Strategy": f"{SAMPLE_STRAT_NAME_MAP.get(sampler, sampler)}",
+                    METRIC_GROUP_NAME_MAP[
+                        metric_keys[0]
+                    ]: f"${self_rmse[sampler][metric_keys[0]][0]:.3f}^"
+                    f"{{{self_rmse[sampler][metric_keys[0]][2]:.3f}}}_"
+                    f"{{{self_rmse[sampler][metric_keys[0]][1]:.3f}}}$",
+                    METRIC_GROUP_NAME_MAP[
+                        metric_keys[1]
+                    ]: f"${self_rmse[sampler][metric_keys[1]][0]:.3f}^"
+                    f"{{{self_rmse[sampler][metric_keys[1]][2]:.3f}}}_"
+                    f"{{{self_rmse[sampler][metric_keys[1]][1]:.3f}}}$",
+                    METRIC_GROUP_NAME_MAP[
+                        metric_keys[2]
+                    ]: f"${self_rmse[sampler][metric_keys[2]][0]:.3f}^"
+                    f"{{{self_rmse[sampler][metric_keys[2]][2]:.3f}}}_"
+                    f"{{{self_rmse[sampler][metric_keys[2]][1]:.3f}}}$",
                 }
             )
             all_rows.append(
                 {
                     "Imbalance": imbalance,
-                    "Sampler": f"{SAMPLE_STRAT_NAME_MAP.get(sampler, sampler)} "
+                    "Strategy": f"{SAMPLE_STRAT_NAME_MAP.get(sampler, sampler)} "
                     "(others)",
-                    "Minority Metrics": f"${other_rmse[sampler]['minority'][0]:.3f}^"
-                    f"{{{other_rmse[sampler]['minority'][2]:.3f}}}_"
-                    f"{{{other_rmse[sampler]['minority'][1]:.3f}}}$",
-                    "Majority Metrics": f"${other_rmse[sampler]['majority'][0]:.3f}^"
-                    f"{{{other_rmse[sampler]['majority'][2]:.3f}}}_"
-                    f"{{{other_rmse[sampler]['majority'][1]:.3f}}}$",
-                    "All Metrics": f"${other_rmse[sampler]['overall'][0]:.3f}^"
-                    f"{{{other_rmse[sampler]['overall'][2]:.3f}}}_"
-                    f"{{{other_rmse[sampler]['overall'][1]:.3f}}}$",
+                    METRIC_GROUP_NAME_MAP[
+                        metric_keys[0]
+                    ]: f"${other_rmse[sampler][metric_keys[0]][0]:.3f}^"
+                    f"{{{other_rmse[sampler][metric_keys[0]][2]:.3f}}}_"
+                    f"{{{other_rmse[sampler][metric_keys[0]][1]:.3f}}}$",
+                    METRIC_GROUP_NAME_MAP[
+                        metric_keys[1]
+                    ]: f"${other_rmse[sampler][metric_keys[1]][0]:.3f}^"
+                    f"{{{other_rmse[sampler][metric_keys[1]][2]:.3f}}}_"
+                    f"{{{other_rmse[sampler][metric_keys[1]][1]:.3f}}}$",
+                    METRIC_GROUP_NAME_MAP[
+                        metric_keys[2]
+                    ]: f"${other_rmse[sampler][metric_keys[2]][0]:.3f}^"
+                    f"{{{other_rmse[sampler][metric_keys[2]][2]:.3f}}}_"
+                    f"{{{other_rmse[sampler][metric_keys[2]][1]:.3f}}}$",
                 }
             )
 
@@ -289,9 +378,9 @@ def make_combined_table():
 
     # Create wide format table with imbalance levels as columns
     df_combined = df_long.pivot_table(
-        index="Sampler",
+        index="Strategy",
         columns="Imbalance",
-        values=["Minority Metrics", "Majority Metrics", "All Metrics"],
+        values=list(METRIC_GROUP_NAME_MAP.values()),
         aggfunc="first",
     )
 
@@ -299,11 +388,7 @@ def make_combined_table():
     new_columns = []
     for imbalance in imbalances:
         new_columns.extend(
-            [
-                ("Minority Metrics", imbalance),
-                ("Majority Metrics", imbalance),
-                ("All Metrics", imbalance),
-            ]
+            [(metric_name, imbalance) for metric_name in METRIC_GROUP_NAME_MAP.values()]
         )
 
     df_combined = df_combined.reindex(columns=new_columns)
@@ -338,8 +423,8 @@ def make_combined_table():
 
 if __name__ == "__main__":
     # main()
-    # # Create tables for each imbalance level
-    # for imbalance in imbalances:
-    #     make_table(imbalance)
+    # Create tables for each imbalance level
+    for imbalance in imbalances:
+        make_table(imbalance)
     # Create combined table with all metrics
     make_combined_table()
