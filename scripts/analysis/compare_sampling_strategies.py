@@ -116,7 +116,9 @@ if __name__ == "__main__":
         help="Model name (e.g., 'distilbert', 'gpt2', 'ModernBERT')",
     )
     parser.add_argument(
-        "test_imbalance",
+        "--imbalances",
+        nargs="+",
+        required=True,
         help="Test imbalance level (e.g., '05', '01', '001')",
     )
     parser.add_argument(
@@ -130,4 +132,5 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    main(args.base_path, args.model, args.test_imbalance, args.strategies)
+    for imbalance in args.imbalances:
+        main(args.base_path, args.model, imbalance, args.strategies)

@@ -7,7 +7,7 @@ import pandas as pd
 
 from arc_tigers.eval.plotting import MODEL_NAME_MAP
 
-MODERN_BERT_MAP = {"fp16": "small", "200k": "large"}
+MODERN_BERT_MAP = {"fp16": "small", "200k": "large", "short": "large"}
 
 
 def main():
@@ -46,12 +46,12 @@ def main():
                 )
 
             new_data = {
-                "Model": model_name,
-                "Accuracy": data["accuracy"],
-                "Loss": data["loss"],
-                "Average precision": data["average_precision"],
-                "Target Precision": data["precision_1"],
-                "Target Recall": data["recall_1"],
+                "\\textbf{Model}": f"\\textbf{{{model_name}}}",
+                "\\textbf{Accuracy}": data["accuracy"],
+                "\\textbf{Loss}": data["loss"],
+                "\\textbf{Average precision}": data["average_precision"],
+                "\\textbf{Minority F1-Score}": data["f1_1"],
+                "\\textbf{Majority F1-Score}": data["f1_0"],
             }
             df = pd.DataFrame([new_data])
             results.append(df)
@@ -64,9 +64,14 @@ def main():
     # Save to LaTeX table
     latex_table = combined_results.to_latex(
         index=False,
-        float_format="%.3f",
+        float_format="$%.3f$",
         column_format="l" + "c" * (len(combined_results.columns) - 1),
         escape=False,
+        label="tab:baseline_performance",
+        caption="Summary of model performance across different architectures.",
+    )
+    latex_table = latex_table.replace(
+        "\\begin{table}\n", "\\begin{table}[!h]\n\\centering\n"
     )
 
     # Make column names bold

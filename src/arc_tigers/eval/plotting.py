@@ -39,7 +39,7 @@ METRIC_NAME_MAP = {
 }
 
 SAMPLE_STRAT_NAME_MAP = {
-    "random": "Random",
+    "random": "Random Uniform",
     "ssepy": "ssepy",
     "minority": "Minority",
     "isolation": "Isolation",
@@ -635,7 +635,7 @@ def sampling_comparison_mse(
         for strategy_name in strategy_names:
             mse = metric_stats[strategy_name][metric]["mse"]
             x_vals = metric_stats[strategy_name]["n_labels"][1:]  # type: ignore[index]
-            y_vals = mse[1:]
+            y_vals = np.sqrt(mse[1:])
 
             plt.plot(
                 x_vals,
@@ -645,10 +645,17 @@ def sampling_comparison_mse(
                 linewidth=2,
             )
 
-        plt.ylabel(f"MSE from full test {metric}")
-        plt.xlabel("Number of labelled samples")
-        plt.legend()
-        plt.title(f"Sampling Strategy Comparison: Sampling Error {metric}")
+        plt.ylabel(
+            f"RMSE from full test {METRIC_NAME_MAP.get(metric, metric)}",
+            fontsize=16,
+        )
+        plt.xlabel("Number of labelled samples", fontsize=16)
+        plt.legend(fontsize=14)
+        # plt.title(
+        #     "Sampling Strategy Comparison: Sampling Error "
+        #     f"{METRIC_NAME_MAP.get(metric, metric)}",
+        #     fontsize=15,
+        # )
         plt.tight_layout()
         plt.savefig(f"{save_dir}/mse/{metric}.png", dpi=300)
         plt.close()

@@ -17,7 +17,12 @@ os.makedirs(tables_dir, exist_ok=True)
 os.makedirs(figures_dir, exist_ok=True)
 os.makedirs(data_dir, exist_ok=True)
 
-SAMPLING_STRATEGIES = ["accuracy_lightgbm", "info_gain_lightgbm", "minority", "ssepy"]
+SAMPLING_STRATEGIES = [
+    "accuracy_lightgbm",
+    "info_gain_lightgbm",
+    "minority",
+    "ssepy",
+]
 models = {
     "DistilBERT": ("distilbert", "default"),
     "GPT-2": ("gpt2", "default"),
@@ -25,6 +30,7 @@ models = {
     "Zero-shot": ("zero-shot", "default"),
 }
 imbalances = ["05", "01", "001"]
+# imbalances = ["001"]
 METRICS = [
     "accuracy",
     "average_precision",
@@ -41,11 +47,13 @@ def nan_root_mean(values):
     return np.sqrt(np.nanmean(values))
 
 
-def get_aggregate_rmse(replays_dir):
+def get_aggregate_rmse(replays_dir, replay=True):
     """Get the aggregate RMSE for a specific model transfer scenario."""
     bootstrap_se_vals = []
     for sample_strategy in SAMPLING_STRATEGIES:
-        replay_metrics_paths = f"{replays_dir}/{sample_strategy}/all_seeds/"
+        replay_metrics_paths = (
+            f"{replays_dir}/{sample_strategy}/{'all_seeds/' * replay}"
+        )
         se_values = get_se_values(replay_metrics_paths)
         for metric in METRICS:
             bootstrap_se_vals.append(se_values[metric].flatten())
@@ -77,15 +85,22 @@ def model_transfer_matrix():
         for model1_name, model1 in models.items():
             for model2_name, model2 in models.items():
                 if model1 == model2:
-                    continue
+                    replay_dir = (
+                        f"{base_dir}/{model1[0]}/{model1[1]}/eval_outputs/{imbalance}"
+                    )
+                    aggregate_rmse = get_aggregate_rmse(
+                        replay_dir,
+                        replay=False,
+                    )
                 # Simulate getting model performance for each imbalance
-                replay_dir = (
-                    f"{base_dir}/replays/{imbalance}/{model1[0]}_{model1[1]}"
-                    f"/from_{model2[0]}_{model2[1]}"
-                )
-                aggregate_rmse = get_aggregate_rmse(
-                    replay_dir,
-                )
+                else:
+                    replay_dir = (
+                        f"{base_dir}/replays/{imbalance}/{model1[0]}_{model1[1]}"
+                        f"/from_{model2[0]}_{model2[1]}"
+                    )
+                    aggregate_rmse = get_aggregate_rmse(
+                        replay_dir,
+                    )
 
                 # Add to results
                 results.append(
@@ -139,12 +154,6 @@ def create_transfer_matrices(df):
             ci_low_matrix.loc[source, target] = row["rmse_ci_low"]
             ci_high_matrix.loc[source, target] = row["rmse_ci_high"]
 
-        # Set diagonal to NaN (same model transfers)
-        for model in model_names:
-            mean_matrix.loc[model, model] = np.nan
-            ci_low_matrix.loc[model, model] = np.nan
-            ci_high_matrix.loc[model, model] = np.nan
-
         # Store matrices
         matrices[imbalance] = {
             "mean": mean_matrix,
@@ -183,7 +192,7 @@ def create_combined_matrix(matrices):
 
     for imbalance in imbalances:
         # Create combined string matrix
-        model_names_table_map = {name: f"\\textbf{{{name}}}" for name in model_names}
+        model_names_table_map = {name: name for name in model_names}
         combined_matrix = pd.DataFrame(
             index=model_names_table_map.values(),
             columns=model_names_table_map.values(),
@@ -194,29 +203,22 @@ def create_combined_matrix(matrices):
         ci_low_mat = matrices[imbalance]["ci_low"]
         ci_high_mat = matrices[imbalance]["ci_high"]
 
-        for source in model_names:
-            for target in model_names:
-                if source == target:
-                    combined_matrix.loc[
-                        model_names_table_map[source], model_names_table_map[target]
-                    ] = "—"
-                else:
-                    mean_val = mean_mat.loc[source, target]
-                    ci_low_val = ci_low_mat.loc[source, target]
-                    ci_high_val = ci_high_mat.loc[source, target]
+        for target_model in model_names:
+            for source_model in model_names:
+                mean_val = mean_mat.loc[target_model, source_model]
+                ci_low_val = ci_low_mat.loc[target_model, source_model]
+                ci_high_val = ci_high_mat.loc[target_model, source_model]
 
-                    if pd.notna(mean_val):
-                        combined_matrix.loc[
-                            model_names_table_map[source], model_names_table_map[target]
-                        ] = (
-                            f"${mean_val:.4f}"
-                            f"_{{{ci_low_val:.4f}}}"
-                            f"^{{{ci_high_val:.4f}}}$"
-                        )
-                    else:
-                        combined_matrix.loc[
-                            model_names_table_map[source], model_names_table_map[target]
-                        ] = "N/A"
+                if pd.notna(mean_val):
+                    combined_matrix.loc[
+                        model_names_table_map[target_model],
+                        model_names_table_map[source_model],
+                    ] = f"${mean_val:.4f}_{{{ci_low_val:.4f}}}^{{{ci_high_val:.4f}}}$"
+                else:
+                    combined_matrix.loc[
+                        model_names_table_map[target_model],
+                        model_names_table_map[source_model],
+                    ] = "N/A"
 
         # Create the LaTeX table with custom formatting
         imbalance_percentage = int(float(imbalance[0] + "." + imbalance[1:]) * 100)
@@ -232,8 +234,8 @@ def create_combined_matrix(matrices):
         # Replace the empty top-left cell with "Source / Target Model"
         latex_content = latex_content.replace(
             "\\toprule\n & ",
-            "\\toprule\n & \\multicolumn{4}{c}{\\textbf{Target Model}} \\\\"
-            "\n\\textbf{Source Model} & ",
+            "\\toprule\n & \\multicolumn{4}{c}{\\textbf{Source Model}} \\\\"
+            "\n\\textbf{Target Model} & ",
         )
 
         latex_content = latex_content.replace(
