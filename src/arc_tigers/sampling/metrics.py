@@ -9,7 +9,7 @@ from sklearn.metrics import (
 )
 from torch.nn.functional import cross_entropy
 
-from arc_tigers.sampling.bias import BiasCorrector
+from arc_tigers.sampling.bias import HTBiasCorrector, LUREBiasCorrector
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,8 @@ def compute_loss(
             torch.tensor(labels),
             reduction="none",
         )
-        loss = (loss * torch.tensor(sample_weight, dtype=loss.dtype)).mean()
+        w = torch.tensor(sample_weight, dtype=loss.dtype)
+        loss = (loss * w).sum() / w.sum()
     else:
         loss = cross_entropy(
             torch.tensor(logits, dtype=torch.float32),
@@ -81,7 +82,7 @@ def unpack_metrics(metrics):
 def evaluate(
     dataset,
     preds,
-    bias_corrector: BiasCorrector | None = None,
+    bias_corrector: LUREBiasCorrector | HTBiasCorrector | None = None,
 ) -> dict[str, int | float]:
     """
     Compute metrics for a given dataset with preds.
@@ -103,7 +104,7 @@ def evaluate(
 # Define metrics
 def compute_metrics(
     eval_pred: tuple[np.ndarray, np.ndarray],
-    bias_corrector: BiasCorrector | None = None,
+    bias_corrector: LUREBiasCorrector | HTBiasCorrector | None = None,
 ) -> dict[str, int | float | list[int | float]]:
     logits, labels = eval_pred
     if logits.ndim == 1:
@@ -118,7 +119,7 @@ def compute_metrics(
         probs = softmax(logits)[:, 1] if logits.shape[1] > 1 else softmax(logits)[:, 0]
         predictions = np.argmax(logits, axis=-1)
 
-    sample_weight = bias_corrector.v_values if bias_corrector else None
+    sample_weight = bias_corrector.sample_weights if bias_corrector else None
     precision, recall, f1, _ = precision_recall_fscore_support(
         labels,
         predictions,
