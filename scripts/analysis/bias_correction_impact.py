@@ -5,22 +5,31 @@ import shutil
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from scipy.stats import bootstrap
 
-from arc_tigers.eval.utils import get_metric_stats, get_se_values
+from arc_tigers.eval.aggregate_utils import sqrt_mean
+from arc_tigers.eval.plotting import METRIC_NAME_MAP, SAMPLE_STRAT_NAME_MAP
+from arc_tigers.eval.utils import get_se_values
 from arc_tigers.replay.utils import load_sampling_data
-from arc_tigers.sampling.bias import BiasCorrector
+from arc_tigers.sampling.bias import HTBiasCorrector, LUREBiasCorrector
 from arc_tigers.sampling.metrics import compute_metrics, inverse_softmax, unpack_metrics
 
 METRICS = [
     "accuracy",
+    "loss",
     "average_precision",
     "f1_0",
     "f1_1",
-    "precision_0",
-    "precision_1",
-    "recall_0",
-    "recall_1",
 ]
+
+SAMPLERS = ["accuracy_lightgbm", "info_gain_lightgbm", "minority", "ssepy"]
+MODELS = [
+    ("distilbert", "default"),
+    ("gpt2", "default"),
+    ("ModernBERT", "short"),
+    ("zero-shot", "default"),
+]
+IMBALANCE_LEVELS = ["05", "01", "001"]
 
 
 def uncorrect_bias(experiment_dir):
@@ -40,18 +49,22 @@ def uncorrect_bias(experiment_dir):
         metrics_df = pd.read_csv(f"{experiment_dir}/metrics_{seed}.csv")
         sample_counts = metrics_df["n"]
 
-        bias_corrector = BiasCorrector(
-            N=sample_data["dataset_size"], M=sample_data["n_labels"]
-        )
+        if sample_strat != "ssepy":
+            bias_corrector = LUREBiasCorrector(
+                N=sample_data["dataset_size"], M=sample_data["n_labels"]
+            )
         sample_indices = sample_data["sample_idx"]
         sample_probabilities = sample_data["sample_prob"]
 
         sample_index = 0
         uncorrected_df = pd.DataFrame()
         for n_samples in sample_counts:
-            for p in sample_probabilities[sample_index:n_samples]:
-                bias_corrector.compute_weighting_factor(p, sample_index)
-                sample_index += 1
+            if sample_strat == "ssepy":
+                bias_corrector = HTBiasCorrector(sample_probabilities[:n_samples])
+            else:
+                for p in sample_probabilities[sample_index:n_samples]:
+                    bias_corrector.compute_weighting_factor(p, sample_index)
+                    sample_index += 1
 
             indices = sample_indices[:n_samples]
             # use 1d preds as compute metrics expects logits or binary predictions
@@ -66,7 +79,7 @@ def uncorrect_bias(experiment_dir):
             )
         uncorrected_df.to_csv(f"{save_dir}/metrics_{seed}.csv", index=False)
 
-    get_metric_stats(save_dir)
+    return sample_counts
 
 
 def plot_comparison(corrected, uncorrected, metric, savedir):
@@ -80,7 +93,7 @@ def plot_comparison(corrected, uncorrected, metric, savedir):
     plt.close()
 
 
-def compare_bias_correction(experiment_dir):
+def compare_bias_correction(experiment_dir, uncorrected_dict, corrected_dict):
     uncorrected_dir = (
         f"{experiment_dir}/../bias_uncorrected_{experiment_dir.split('/')[-1]}/"
     )
@@ -99,11 +112,104 @@ def compare_bias_correction(experiment_dir):
             savedir=uncorrected_dir,
         )
 
+        corrected_dict[metric].append(corrected_se_vals[metric].flatten())
+        uncorrected_dict[metric].append(uncorrected_se_vals[metric].flatten())
+
+    return corrected_dict, uncorrected_dict
+
 
 if __name__ == "__main__":
-    example_dir = (
-        "outputs/reddit_dataset_12/one-vs-all/football/42_05/distilbert/"
-        "default/eval_outputs/05/info_gain_lightgbm"
+    base_dir = "outputs/reddit_dataset_12/one-vs-all/football/42_05/"
+    imbalance = "05"
+    bias_correction_df = pd.DataFrame(
+        columns=[
+            "Sample Strategy",
+            "BC",
+            *[METRIC_NAME_MAP.get(metric, metric) for metric in METRICS],
+        ]
     )
-    # uncorrect_bias(example_dir)
-    compare_bias_correction(example_dir)
+    for sampler in SAMPLERS:
+        uncorrected_dict = {metric: [] for metric in METRICS}
+        corrected_dict = {metric: [] for metric in METRICS}
+        for model in MODELS:
+            example_dir = (
+                f"{base_dir}/{model[0]}/{model[1]}/eval_outputs/{imbalance}/{sampler}"
+            )
+            uncorrect_bias(example_dir)
+            uncorrected_dict, corrected_dict = compare_bias_correction(
+                example_dir, uncorrected_dict, corrected_dict
+            )
+
+        bootstrap_corrected = {}
+        bootstrap_uncorrected = {}
+        print(f"\nSample Strategy: {sampler}, Imbalance: {imbalance}")
+        corrected_df_row = {
+            "Sample Strategy": SAMPLE_STRAT_NAME_MAP.get(sampler, sampler),
+            "BC": "Yes",
+        }
+        uncorrected_df_row = {
+            "Sample Strategy": SAMPLE_STRAT_NAME_MAP.get(sampler, sampler),
+            "BC": "No",
+        }
+        for metric in METRICS:
+            corrected_dict[metric] = np.hstack(corrected_dict[metric]).flatten()
+            uncorrected_dict[metric] = np.hstack(uncorrected_dict[metric]).flatten()
+            boot_uncorrected = bootstrap(
+                (uncorrected_dict[metric],),
+                sqrt_mean,
+                n_resamples=1000,
+            )
+            boot_corrected = bootstrap(
+                (corrected_dict[metric],),
+                sqrt_mean,
+                n_resamples=1000,
+            )
+
+            bootstrap_corrected[metric] = (
+                boot_corrected.bootstrap_distribution.mean(),
+                (
+                    boot_corrected.confidence_interval.low,
+                    boot_corrected.confidence_interval.high,
+                ),
+            )
+
+            corrected_df_row[METRIC_NAME_MAP.get(metric, metric)] = (
+                f"${bootstrap_corrected[metric][0]:.4f}"
+                f"^{{{bootstrap_corrected[metric][1][1]:.4f}}}"
+                f"_{{{bootstrap_corrected[metric][1][0]:.4f}}}$"
+            )
+
+            bootstrap_uncorrected[metric] = (
+                boot_uncorrected.bootstrap_distribution.mean(),
+                (
+                    boot_uncorrected.confidence_interval.low,
+                    boot_uncorrected.confidence_interval.high,
+                ),
+            )
+
+            uncorrected_df_row[METRIC_NAME_MAP.get(metric, metric)] = (
+                f"${bootstrap_uncorrected[metric][0]:.4f}"
+                f"^{{{bootstrap_uncorrected[metric][1][1]:.4f}}}"
+                f"_{{{bootstrap_uncorrected[metric][1][0]:.4f}}}$"
+            )
+        bias_correction_df = pd.concat(
+            [bias_correction_df, pd.DataFrame([corrected_df_row, uncorrected_df_row])],
+            ignore_index=True,
+        )
+    table_dir = f"{base_dir}/tables/bias_correction"
+    os.makedirs(table_dir, exist_ok=True)
+    bias_correction_df.to_csv(
+        f"{table_dir}/aggregated_sampling_results.csv",
+        index=False,
+    )
+    bias_correction_df.to_latex(
+        f"{table_dir}/aggregated_sampling_results.tex",
+        index=False,
+        column_format="ll" + "c" * len(METRICS),
+        label="tab:bias_correction_sampling_strats",
+        caption=(
+            "The impact of bias correction on different sampling strategies. "
+            "Results are aggregated over 80 runs across 4 models and "
+            "bootstrapped with 1000 resamples."
+        ),
+    )
