@@ -16,7 +16,8 @@ from arc_tigers.samplers.acquisition import (
 from arc_tigers.samplers.fixed import FixedSampler
 from arc_tigers.samplers.methods import SAMPLING_STRATEGIES
 from arc_tigers.samplers.sampler import Sampler
-from arc_tigers.sampling.bias import BiasCorrector
+from arc_tigers.samplers.ssepy import SSEPySampler
+from arc_tigers.sampling.bias import HTBiasCorrector, LUREBiasCorrector
 from arc_tigers.sampling.metrics import evaluate, per_sample_stats
 from arc_tigers.sampling.utils import get_preds, get_surrogate_data
 from arc_tigers.training.config import TrainConfig
@@ -26,10 +27,10 @@ from arc_tigers.utils import to_json
 def sample_dataset_metrics(
     dataset: Dataset,
     preds: np.ndarray,
-    sampler: Sampler,
+    sampler: Sampler | SSEPySampler,
     evaluate_steps: list[int],
-    bias_corrector: BiasCorrector | None = None,
-) -> list[dict[str, float]]:
+    bias_corrector: LUREBiasCorrector | HTBiasCorrector | None = None,
+) -> tuple[list[dict[str, int | float]], list[dict[str, list[int | float] | int]]]:
     """
     Simulate iteratively random sampling the whole dataset, re-computing metrics
     after each sample.
@@ -49,12 +50,19 @@ def sample_dataset_metrics(
     max_labels = evaluate_steps[-1]
     evaluate_steps = deepcopy(evaluate_steps)
     metrics = []
+    sample_history = []
     next_eval_step = evaluate_steps.pop(0)
     for n in tqdm(range(max_labels)):
-        _, q = sampler.sample()
-        if bias_corrector is not None:
-            bias_corrector.compute_weighting_factor(q_im=q, m=n + 1)
+        if isinstance(sampler, Sampler):
+            _, q = sampler.sample()
+            if isinstance(bias_corrector, LUREBiasCorrector):
+                bias_corrector.compute_weighting_factor(q_im=q, m=n + 1)
+
         if (n + 1) == next_eval_step:
+            if isinstance(sampler, SSEPySampler):
+                sampler.sample(n + 1)
+            if isinstance(bias_corrector, HTBiasCorrector):
+                bias_corrector = HTBiasCorrector(sampler.sample_prob)
             metric = evaluate(
                 dataset[sampler.labelled_idx],
                 preds[sampler.labelled_idx],
@@ -62,12 +70,22 @@ def sample_dataset_metrics(
             )
             metric["n"] = n + 1
             metrics.append(metric)
+
+            sample_history.append(
+                {
+                    "sample_idx": sampler.labelled_idx,
+                    "sample_prob": sampler.sample_prob,
+                    "dataset_size": len(preds),
+                    "n_labels": n + 1,
+                }
+            )
+
             if evaluate_steps:
                 next_eval_step = evaluate_steps.pop(0)
             else:
                 break
 
-    return metrics
+    return metrics, sample_history
 
 
 def sampling_loop(
@@ -161,6 +179,7 @@ def sampling_loop(
             "minority_class": 1,  # Assuming class 1 is the minority class
             "model_preds": predictions,
             "retrain_every": retrain_every,
+            "n_clusters": 10,  # Default number of clusters for SSEPySampler
         }
 
     if isinstance(data_config, HFDataConfig) and not is_replay:
@@ -187,12 +206,16 @@ def sampling_loop(
             sampler_args["seed"] = seed
 
         sampler = sampler_class(**sampler_args)
-        bias_corrector = (
-            BiasCorrector(N=len(predictions), M=max_labels)
-            if sampling_strategy != "random"
-            else None
-        )
-        metrics = sample_dataset_metrics(
+        if sampling_strategy == "ssepy":
+            bias_corrector: HTBiasCorrector | LUREBiasCorrector | None = (
+                HTBiasCorrector(sampler.sample_prob)
+            )
+        elif sampling_strategy == "random":
+            bias_corrector = None
+        else:
+            bias_corrector = LUREBiasCorrector(N=len(predictions), M=max_labels)
+
+        metrics, sample_history = sample_dataset_metrics(
             eval_data,
             predictions,
             sampler,
@@ -201,12 +224,4 @@ def sampling_loop(
         )
 
         pd.DataFrame(metrics).to_csv(f"{output_dir}/metrics_{seed}.csv", index=False)
-        to_json(
-            {
-                "sample_idx": sampler.labelled_idx,
-                "sample_prob": sampler.sample_prob,
-                "dataset_size": len(predictions),
-                "n_labels": max_labels,
-            },
-            f"{output_dir}/sample_{seed}.json",
-        )
+        to_json(sample_history, f"{output_dir}/sample_{seed}.json")
