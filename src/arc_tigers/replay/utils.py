@@ -3,15 +3,60 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import yaml
 from datasets import Dataset
 
-from arc_tigers.data.config import load_data_config
 from arc_tigers.samplers.fixed import FixedSampler
-from arc_tigers.sampling.run import sampling_loop
 from arc_tigers.training.config import TrainConfig
 
 logger = logging.getLogger(__name__)
+
+
+def extract_eval_data_config_from_path(experiment_output_dir: str | Path) -> str:
+    """
+    Extract the evaluation data config from the experiment output directory path.
+
+    For a path like: outputs/reddit_dataset_12/one-vs-all/football/42_05/distilbert/
+    default/eval_outputs/05/random/
+    This returns: "05" (the second to last component, before the sampling strategy)
+
+    Args:
+        experiment_output_dir: Path to the experiment output directory
+
+    Returns:
+        The evaluation data config identifier (e.g., "05", "01", "001")
+
+    Raises:
+        ValueError: If the path structure doesn't match expected format
+    """
+    path = Path(experiment_output_dir)
+    parts = path.parts
+
+    # Expected structure: .../eval_outputs/{eval_data_config}/{sampling_strategy}
+    # So eval_data_config should be the second to last part
+    if len(parts) < 2:
+        msg = f"Path too short to extract eval data config: {path}"
+        raise ValueError(msg)
+
+    # Find eval_outputs in the path
+    eval_outputs_idx = None
+    for i, part in enumerate(parts):
+        if part == "eval_outputs":
+            eval_outputs_idx = i
+            break
+
+    if eval_outputs_idx is None:
+        msg = f"Path does not contain 'eval_outputs': {path}"
+        raise ValueError(msg)
+
+    # eval_data_config should be the part immediately after eval_outputs
+    if eval_outputs_idx + 1 >= len(parts):
+        msg = f"No eval data config found after 'eval_outputs' in path: {path}"
+        raise ValueError(msg)
+
+    eval_data_config = parts[eval_outputs_idx + 1]
+
+    logger.info("Extracted eval data config '%s' from path: %s", eval_data_config, path)
+    return eval_data_config
 
 
 def load_sampling_data(experiment_output_dir: str | Path) -> dict[str, Any]:
@@ -41,8 +86,6 @@ def load_sampling_data(experiment_output_dir: str | Path) -> dict[str, Any]:
         msg = f"No sample_*.json files found in {experiment_dir}"
         raise FileNotFoundError(msg)
 
-    logger.info("Found %d sample files in %s", len(sample_files), experiment_dir)
-
     # Load and validate all sample data
     sample_data = []
     seeds = []
@@ -56,16 +99,20 @@ def load_sampling_data(experiment_output_dir: str | Path) -> dict[str, Any]:
         seed = int(sample_file.stem.split("_")[1])
         seeds.append(seed)
 
+        if type(data) is list:
+            data = data[-1]
+
         # Validate dataset size consistency
         if dataset_size is None:
             dataset_size = data["dataset_size"]
 
         sample_data.append(data)
-        log_msg = (
-            f"Loaded sampling data from {sample_file.name}: "
-            f"{len(data['sample_idx'])} samples, seed={seed}"
-        )
-        logger.info(log_msg)
+
+    msg = (
+        "Lists found in sample files, expected dicts of final sampling runs. "
+        "Taken final index assuming they contain final sampling run."
+    )
+    logger.warning(msg)
 
     return {
         "sample_files": sample_files,
@@ -145,12 +192,6 @@ def create_fixed_sampler_from_experiment(
         )
         raise ValueError(msg)
 
-    logger.info(
-        "Creating FixedSampler with %d samples from seed %d",
-        len(sample_indices),
-        seed_to_replay,
-    )
-
     return FixedSampler(
         eval_data=eval_data,
         seed=seed_to_replay,
@@ -162,13 +203,15 @@ def create_fixed_sampler_from_experiment(
 def create_replay_output_dir(
     original_experiment_dir: str | Path,
     new_train_config: TrainConfig,
-    seed_to_replay: int,
+    seed_to_replay: int | None = None,
 ) -> Path:
     """
     Create a structured output directory for replay experiments.
 
     Creates output directory structure like:
     `outputs/{data}/{task}/{model_id}/replays/{eval_id}/replay_from_{orig_model}_{orig_hparams}_{orig_strategy}/to_{new_model}_{new_hparams}/seed_{seed}`
+    If seed_to_replay is None, creates a shared directory without the seed suffix for
+    multi-seed experiments.
 
     `original_experiment_directory` should be structured like:
     `outputs/{dataset}/{task}/{model_id}/{orig_model}/{orig_hparams}/eval_outputs/{eval_id}/{strategy}`
@@ -176,7 +219,8 @@ def create_replay_output_dir(
     Args:
         original_experiment_dir: Path to original experiment.
         new_train_config: Configuration for the new model
-        seed_to_replay: Seed being replayed
+        seed_to_replay: Seed being replayed. If None, creates shared directory for all
+        seeds
 
     Returns:
         Path to the structured output directory
@@ -233,161 +277,33 @@ def create_replay_output_dir(
     )
 
     # Create structured path
-    replay_dir = (
-        Path("outputs")
-        / data_config  # data
-        / task  # task
-        / original_parts[3]  # data config
-        / model_id  # seed/train imbalance
-        / "replays"
-        / eval_id  # (evaluation data imbalance)
-        / f"from_{original_model}_{original_hparams}_{original_strategy}"
-        / f"to_{new_model}_{new_hparams}"
-        / f"seed_{seed_to_replay}"
-    )
+    if seed_to_replay is not None:
+        replay_dir = (
+            Path("outputs")
+            / data_config  # data
+            / task  # task
+            / original_parts[3]  # data config
+            / model_id  # seed/train imbalance
+            / "replays"
+            / eval_id  # (evaluation data imbalance)
+            / f"{new_model}_{new_hparams}"
+            / f"from_{original_model}_{original_hparams}/{original_strategy}"
+            / f"seed_{seed_to_replay}"
+        )
+    else:
+        # Shared directory for all seeds
+        replay_dir = (
+            Path("outputs")
+            / data_config  # data
+            / task  # task
+            / original_parts[3]  # data config
+            / model_id  # seed/train imbalance
+            / "replays"
+            / eval_id  # (evaluation data imbalance)
+            / f"{new_model}_{new_hparams}"
+            / f"from_{original_model}_{original_hparams}/{original_strategy}"
+            / "all_seeds"
+        )
 
     replay_dir.mkdir(parents=True, exist_ok=True)
     return replay_dir
-
-
-def save_replay_metadata(
-    output_dir: Path,
-    original_experiment_dir: str | Path,
-    new_train_config: TrainConfig,
-    seed_to_replay: int,
-    max_samples: int | None,
-    n_samples_replayed: int,
-) -> None:
-    """
-    Save metadata about the replay experiment.
-
-    Args:
-        output_dir: Directory where replay results are saved
-        original_experiment_dir: Path to original experiment
-        new_train_config: Configuration for the new model
-        seed_to_replay: Seed that was replayed
-        max_samples: Maximum samples specified (if any)
-        n_samples_replayed: Actual number of samples replayed
-    """
-    metadata = {
-        "replay_info": {
-            "original_experiment_dir": str(original_experiment_dir),
-            "new_model_config": new_train_config.model_config,
-            "new_hparams_config": new_train_config.hparams_config,
-            "data_config": new_train_config.data_config,
-            "seed_replayed": seed_to_replay,
-            "max_samples_requested": max_samples,
-            "actual_samples_replayed": n_samples_replayed,
-        },
-        "original_config_path": str(Path(original_experiment_dir) / "config.yaml"),
-        "replay_strategy": "fixed_sampler",
-        "creation_timestamp": str(Path(output_dir).stat().st_mtime),
-    }
-
-    metadata_file = output_dir / "replay_metadata.yaml"
-    with open(metadata_file, "w") as f:
-        yaml.dump(metadata, f, default_flow_style=False, indent=2)
-
-    logger.info("Saved replay metadata to %s", metadata_file)
-
-
-def replay_experiment_with_new_model(
-    original_experiment_dir: str | Path,
-    new_train_config: TrainConfig | str | Path,
-    seed_to_replay: int,
-    max_samples: int | None = None,
-    eval_every: int = 50,
-) -> None:
-    """
-    Replay a previous experiment's sampling sequence using a different trained model.
-
-    This function loads the sampling data from a previous experiment and applies
-    the exact same sampling sequence to a new model, enabling direct comparison
-    of model performance with identical sampling strategies.
-
-    Args:
-        original_experiment_dir: Path to the original experiment's output directory
-        new_train_config: TrainConfig or path to config for the new model to evaluate
-        output_dir: Directory to save the new experiment results
-        seed_to_replay: Specific seed from original experiment to replay
-        max_samples: Maximum number of samples to evaluate
-        eval_every: Evaluate metrics every N samples
-    """
-    original_dir = Path(original_experiment_dir)
-
-    # Load original experiment configuration
-    with open(original_dir / "config.yaml") as f:
-        original_config = yaml.safe_load(f)
-
-    # Load the new train config
-    if isinstance(new_train_config, str | Path):
-        new_train_config = TrainConfig.from_path(new_train_config)
-
-    # Create structured output directory if not provided as absolute path
-    output_dir = create_replay_output_dir(
-        original_experiment_dir=original_dir,
-        new_train_config=new_train_config,
-        seed_to_replay=seed_to_replay,
-    )
-    logger.info("Using structured output directory: %s", output_dir)
-
-    # Load data config (should be the same as original)
-    data_config_path = f"configs/data/{original_config['data_config']}.yaml"
-    data_config = load_data_config(data_config_path)
-
-    # Get the test dataset
-    eval_data = data_config.get_test_split()
-
-    # Create fixed sampler from original experiment
-    fixed_sampler = create_fixed_sampler_from_experiment(
-        eval_data=eval_data,
-        experiment_output_dir=original_dir,
-        seed_to_replay=seed_to_replay,
-        max_samples=max_samples,
-    )
-
-    # Determine evaluation steps
-    n_samples = len(fixed_sampler._sample_order)
-    if max_samples:
-        n_samples = min(n_samples, max_samples)
-
-    evaluate_steps = list(range(eval_every, n_samples + 1, eval_every))
-    if not evaluate_steps or evaluate_steps[-1] != n_samples:
-        evaluate_steps.append(n_samples)
-
-    logger.info(
-        "Replaying experiment with %d samples, evaluating at steps: %s",
-        n_samples,
-        evaluate_steps,
-    )
-
-    # Run the sampling loop with replay parameters
-    sample_indices = fixed_sampler._sample_order
-    sample_probabilities = fixed_sampler._sample_prob
-
-    # Run the sampling loop
-    sampling_loop(
-        data_config=data_config,
-        train_config=new_train_config,
-        n_repeats=1,  # Only one repeat since we're replaying specific sequence
-        sampling_strategy="fixed",
-        init_seed=seed_to_replay,
-        evaluate_steps=evaluate_steps,
-        output_dir=output_dir,
-        retrain_every=1,
-        surrogate_pretrain=False,
-        replay_sample_indices=sample_indices,
-        replay_sample_probabilities=sample_probabilities,
-    )
-
-    # Save replay metadata
-    save_replay_metadata(
-        output_dir=Path(output_dir),
-        original_experiment_dir=original_dir,
-        new_train_config=new_train_config,
-        seed_to_replay=seed_to_replay,
-        max_samples=max_samples,
-        n_samples_replayed=n_samples,
-    )
-
-    logger.info("Replay experiment completed. Results saved to %s", output_dir)

@@ -13,7 +13,7 @@ from scipy.spatial.distance import cdist
 from sklearn.ensemble import IsolationForest, RandomForestClassifier
 
 from arc_tigers.samplers.sampler import Sampler
-from arc_tigers.sampling.metrics import softmax
+from arc_tigers.sampling.metrics import normalised_entropy, softmax
 
 logger = logging.getLogger(__name__)
 
@@ -480,6 +480,46 @@ class MinorityClassSampler(AcquisitionFunction):
             pmf = np.ones_like(minority_probs, dtype=np.float64)
         else:
             pmf = minority_probs
+        pmf = np.asarray(pmf, dtype=np.float64)
+        if pmf.sum() != 0:
+            pmf /= pmf.sum()
+        return self.sample_pmf(pmf)
+
+
+class EntropySampler(AcquisitionFunction):
+    """
+    Sampler that selects samples based on the predicted entropy of the model's
+    predictions, aiming to capture the most informative samples for labeling.
+
+    See AcquisitionFunction for documentation of common functionality.
+
+    Args:
+        minority_class: The class label considered as the minority class.
+        model_preds: Predicted class probabilities from the model being evaluated.
+    """
+
+    def __init__(
+        self,
+        eval_data: Dataset,
+        minority_class: int,
+        seed: int,
+        model_preds: np.ndarray,
+        **kwargs,
+    ):
+        super().__init__(eval_data, seed, "entropy")
+        self.minority_class = minority_class
+        self.model_preds = softmax(model_preds)
+
+    def sample(self) -> tuple[int, float]:
+        """Sample based on the predicted entropy of the model's predictions."""
+        rem_idx = np.array(self.remaining_idx)
+        # Calculate entropies directly with numpy array
+        entropies = normalised_entropy(self.model_preds[rem_idx, :])
+        # Avoid all-zero pmf
+        if np.all(entropies == 0):
+            pmf = np.ones_like(entropies, dtype=np.float64)
+        else:
+            pmf = entropies
         pmf = np.asarray(pmf, dtype=np.float64)
         if pmf.sum() != 0:
             pmf /= pmf.sum()
