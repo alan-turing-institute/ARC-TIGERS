@@ -30,6 +30,7 @@ def main(
     """Main function to run bootstrap RMSE analysis."""
     metrics = [
         "accuracy",
+        "loss",
         "average_precision",
         "f1_0",
         "f1_1",
@@ -91,6 +92,7 @@ def main(
     stacked_se_vals = stack_values(
         se_vals, imbalances, sampling_methods, metrics, step_indices
     )
+
     # Stack SE differences for bootstrap analysis
     stacked_se_diffs = stack_values(
         se_diffs, imbalances, diff_sampling_methods, metrics, step_indices
@@ -195,9 +197,9 @@ if __name__ == "__main__":
         default=[
             "random",
             "ssepy",
-            "minority",
             "info_gain_lightgbm",
             "accuracy_lightgbm",
+            "minority",
             "isolation",
         ],
         help="Sampling strategies to evaluate",

@@ -51,15 +51,15 @@ def append_metric_results(
     for metric in METRIC_GROUPS[metric_keys[0]]:
         if metric_keys[0] not in se_history:
             se_history[metric_keys[0]] = []
-        se_history[metric_keys[0]].extend(new_se[metric].flatten().tolist())
+        se_history[metric_keys[0]].extend(new_se[metric][:, 2:].flatten().tolist())
     for metric in METRIC_GROUPS[metric_keys[1]]:
         if metric_keys[1] not in se_history:
             se_history[metric_keys[1]] = []
-        se_history[metric_keys[1]].extend(new_se[metric].flatten().tolist())
+        se_history[metric_keys[1]].extend(new_se[metric][:, 2:].flatten().tolist())
     for metric in METRIC_GROUPS[metric_keys[2]]:
         if metric_keys[2] not in se_history:
             se_history[metric_keys[2]] = []
-        se_history[metric_keys[2]].extend(new_se[metric].flatten().tolist())
+        se_history[metric_keys[2]].extend(new_se[metric][:, 2:].flatten().tolist())
 
 
 def nan_root_mean(values):
@@ -422,7 +422,7 @@ def make_combined_table():
 
 
 if __name__ == "__main__":
-    # main()
+    main()
     # Create tables for each imbalance level
     for imbalance in imbalances:
         make_table(imbalance)

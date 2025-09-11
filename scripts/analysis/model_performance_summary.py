@@ -24,37 +24,34 @@ def main():
     args = parser.parse_args()
 
     results = []
-
     for model in args.models:
-        results_file_path_pattern = (
-            f"{args.base_path}/{model}/*/eval_outputs/05/random/metrics_full.json"
-        )
-        results_files = glob(results_file_path_pattern)
-        for results_file_path in results_files:
-            print(f"Processing results file: {results_file_path}")
-            with open(results_file_path) as file:
-                data = json.load(file)
-            # Extract relevant data
+        model_name = MODEL_NAME_MAP.get(model, model)
+        new_data = {"\\textbf{Model}": f"\\textbf{{{model_name}}}"}
+        for imbalance in ["05", "01", "001"]:
+            results_file_path_pattern = (
+                f"{args.base_path}/{model}/*/eval_outputs/"
+                f"{imbalance}/random/metrics_full.json"
+            )
+            results_files = glob(results_file_path_pattern)
+            for results_file_path in results_files:
+                print(f"Processing results file: {results_file_path}")
+                with open(results_file_path) as file:
+                    data = json.load(file)
+                # Extract relevant data
 
-            if len(results_files) == 1:
-                model_name = MODEL_NAME_MAP.get(model, model)
-            else:
-                config = results_file_path.split("/")[-5]
-                model_name = (
-                    MODEL_NAME_MAP.get(model, model)
-                    + f" ({MODERN_BERT_MAP.get(config, config)})"
+                new_data.update(
+                    {
+                        # "\\textbf{Accuracy}": data["accuracy"],
+                        # "\\textbf{Loss}": data["loss"],
+                        f"\\textbf{{Average precision}} - {imbalance}": data[
+                            "average_precision"
+                        ],
+                        f"\\textbf{{Minority F1-Score}} - {imbalance}": data["f1_1"],
+                        f"\\textbf{{Majority F1-Score}} - {imbalance}": data["f1_0"],
+                    }
                 )
-
-            new_data = {
-                "\\textbf{Model}": f"\\textbf{{{model_name}}}",
-                "\\textbf{Accuracy}": data["accuracy"],
-                "\\textbf{Loss}": data["loss"],
-                "\\textbf{Average precision}": data["average_precision"],
-                "\\textbf{Minority F1-Score}": data["f1_1"],
-                "\\textbf{Majority F1-Score}": data["f1_0"],
-            }
-            df = pd.DataFrame([new_data])
-            results.append(df)
+        df = pd.DataFrame([new_data])
+        results.append(df)
 
     # Further processing and analysis of the combined results DataFrame
     combined_results = pd.concat(results, ignore_index=True)
@@ -88,10 +85,11 @@ def main():
     # Save to file
     table_dir = f"{args.base_path}/tables"
     os.makedirs(table_dir, exist_ok=True)
-    with open(f"{table_dir}/model_performance_summary.tex", "w") as f:
+    save_path = f"{table_dir}/model_performance_summary_new.tex"
+    with open(save_path, "w") as f:
         f.write(latex_table_bold)
 
-    print(f"LaTeX table saved to {table_dir}/model_performance_summary.tex")
+    print(f"LaTeX table saved to {save_path}")
 
 
 if __name__ == "__main__":

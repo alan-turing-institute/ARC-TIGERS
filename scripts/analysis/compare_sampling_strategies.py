@@ -94,7 +94,9 @@ def main(
     sampling_comparison_raw(
         save_dir=save_dir, metric_stats=metric_stats, full_metrics=full_metrics
     )
-    sampling_comparison_mse(save_dir=save_dir, metric_stats=metric_stats)
+    sampling_comparison_mse(
+        save_dir=save_dir, metric_stats=metric_stats, imbalance=test_imbalance
+    )
     sampling_comparison_improvement(save_dir=save_dir, metric_stats=metric_stats)
 
     print(f"Plots saved to {save_dir}")

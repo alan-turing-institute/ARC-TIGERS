@@ -361,7 +361,7 @@ def all_metrics_results(
             for metric in metrics:
                 vals = np.hstack(
                     list(se_vals[imbalance][sampling_strategy][metric].values())
-                ).flatten()
+                )[:, :, 2:].flatten()
                 _bootstrap_result = bootstrap(
                     (vals,),
                     sqrt_mean,

@@ -7,6 +7,7 @@ import numpy.typing as npt
 import pandas as pd
 import scipy.stats as stats
 import seaborn as sns
+from cycler import cycler
 from scipy.stats import bootstrap
 
 METRIC_GROUPS = {
@@ -29,6 +30,7 @@ MODEL_NAME_MAP = {
 
 METRIC_NAME_MAP = {
     "accuracy": "Accuracy",
+    "loss": "Loss",
     "f1_0": "F1 (Majority)",
     "f1_1": "F1 (Minority)",
     "precision_0": "Precision (Majority)",
@@ -36,6 +38,18 @@ METRIC_NAME_MAP = {
     "recall_0": "Recall (Majority)",
     "recall_1": "Recall (Minority)",
     "average_precision": "Average Precision",
+}
+
+SHORTENED_METRIC_NAME_MAP = {
+    "accuracy": "Acc.",
+    "loss": "Loss",
+    "f1_0": "F1 (Maj.)",
+    "f1_1": "F1 (Min.)",
+    "precision_0": "Prec. (Maj.)",
+    "precision_1": "Prec. (Min.)",
+    "recall_0": "Rec. (Maj.)",
+    "recall_1": "Rec. (Min.)",
+    "average_precision": "Avg. Prec.",
 }
 
 SAMPLE_STRAT_NAME_MAP = {
@@ -447,7 +461,7 @@ def plot_metrics(
         y_min = limits_dict.get(metric, (-0.1, 1.1))[0]
         y_max = limits_dict.get(metric, (-0.1, 1.1))[1]
         plt.ylim(y_min, y_max)
-        plt.ylabel(metric)
+        plt.ylabel(METRIC_NAME_MAP.get(metric, metric))
         plt.xlabel("Number of labelled samples")
         plt.legend()
         plt.tight_layout()
@@ -613,6 +627,7 @@ def sampling_comparison_raw(
 def sampling_comparison_mse(
     save_dir: str,
     metric_stats: dict[str, dict[str, npt.NDArray | dict[str, npt.NDArray]]],
+    imbalance: str,
 ):
     """Plot MSE (sampling error) for sampling strategy comparison."""
     strategy_names = list(metric_stats.keys())
@@ -625,14 +640,31 @@ def sampling_comparison_mse(
             continue
 
         plt.figure(figsize=(7, 5))
-        plt.axhline(
-            y=0,
-            color="k",
-            linestyle="--",
-            alpha=0.5,
-        )
-
+        c = plt.get_cmap("Set2").colors
+        plt.rcParams["axes.prop_cycle"] = cycler(color=c)
+        # plt.axhline(
+        #     y=0,
+        #     color="k",
+        #     linestyle="--",
+        #     alpha=0.5,
+        # )
+        index = 0
+        colours = [1, 0, 3, 2, 4]
+        actual_colours = [
+            (0.3860518578202345, 0.347233231410498, 0.9587675565854633),
+            (0.3445203292825778, 0.9058528933329075, 0.3542249551359389),
+            (0.9906165268127168, 0.5364405488158809, 0.35015868672286615),
+            (0.40669494593387073, 0.8441399379845326, 0.964301804990655),
+            (0.9853462883412639, 0.3674190826435139, 0.9724504814304838),
+        ]
         for strategy_name in strategy_names:
+            linestyle = "--" if strategy_name == "random" else "-"
+            linesize = 2.5 if strategy_name == "random" else 2
+            linesize = 3
+            colour = (
+                "black" if strategy_name == "random" else actual_colours[colours[index]]
+            )
+
             mse = metric_stats[strategy_name][metric]["mse"]
             x_vals = metric_stats[strategy_name]["n_labels"][1:]  # type: ignore[index]
             y_vals = np.sqrt(mse[1:])
@@ -641,10 +673,14 @@ def sampling_comparison_mse(
                 x_vals,
                 y_vals,
                 label=SAMPLE_STRAT_NAME_MAP.get(strategy_name, strategy_name),
-                linestyle="-",
-                linewidth=2,
+                linestyle=linestyle,
+                linewidth=linesize,
+                color=colour,
             )
+            if strategy_name != "random":
+                index += 1
 
+        plt.ylim(0, plt.ylim()[1])
         plt.ylabel(
             f"RMSE from full test {METRIC_NAME_MAP.get(metric, metric)}",
             fontsize=16,
@@ -657,7 +693,7 @@ def sampling_comparison_mse(
         #     fontsize=15,
         # )
         plt.tight_layout()
-        plt.savefig(f"{save_dir}/mse/{metric}.png", dpi=300)
+        plt.savefig(f"{save_dir}/mse/{metric}_{imbalance}.png", dpi=300)
         plt.close()
 
 
@@ -1023,10 +1059,13 @@ def generate_all_metrics_rmse_tables(
     tables_dir: str,
 ):
     os.makedirs(tables_dir, exist_ok=True)
-    metric_names = [METRIC_NAME_MAP.get(metric, metric) for metric in metrics]
+    metric_names = [
+        f"\\textbf{{{SHORTENED_METRIC_NAME_MAP.get(metric, metric)}}}"
+        for metric in metrics
+    ]
     """Generate a table with RMSE for all metrics."""
     for imbalance, imbalance_dict in all_metric_stats.items():
-        df = pd.DataFrame(columns=["Sampling Strategy", *metric_names])
+        df = pd.DataFrame(columns=["\\textbf{{Sampling Strategy}}", *metric_names])
         for sampling_strategy in imbalance_dict:
             row = [SAMPLE_STRAT_NAME_MAP.get(sampling_strategy, sampling_strategy)]
             if metrics != list(imbalance_dict[sampling_strategy].keys()):
@@ -1036,14 +1075,33 @@ def generate_all_metrics_rmse_tables(
                 raise ValueError(err_msg)
             for _, values in imbalance_dict[sampling_strategy].items():
                 mean_val, ci = values
-                row.append(f"${mean_val:.3f}^{{{ci[0]:.3f}}}_{{{ci[1]:.3f}}}$")
+                row.append(f"${mean_val:.3f}_{{{ci[0]:.3f}}}^{{{ci[1]:.3f}}}$")
             df.loc[len(df)] = row
         df.to_latex(
             f"{tables_dir}/all_metric_rmse_table_{imbalance}.tex",
             index=False,
             float_format="%.3f",
             column_format="l" + "c" * len(metrics),
-            caption=f"RMSE for all metrics at imbalance {imbalance}",
+            caption=(
+                "RMSE for all metrics at imbalance "
+                f"{int(float(imbalance[:1] + '.' + imbalance[1:]) * 100)}\\%. Metrics "
+                "are aggregated across all models and results are bootstrapped to a "
+                "confidence interval of 95\\%"
+            ),
             label=f"tab:all_metric_rmse_{imbalance}",
+            position="h!",
         )
+        # Read the generated LaTeX file and modify it to add resizebox
+        with open(f"{tables_dir}/all_metric_rmse_table_{imbalance}.tex") as f:
+            content = f.read()
+
+        # Add resizebox wrapper around the tabular environment
+        content = content.replace(
+            "\\begin{tabular}", "\\resizebox{\\textwidth}{!}{%\n\\begin{tabular}"
+        )
+        content = content.replace("\\end{tabular}", "\\end{tabular}\n}")
+
+        # Write the modified content back to the file
+        with open(f"{tables_dir}/all_metric_rmse_table_{imbalance}.tex", "w") as f:
+            f.write(content)
         df.to_csv(f"{tables_dir}/all_metric_rmse_table_{imbalance}.csv", index=False)
