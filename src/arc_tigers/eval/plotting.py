@@ -15,6 +15,7 @@ METRIC_GROUPS = {
     "f1_0": ["f1_0"],
     "average_precision": ["average_precision"],
 }
+
 METRIC_GROUP_NAME_MAP = {
     "f1_1": "F1 (Minority)",
     "f1_0": "F1 (Majority)",
@@ -798,6 +799,7 @@ def generate_grouped_tables(
     sampling_methods: list[str],
     save_dir: str,
     verbose: bool = False,
+    groups=METRIC_GROUPS,
 ) -> None:
     """Generate tables for grouped bootstrap results, one per imbalance level."""
 
@@ -813,7 +815,7 @@ def generate_grouped_tables(
             row = {"Strategy": strategy_name}
 
             # Add columns for each metric group and sample count
-            for group_name in METRIC_GROUPS:
+            for group_name in groups:
                 for step_idx, step in enumerate(evaluate_steps):
                     col_name = f"{group_name} - {step}"
 
