@@ -112,7 +112,10 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Evaluate an experiment and save outputs."
+        description=(
+            "Produce some stats and EDA plots on model performance for an experiment, "
+            "such as words present in correct and incorrect predictions."
+        )
     )
     parser.add_argument(
         "experiment_dir", type=str, help="Path to the experiment directory."

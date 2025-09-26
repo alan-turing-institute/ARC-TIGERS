@@ -18,19 +18,19 @@ if __name__ == "__main__":
         "--target_subreddits",
         type=str,
         default=f"{DATA_DIR}/top_subreddits.json",
-        help="Optional: Path to a JSON file containing a list of target subreddits.",
+        help="Path to a JSON file containing a list of target subreddits.",
     )
     parser.add_argument(
         "--min_length",
         type=int,
         default=30,
-        help="Optional: Minimum length of posts/comments to keep, in characters.",
+        help="Minimum length of posts/comments to keep, in characters.",
     )
     parser.add_argument(
         "--seed",
         type=int,
         default=42,
-        help="Optional: Random seed for shuffling.",
+        help="Random seed for shuffling.",
     )
     args = parser.parse_args()
 
