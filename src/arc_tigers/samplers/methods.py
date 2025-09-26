@@ -1,6 +1,7 @@
 from arc_tigers.samplers.acquisition import (
     AccSampler,
     DistanceSampler,
+    EntropySampler,
     InformationGainSampler,
     IsolationForestSampler,
     MinorityClassSampler,
@@ -16,6 +17,7 @@ SAMPLING_STRATEGIES = {
     "info_gain": InformationGainSampler,
     "isolation": IsolationForestSampler,
     "minority": MinorityClassSampler,
+    "entropy": EntropySampler,
     "fixed": FixedSampler,
     "ssepy": SSEPySampler,
 }

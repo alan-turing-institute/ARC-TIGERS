@@ -1,6 +1,6 @@
 # $1 = Data config
 # $2 = Training config
-# $3 = Retrain frequency
+# $3 = Retrain frequency (typically 50)
 
 sbatch slurm_scripts/evaluation_scripts/run_sampling.sh $1 $2 random $3
 # sbatch slurm_scripts/evaluation_scripts/run_sampling.sh $1 $2 distance $3

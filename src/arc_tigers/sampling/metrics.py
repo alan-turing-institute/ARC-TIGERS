@@ -14,6 +14,21 @@ from arc_tigers.sampling.bias import HTBiasCorrector, LUREBiasCorrector
 logger = logging.getLogger(__name__)
 
 
+def inverse_softmax(softmax_probs: np.ndarray) -> np.ndarray:
+    """
+    Recover logits from softmax probabilities using log transformation.
+
+    Args:
+        softmax_probs: Softmax probabilities, shape (n_samples, n_classes)
+
+    Returns:
+        Logits (up to an additive constant)
+    """
+    # Add small epsilon to avoid log(0)
+    epsilon = 1e-10
+    return np.log(softmax_probs + epsilon)
+
+
 def compute_loss(
     logits: np.ndarray,
     labels: np.ndarray,
@@ -48,6 +63,22 @@ def compute_loss(
     return loss.item()
 
 
+def unpack_metrics(metrics):
+    single_value_metrics = {}
+    for key, value in metrics.items():
+        if isinstance(value, list):
+            # unpack multi-valued metrics into separate values for each class
+            if len(value) == 1:
+                msg = "If metric value is a list, should have more than 1 value"
+                raise ValueError(msg)
+            for i, m in enumerate(value):
+                single_value_metrics[f"{key}_{i}"] = m
+        else:
+            single_value_metrics[key] = value
+
+    return single_value_metrics
+
+
 def evaluate(
     dataset,
     preds,
@@ -67,19 +98,7 @@ def evaluate(
     # Placeholder for actual metric computation
     eval_pred = (preds, dataset["label"])
     metrics = compute_metrics(eval_pred, bias_corrector=bias_corrector)
-    single_value_metrics = {}
-    for key, value in metrics.items():
-        if isinstance(value, list):
-            # unpack multi-valued metrics into separate values for each class
-            if len(value) == 1:
-                msg = "If metric value is a list, should have more than 1 value"
-                raise ValueError(msg)
-            for i, m in enumerate(value):
-                single_value_metrics[f"{key}_{i}"] = m
-        else:
-            single_value_metrics[key] = value
-
-    return single_value_metrics
+    return unpack_metrics(metrics)
 
 
 # Define metrics
@@ -175,6 +194,22 @@ def entropy(logits: np.ndarray) -> np.ndarray:
     """
     softmax_probs = softmax(logits)
     return -np.sum(softmax_probs * np.log(softmax_probs + 1e-10), axis=-1)
+
+
+def normalised_entropy(probs: np.ndarray) -> np.ndarray:
+    """Compute the entropy of a probability distribution.
+
+    Args:
+        probs: A numpy array of probabilities (must sum to 1).
+
+    Returns:
+        The entropy of the distribution.
+    """
+    # Clamp probabilities to avoid log(0)
+    probs = np.clip(probs, a_min=1e-12, a_max=1.0)
+    entropies = -np.sum(probs * np.log(probs), axis=-1)
+    # normalise
+    return entropies / np.log(probs.shape[-1])
 
 
 def per_sample_stats(preds, labels):
